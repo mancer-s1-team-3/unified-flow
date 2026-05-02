@@ -1,0 +1,31 @@
+name: Solana Program - Anchor Tests
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "solana-program/programs/**"
+      - "solana-program/tests/**"
+      - "solana-program/Anchor.toml"
+      - "solana-program/Cargo.toml"
+      - "solana-program/Cargo.lock"
+  pull_request:
+    branches: [main]
+    paths:
+      - "solana-program/programs/**"
+      - "solana-program/tests/**"
+      - "solana-program/Anchor.toml"
+      - "solana-program/Cargo.toml"
+      - "solana-program/Cargo.lock"
+  workflow_dispatch:
+    inputs:
+      program:
+        description: "Program to test"
+        required: true
+        default: "token-distribution"
+
+jobs:
+  test:
+    uses: solana-developers/github-workflows/.github/workflows/test.yaml@v0.2.9
+    with:
+      program: ${{ 'token-distribution' }}

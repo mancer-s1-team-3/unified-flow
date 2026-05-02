@@ -1,4 +1,4 @@
-name: Devnet Build and Deploy
+name: Solana Program - Devnet Build and Deploy
 
 on:
   workflow_dispatch:
