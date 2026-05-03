@@ -1,15 +1,37 @@
-# Token Distribution
+# Token Distribution App
 
-A Solana Anchor program for token distribution streams. Provides instruction handlers for `create_stream`, `withdraw`, and `cancel`.
+A Solana-based token vesting platform that lets organizations lock SPL tokens on-chain and release them to recipients over time. The on-chain program supports three vesting models — **Linear**, **Cliff**, and **Milestone-based** — exposed through three core instructions: `create_stream`, `withdraw`, and `cancel`.
 
-- Program ID (localnet): `8M5yieUh7pxwUi1YBByDF82nqoorZwaKi8dBoMVpurFa`
-- Anchor version: `0.32.1`
-- Solana version: `2.2.1`
-- Rust toolchain: `1.89.0`
+This repository is a monorepo and will host the on-chain program, the web frontend, and the supporting backend service as the project grows.
+
+## Status
+
+| Component | Status | Path |
+|-----------|--------|------|
+| Anchor on-chain program | In development | [programs/solana-program/](programs/solana-program/) |
+| Frontend (web app) | Coming soon (Week 4+) | `frontend/` *(not yet created)* |
+| Backend (API + indexer) | Coming soon (Week 4+) | `backend/` *(not yet created)* |
+
+> Detailed architecture (account structure, data flow, fee model, off-chain schema) will be documented separately in `ARCHITECTURE.md`. For now, see the Week 2 architecture document.
+
+## Repository Structure
+
+```
+.
+├── Anchor.toml                  # Anchor + cluster + script config
+├── Cargo.toml                   # Rust workspace manifest
+├── rust-toolchain.toml          # Pinned Rust toolchain (1.89.0)
+├── package.json                 # JS/TS tooling for tests
+├── programs/
+│   └── solana-program/          # On-chain Anchor program (Rust)
+├── tests/                       # TypeScript integration tests (mocha)
+├── migrations/                  # Anchor deploy scripts
+├── frontend/                    # (coming soon) Web app
+├── backend/                     # (coming soon) API + indexer
+└── .github/workflows/           # CI: build + test on every push
+```
 
 ## Prerequisites
-
-Make sure the following tools are installed before working with this repo:
 
 | Tool | Version | Install |
 |------|---------|---------|
@@ -112,21 +134,19 @@ anchor test --skip-local-validator
 
 > If you regenerate the program keypair, run `anchor keys sync` and rebuild so the on-chain ID matches `declare_id!` and `Anchor.toml`.
 
-## Project Structure
-
-```
-.
-├── Anchor.toml              # Anchor + cluster + script config
-├── Cargo.toml               # Rust workspace
-├── programs/solana-program  # On-chain program source
-├── tests/                   # TypeScript integration tests (mocha)
-├── migrations/              # Anchor deploy scripts
-└── .github/workflows/       # CI: build + test on every push
-```
-
 ## CI
 
 GitHub Actions runs on every push:
 
 - `solana-program-test.yaml` — builds the program and runs the test suite.
 - `solana-program-devnet-build.yaml` — verifies the devnet build.
+
+## Troubleshooting
+
+- **`anchor build` fails on edition 2024**: ensure the pinned Rust toolchain (`1.89.0`) is active. Run `rustup show` from the repo root.
+- **`Program ID mismatch`**: run `anchor keys sync` then `anchor build` again.
+- **Devnet airdrop rate-limited**: use https://faucet.solana.com or wait a few minutes and retry.
+
+---
+
+Built by **Mancer S1 — Team 3**.
