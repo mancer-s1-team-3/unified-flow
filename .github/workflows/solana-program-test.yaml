@@ -4,28 +4,28 @@ on:
   push:
     branches: [main]
     paths:
-      - "solana-program/programs/**"
-      - "solana-program/tests/**"
-      - "solana-program/Anchor.toml"
-      - "solana-program/Cargo.toml"
-      - "solana-program/Cargo.lock"
+      - "programs/**"
+      - "tests/**"
+      - "Anchor.toml"
+      - "Cargo.toml"
+      - "Cargo.lock"
   pull_request:
     branches: [main]
     paths:
-      - "solana-program/programs/**"
-      - "solana-program/tests/**"
-      - "solana-program/Anchor.toml"
-      - "solana-program/Cargo.toml"
-      - "solana-program/Cargo.lock"
+      - "programs/**"
+      - "tests/**"
+      - "Anchor.toml"
+      - "Cargo.toml"
+      - "Cargo.lock"
   workflow_dispatch:
     inputs:
       program:
         description: "Program to test"
         required: true
-        default: "token-distribution"
+        default: "solana-program"
 
 jobs:
   test:
-    uses: solana-developers/github-workflows/.github/workflows/test.yaml@v0.2.9
+    uses: solana-developers/github-workflows/.github/workflows/test.yaml@v0.3.4
     with:
-      program: ${{ 'token-distribution' }}
+      program: ${{ 'solana-program' }}
