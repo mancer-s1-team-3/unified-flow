@@ -10,7 +10,7 @@ This repository is a monorepo and will host the on-chain program, the web fronte
 |-----------|--------|------|
 | Anchor on-chain program | In development | [programs/solana-program/](programs/solana-program/) |
 | Frontend (web app) | Coming soon (Week 4+) | `frontend/` *(not yet created)* |
-| Backend (API + indexer) | Coming soon (Week 4+) | `backend/` *(not yet created)* |
+| Backend (API + indexer) | Initialized | [`backend/`](backend/) |
 
 > Detailed architecture (account structure, data flow, fee model, off-chain schema) will be documented separately in `ARCHITECTURE.md`. For now, see the Week 2 architecture document.
 
@@ -27,7 +27,7 @@ This repository is a monorepo and will host the on-chain program, the web fronte
 ├── tests/                       # TypeScript integration tests (mocha)
 ├── migrations/                  # Anchor deploy scripts
 ├── frontend/                    # (coming soon) Web app
-├── backend/                     # (coming soon) API + indexer
+├── backend/                     # Backend service (Node.js + Express)
 └── .github/workflows/           # CI: build + test on every push
 ```
 
@@ -94,6 +94,16 @@ To run tests against an already-running local validator (faster iteration):
 ```bash
 solana-test-validator -r        # in a separate terminal
 anchor test --skip-local-validator
+```
+
+## Backend Setup
+
+The backend service is built with Node.js, Express, and TypeScript. It is currently initialized with a basic configuration.
+
+```bash
+cd backend
+npm install
+npm run dev
 ```
 
 ## Deploy to Devnet
