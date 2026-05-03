@@ -1,6 +1,6 @@
 # Token Distribution App
 
-A Solana-based token vesting platform that lets organizations lock SPL tokens on-chain and release them to recipients over time. The on-chain program supports three vesting models — **Linear**, **Cliff**, and **Milestone-based** — exposed through three core instructions: `create_stream`, `withdraw`, and `cancel`.
+A Solana-based token vesting platform that lets organizations lock SPL tokens on-chain and release them to recipients over time. The on-chain program supports three vesting models - **Linear**, **Cliff**, and **Milestone-based** - exposed through three core instructions: `create_stream`, `withdraw`, and `cancel`.
 
 This repository is a monorepo and will host the on-chain program, the web frontend, and the supporting backend service as the project grows.
 
@@ -138,8 +138,8 @@ anchor test --skip-local-validator
 
 GitHub Actions runs on every push:
 
-- `solana-program-test.yaml` — builds the program and runs the test suite.
-- `solana-program-devnet-build.yaml` — verifies the devnet build.
+- `solana-program-test.yaml` - builds the program and runs the test suite.
+- `solana-program-devnet-build.yaml` - verifies the devnet build.
 
 ## Troubleshooting
 
@@ -149,4 +149,4 @@ GitHub Actions runs on every push:
 
 ---
 
-Built by **Mancer S1 — Team 3**.
+Built by **Mancer S1 - Team 3**.
