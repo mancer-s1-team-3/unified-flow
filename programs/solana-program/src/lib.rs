@@ -35,3 +35,64 @@ pub struct Withdraw {}
 
 #[derive(Accounts)]
 pub struct Cancel {}
+
+#[derive(AnchorSerialize, AnchorDeserialize, Clone, PartialEq, Eq)]
+pub struct PendingFees {
+    pub new_create_fee_bps: u16,
+    pub new_withdraw_fee_bps: u16,
+    pub new_cancel_fee_lamports: u64,
+    pub effective_at: i64,
+}
+
+#[account]
+pub struct ConfigAccount {
+    pub admin_authority: Pubkey,
+    pub fee_authority: Pubkey,
+    pub paused: bool,
+    pub create_fee_bps: u16,
+    pub withdraw_fee_bps: u16,
+    pub cancel_fee_lamports: u64,
+    pub max_create_fee_bps: u16,
+    pub max_withdraw_fee_bps: u16,
+    pub max_cancel_fee_lamports: u64,
+    pub fee_change_timelock_seconds: u64,
+    pub pending_fees: Option<PendingFees>,
+    pub allowed_mints: Vec<Pubkey>,
+    pub bump: u8,
+}
+
+#[account]
+pub struct FeeVaultAccount {
+    pub mint: Pubkey,
+    pub balance: u64,
+}
+
+#[account]
+pub struct StreamAccount {
+    pub creator: Pubkey,
+    pub recipient: Pubkey,
+    pub mint: Pubkey,
+    pub vault: Pubkey,
+    pub total_amount: u64,
+    pub withdrawn: u64,
+    pub start_ts: i64,
+    pub cliff_ts: i64,
+    pub end_ts: i64,
+    pub vesting_type: u8,
+    pub status: u8,
+    pub cancelable: bool,
+    pub milestone_count: u8,
+    pub nonce: u64,
+    pub bump: u8,
+}
+
+#[account]
+pub struct MilestoneAccount {
+    pub stream: Pubkey,
+    pub index: u8,
+    pub unlock_ts: i64,
+    pub amount: u64,
+    pub approved: bool,
+    pub unlocked: bool,
+    pub bump: u8,
+}
