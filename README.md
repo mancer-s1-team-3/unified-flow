@@ -9,7 +9,7 @@ This repository is a monorepo and will host the on-chain program, the web fronte
 | Component | Status | Path |
 |-----------|--------|------|
 | Anchor on-chain program | In development | [programs/solana-program/](programs/solana-program/) |
-| Frontend (web app) | Coming soon (Week 4+) | `frontend/` *(not yet created)* |
+| Frontend (web app) | Initialized | [`frontend/`](frontend/) |
 | Backend (API + indexer) | Initialized | [`backend/`](backend/) |
 
 > Detailed architecture (account structure, data flow, fee model, off-chain schema) will be documented separately in `ARCHITECTURE.md`. For now, see the Week 2 architecture document.
@@ -26,7 +26,7 @@ This repository is a monorepo and will host the on-chain program, the web fronte
 │   └── solana-program/          # On-chain Anchor program (Rust)
 ├── tests/                       # TypeScript integration tests (mocha)
 ├── migrations/                  # Anchor deploy scripts
-├── frontend/                    # (coming soon) Web app
+├── frontend/                    # Web app (Next.js + Tailwind)
 ├── backend/                     # Backend service (Node.js + Express)
 └── .github/workflows/           # CI: build + test on every push
 ```
@@ -102,6 +102,16 @@ The backend service is built with Node.js, Express, and TypeScript. It is curren
 
 ```bash
 cd backend
+npm install
+npm run dev
+```
+
+## Frontend Setup
+
+The frontend is built with Next.js, Tailwind CSS, and TypeScript.
+
+```bash
+cd frontend
 npm install
 npm run dev
 ```
