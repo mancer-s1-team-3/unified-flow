@@ -10,7 +10,28 @@ pub mod solana_program {
         msg!("Greetings from: {:?}", ctx.program_id);
         Ok(())
     }
+
+    pub fn create_stream(_ctx: Context<CreateStream>) -> Result<()> {
+        Ok(())
+    }
+
+    pub fn withdraw(_ctx: Context<Withdraw>) -> Result<()> {
+        Ok(())
+    }
+
+    pub fn cancel(_ctx: Context<Cancel>) -> Result<()> {
+        Ok(())
+    }
 }
 
 #[derive(Accounts)]
 pub struct Initialize {}
+
+#[derive(Accounts)]
+pub struct CreateStream {}
+
+#[derive(Accounts)]
+pub struct Withdraw {}
+
+#[derive(Accounts)]
+pub struct Cancel {}
