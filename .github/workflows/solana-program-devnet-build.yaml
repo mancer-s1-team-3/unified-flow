@@ -11,9 +11,9 @@ on:
 
 jobs:
   build:
-    uses: solana-developers/github-workflows/.github/workflows/reusable-build.yaml@v0.2.9
+    uses: solana-developers/github-workflows/.github/workflows/reusable-build.yaml@v0.3.4
     with:
-      program: "token-distribution"
+      program: "solana-program"
       program-id: "8M5yieUh7pxwUi1YBByDF82nqoorZwaKi8dBoMVpurFa"
       network: "devnet"
       deploy: true
