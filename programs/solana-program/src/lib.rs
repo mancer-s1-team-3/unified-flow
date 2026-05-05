@@ -6,10 +6,6 @@ declare_id!("8M5yieUh7pxwUi1YBByDF82nqoorZwaKi8dBoMVpurFa");
 pub mod solana_program {
     use super::*;
 
-    pub fn initialize(ctx: Context<Initialize>) -> Result<()> {
-        msg!("Greetings from: {:?}", ctx.program_id);
-        Ok(())
-    }
 
     pub fn create_stream(_ctx: Context<CreateStream>) -> Result<()> {
         Ok(())
