@@ -20,8 +20,6 @@ pub mod solana_program {
     }
 }
 
-#[derive(Accounts)]
-pub struct Initialize {}
 
 #[derive(Accounts)]
 pub struct CreateStream {}
