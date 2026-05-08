@@ -1,104 +1,135 @@
-# Token Distribution App
+# Unified Flow
 
-A Solana-based token vesting platform that lets organizations lock SPL tokens on-chain and release them to recipients over time. The on-chain program supports three vesting models - **Linear**, **Cliff**, and **Milestone-based** - exposed through three core instructions: `create_stream`, `withdraw`, and `cancel`.
+Unified Flow is a Solana-based token distribution monorepo for building transparent and auditable SPL token vesting and streaming workflows. The project combines an Anchor on-chain program, a supporting backend service, and a web frontend.
 
-This repository is a monorepo and will host the on-chain program, the web frontend, and the supporting backend service as the project grows.
+The project is currently in early development. The base structure for the smart contract, backend, frontend, integration tests, and CI is already in place as the foundation for future iterations.
 
-## Status
+## Overview
+
+Unified Flow is designed to help organizations and teams lock SPL tokens on-chain and release them to recipients over time based on predefined schedules.
+
+Target vesting models:
+
+- Linear vesting
+- Cliff vesting
+- Milestone-based vesting
+
+Core program instructions currently scaffolded:
+
+- `create_stream`
+- `withdraw`
+- `cancel`
+
+## Component Status
 
 | Component | Status | Path |
-|-----------|--------|------|
-| Anchor on-chain program | In development | [programs/solana-program/](programs/solana-program/) |
-| Frontend (web app) | Initialized | [`frontend/`](frontend/) |
-| Backend (API + indexer) | Initialized | [`backend/`](backend/) |
+| --- | --- | --- |
+| Anchor program | In development | [programs/solana-program/](programs/solana-program/) |
+| Backend API | Initialized | [backend/](backend/) |
+| Frontend web app | Initialized | [frontend/](frontend/) |
+| Integration tests | Initialized | [tests/](tests/) |
+| CI workflow | Available | [.github/workflows/](.github/workflows/) |
 
-> Detailed architecture (account structure, data flow, fee model, off-chain schema) will be documented separately in `ARCHITECTURE.md`. For now, see the Week 2 architecture document.
+## Tech Stack
+
+- **Solana + Anchor** for the on-chain program
+- **Rust** for smart contract development
+- **TypeScript** for tests, backend, and frontend
+- **Express** for the backend service
+- **Next.js** for the frontend web app
+- **Mocha + Chai** for Anchor integration tests
 
 ## Repository Structure
 
-```
+```text
 .
-├── Anchor.toml                  # Anchor + cluster + script config
-├── Cargo.toml                   # Rust workspace manifest
-├── rust-toolchain.toml          # Pinned Rust toolchain (1.89.0)
-├── package.json                 # JS/TS tooling for tests
-├── programs/
-│   └── solana-program/          # On-chain Anchor program (Rust)
-├── tests/                       # TypeScript integration tests (mocha)
-├── migrations/                  # Anchor deploy scripts
-├── frontend/                    # Web app (Next.js + Tailwind)
-├── backend/                     # Backend service (Node.js + Express)
-└── .github/workflows/           # CI: build + test on every push
+|-- Anchor.toml                 # Anchor, cluster, wallet, and test script config
+|-- Cargo.toml                  # Rust workspace manifest
+|-- rust-toolchain.toml         # Pinned Rust toolchain
+|-- package.json                # JS/TS tooling for the Anchor workspace
+|-- programs/
+|   `-- solana-program/         # Anchor on-chain program
+|-- tests/                      # TypeScript integration tests
+|-- migrations/                 # Anchor deploy scripts
+|-- backend/                    # Express + TypeScript backend API
+|-- frontend/                   # Next.js + Tailwind CSS frontend
+`-- .github/workflows/          # CI workflows for build and test
 ```
 
 ## Prerequisites
 
-| Tool | Version | Install |
-|------|---------|---------|
-| Rust | `1.89.0` (pinned via `rust-toolchain.toml`) | https://www.rust-lang.org/tools/install |
-| Solana CLI | `2.2.1` | `sh -c "$(curl -sSfL https://release.anza.xyz/v2.2.1/install)"` |
-| Anchor CLI | `0.32.1` | `cargo install --git https://github.com/coral-xyz/anchor avm --force && avm install 0.32.1 && avm use 0.32.1` |
-| Node.js | `>= 18` | https://nodejs.org |
-| Yarn | latest | `npm install -g yarn` |
+Make sure the following tools are installed:
 
-Verify the toolchain:
+| Tool | Version Used | Notes |
+| --- | --- | --- |
+| Rust | `1.89.0` | Pinned through `rust-toolchain.toml` |
+| Solana CLI | `2.2.1` | Matches `Anchor.toml` |
+| Anchor CLI | `0.32.1` | Matches `Anchor.toml` |
+| Node.js | `>= 18` | LTS recommended |
+| Yarn | latest | Used by the Anchor test script |
+
+Check your local versions:
 
 ```bash
-rustc --version       # rustc 1.89.0
-solana --version      # solana-cli 2.2.1
-anchor --version      # anchor-cli 0.32.1
-node --version        # v18+
+rustc --version
+solana --version
+anchor --version
+node --version
 yarn --version
 ```
 
-## Setup
+## Installation
 
-Clone the repo and install JavaScript dependencies:
+Clone the repository and install root dependencies:
 
 ```bash
-git clone https://github.com/mancer-s1-team-3/token-distribution.git
-cd token-distribution
+git clone <repository-url>
+cd unified-flow
 yarn install
 ```
 
-Generate a local Solana keypair if you do not already have one (Anchor reads it from `~/.config/solana/id.json`):
+If you do not have a local Solana keypair yet, create one:
 
 ```bash
 solana-keygen new --outfile ~/.config/solana/id.json
 ```
 
-## Build
+Point your Solana CLI to localnet for local development:
 
-Compile the Anchor program:
+```bash
+solana config set --url localhost
+```
+
+## On-chain Program
+
+Build the Anchor program:
 
 ```bash
 anchor build
 ```
 
-The build produces:
+Main build outputs:
 
-- BPF binary: `target/deploy/solana_program.so`
-- IDL: `target/idl/solana_program.json`
-- TypeScript types: `target/types/solana_program.ts`
+- `target/deploy/solana_program.so`
+- `target/idl/solana_program.json`
+- `target/types/solana_program.ts`
 
-## Run Tests
-
-Tests run against a local validator that Anchor spins up automatically.
+Run tests with the local validator managed by Anchor:
 
 ```bash
 anchor test
 ```
 
-To run tests against an already-running local validator (faster iteration):
+For faster iteration, run the validator separately:
 
 ```bash
-solana-test-validator -r        # in a separate terminal
+solana-test-validator -r
 anchor test --skip-local-validator
 ```
 
-## Backend Setup
+## Backend
 
-The backend service is built with Node.js, Express, and TypeScript. It is currently initialized with a basic configuration.
+The backend lives in [backend/](backend/) and currently exposes a health check endpoint.
 
 ```bash
 cd backend
@@ -106,9 +137,24 @@ npm install
 npm run dev
 ```
 
-## Frontend Setup
+Default endpoint:
 
-The frontend is built with Next.js, Tailwind CSS, and TypeScript.
+```text
+GET http://localhost:3000/health
+```
+
+Response:
+
+```json
+{
+  "status": "ok",
+  "message": "Backend is running"
+}
+```
+
+## Frontend
+
+The frontend lives in [frontend/](frontend/) and uses Next.js.
 
 ```bash
 cd frontend
@@ -116,56 +162,127 @@ npm install
 npm run dev
 ```
 
+By default, the app runs at:
+
+```text
+http://localhost:3000
+```
+
+If the backend is also running on port `3000`, run one of the services on a different port.
+
 ## Deploy to Devnet
 
-1. Switch the Solana CLI to devnet:
+Switch the Solana CLI to devnet:
 
-   ```bash
-   solana config set --url https://api.devnet.solana.com
-   ```
+```bash
+solana config set --url https://api.devnet.solana.com
+```
 
-2. Fund your wallet with devnet SOL:
+Fund your wallet with devnet SOL:
 
-   ```bash
-   solana airdrop 2
-   solana balance
-   ```
+```bash
+solana airdrop 2
+solana balance
+```
 
-3. Update the `[provider]` cluster in `Anchor.toml` (or pass `--provider.cluster devnet`):
+Build and deploy the program:
 
-   ```toml
-   [provider]
-   cluster = "devnet"
-   wallet = "~/.config/solana/id.json"
-   ```
+```bash
+anchor build
+anchor deploy --provider.cluster devnet
+```
 
-4. Build and deploy:
+Current program ID:
 
-   ```bash
-   anchor build
-   anchor deploy --provider.cluster devnet
-   ```
+```text
+8M5yieUh7pxwUi1YBByDF82nqoorZwaKi8dBoMVpurFa
+```
 
-5. (Optional) Verify the deployed program:
+Verify the deployed program:
 
-   ```bash
-   solana program show 8M5yieUh7pxwUi1YBByDF82nqoorZwaKi8dBoMVpurFa --url devnet
-   ```
+```bash
+solana program show 8M5yieUh7pxwUi1YBByDF82nqoorZwaKi8dBoMVpurFa --url devnet
+```
 
-> If you regenerate the program keypair, run `anchor keys sync` and rebuild so the on-chain ID matches `declare_id!` and `Anchor.toml`.
+If the program keypair changes, run:
+
+```bash
+anchor keys sync
+anchor build
+```
+
+## Useful Scripts
+
+Root workspace:
+
+```bash
+yarn lint
+yarn lint:fix
+anchor build
+anchor test
+```
+
+Backend:
+
+```bash
+npm run dev
+npm run build
+npm start
+```
+
+Frontend:
+
+```bash
+npm run dev
+npm run build
+npm start
+npm run lint
+```
 
 ## CI
 
-GitHub Actions runs on every push:
+GitHub Actions are available for:
 
-- `solana-program-test.yaml` - builds the program and runs the test suite.
-- `solana-program-devnet-build.yaml` - verifies the devnet build.
+- Building and testing the Solana program
+- Verifying the devnet program build
+
+Workflow files are located in [.github/workflows/](.github/workflows/).
 
 ## Troubleshooting
 
-- **`anchor build` fails on edition 2024**: ensure the pinned Rust toolchain (`1.89.0`) is active. Run `rustup show` from the repo root.
-- **`Program ID mismatch`**: run `anchor keys sync` then `anchor build` again.
-- **Devnet airdrop rate-limited**: use https://faucet.solana.com or wait a few minutes and retry.
+**`anchor build` fails because the Rust version does not match**
+
+Make sure the active toolchain follows `rust-toolchain.toml`.
+
+```bash
+rustup show
+```
+
+**Program ID mismatch**
+
+Sync Anchor keys and rebuild.
+
+```bash
+anchor keys sync
+anchor build
+```
+
+**Devnet airdrop is rate-limited**
+
+Wait a few minutes and retry, or use a Solana faucet.
+
+**Backend and frontend ports conflict**
+
+The backend uses `PORT=3000` by default if no environment variable is set, and Next.js also defaults to `3000`. Set one service to a different port explicitly.
+
+## Initial Roadmap
+
+- Complete account validation logic for `create_stream`, `withdraw`, and `cancel`
+- Add stream and milestone state transitions
+- Connect the frontend to a Solana wallet
+- Add backend indexing for stream activity
+- Document the architecture and data model
+- Expand integration tests for the main vesting scenarios
 
 ---
 
