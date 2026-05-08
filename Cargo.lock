@@ -1091,7 +1091,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "solana-program"
+name = "unified-flow"
 version = "0.1.0"
 dependencies = [
  "anchor-lang",
