@@ -1,4 +1,5 @@
 use anchor_lang::prelude::*;
+use anchor_spl::token_interface::{self, Mint, TokenAccount, TokenInterface, TransferChecked, transfer_checked};
 
 declare_id!("8M5yieUh7pxwUi1YBByDF82nqoorZwaKi8dBoMVpurFa");
 
@@ -6,12 +7,46 @@ declare_id!("8M5yieUh7pxwUi1YBByDF82nqoorZwaKi8dBoMVpurFa");
 pub mod solana_program {
     use super::*;
 
+    pub fn create_stream(
+        ctx: Context<CreateStream>,
+        amount: u64,
+        start_ts: i64,
+        end_ts: i64,
+        nonce: u64,
+    ) -> Result<()> {
+        let stream = &mut ctx.accounts.stream;
+        stream.creator = ctx.accounts.creator.key();
+        stream.recipient = ctx.accounts.recipient.key();
+        stream.mint = ctx.accounts.mint.key();
+        stream.vault = ctx.accounts.vault.key();
+        stream.total_amount = amount;
+        stream.withdrawn = 0;
+        stream.start_ts = start_ts;
+        stream.cliff_ts = start_ts;
+        stream.end_ts = end_ts;
+        stream.nonce = nonce;
+        stream.bump = ctx.bumps.stream;
+        stream.vesting_type = 0;
+        stream.status = 1;
+        stream.cancelable = true;
+        stream.milestone_count = 0;
 
-    pub fn create_stream(_ctx: Context<CreateStream>) -> Result<()> {
+        // Transfer tokens to vault
+        let cpi_accounts = TransferChecked {
+            from: ctx.accounts.creator_token_account.to_account_info(),
+            to: ctx.accounts.vault.to_account_info(),
+            authority: ctx.accounts.creator.to_account_info(),
+            mint: ctx.accounts.mint.to_account_info(),
+        };
+        let cpi_program = ctx.accounts.token_program.to_account_info();
+        let cpi_ctx = CpiContext::new(cpi_program, cpi_accounts);
+        transfer_checked(cpi_ctx, amount, ctx.accounts.mint.decimals)?;
+
         Ok(())
     }
 
-    pub fn withdraw(_ctx: Context<Withdraw>) -> Result<()> {
+    pub fn withdraw(ctx: Context<Withdraw>, amount_to_withdraw: u64) -> Result<()> {
+
         Ok(())
     }
 
@@ -20,9 +55,36 @@ pub mod solana_program {
     }
 }
 
-
 #[derive(Accounts)]
-pub struct CreateStream {}
+#[instruction(amount: u64, start_ts: i64, end_ts: i64, nonce: u64)]
+pub struct CreateStream<'info> {
+    #[account(mut)]
+    pub creator: Signer<'info>,
+    /// CHECK: Recipient pubkey
+    pub recipient: UncheckedAccount<'info>,
+    pub mint: InterfaceAccount<'info, Mint>,
+    #[account(
+        init,
+        payer = creator,
+        space = 8 + StreamAccount::INIT_SPACE,
+        seeds = [b"stream", creator.key().as_ref(), recipient.key().as_ref(), &nonce.to_le_bytes()],
+        bump
+    )]
+    pub stream: Account<'info, StreamAccount>,
+    #[account(
+        init,
+        payer = creator,
+        associated_token::mint = mint,
+        associated_token::authority = stream,
+        associated_token::token_program = token_program,
+    )]
+    pub vault: InterfaceAccount<'info, TokenAccount>,
+    #[account(mut)]
+    pub creator_token_account: InterfaceAccount<'info, TokenAccount>,
+    pub system_program: Program<'info, System>,
+    pub token_program: Interface<'info, TokenInterface>,
+    pub associated_token_program: Program<'info, anchor_spl::associated_token::AssociatedToken>,
+}
 
 #[derive(Accounts)]
 pub struct Withdraw {}
@@ -62,6 +124,7 @@ pub struct FeeVaultAccount {
 }
 
 #[account]
+#[derive(InitSpace)]
 pub struct StreamAccount {
     pub creator: Pubkey,
     pub recipient: Pubkey,
@@ -89,4 +152,10 @@ pub struct MilestoneAccount {
     pub approved: bool,
     pub unlocked: bool,
     pub bump: u8,
+}
+
+#[error_code]
+pub enum ErrorCode {
+    #[msg("Insufficient unlocked balance")]
+    InsufficientUnlockedBalance,
 }
