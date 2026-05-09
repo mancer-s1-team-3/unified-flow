@@ -125,12 +125,7 @@ pub mod solana_program {
         stream.cancelable = true;
         stream.milestone_count = 0;
 
-        // =========================
-        // Pre-transfer balance check
-        // (for Token-2022 fee awareness)
-        // =========================
 
-        let vault_before = ctx.accounts.vault.amount;
 
         // =========================
         // Transfer Tokens
@@ -159,15 +154,9 @@ pub mod solana_program {
 
         ctx.accounts.vault.reload()?;
 
-        let vault_after = ctx.accounts.vault.amount;
-
-        let actual_received = vault_after
-            .checked_sub(vault_before)
-            .ok_or(ErrorCode::MathOverflow)?;
-
         // Reject transfer-fee tokens
         require!(
-            actual_received == amount,
+            ctx.accounts.vault.amount == amount,
             ErrorCode::TransferFeeMintUnsupported
         );
 
