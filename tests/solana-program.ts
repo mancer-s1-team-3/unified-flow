@@ -15,7 +15,6 @@ import {
   createInitializeTransferFeeConfigInstruction,
   createInitializeMintInstruction,
   getMintLen,
-  createAssociatedTokenAccountIdempotent,
   mintToChecked,
 } from "@solana/spl-token";
 import { expect } from "chai";
