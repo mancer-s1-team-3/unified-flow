@@ -7,6 +7,7 @@ import {
   mintTo,
   TOKEN_PROGRAM_ID,
   getAccount,
+  ASSOCIATED_TOKEN_PROGRAM_ID,
 } from "@solana/spl-token";
 import { expect } from "chai";
 import { PublicKey, Keypair, SystemProgram } from "@solana/web3.js";
@@ -116,6 +117,75 @@ describe("solana-program", () => {
     const vaultAccount = await getAccount(provider.connection, vault);
     expect(vaultAccount.amount.toString()).to.equal(amount.toString());
   });
+
+
+  it("Fails when amount is 0", async () => {
+    const startTs = new anchor.BN(Math.floor(Date.now() / 1000));
+    const endTs = startTs.add(new anchor.BN(100));
+    const zeroAmount = new anchor.BN(0);
+    const zeroNonce = new anchor.BN(111);
+
+    try {
+      await program.methods
+        .createStream(zeroAmount, startTs, endTs, zeroNonce)
+        .accounts({
+          creator: creator.publicKey,
+          recipient: recipient.publicKey,
+          mint: mint,
+          creatorTokenAccount: creatorTokenAccount,
+          tokenProgram: TOKEN_PROGRAM_ID,
+        })
+        .rpc();
+      expect.fail("Should have failed with InvalidAmount");
+    } catch (err: any) {
+      expect(err.message).to.contain("InvalidAmount");
+    }
+  });
+
+  it("Fails when end date is before start date", async () => {
+    const startTs = new anchor.BN(Math.floor(Date.now() / 1000) + 100);
+    const endTs = startTs.sub(new anchor.BN(50));
+    const invalidNonce = new anchor.BN(222);
+
+    try {
+      await program.methods
+        .createStream(amount, startTs, endTs, invalidNonce)
+        .accounts({
+          creator: creator.publicKey,
+          recipient: recipient.publicKey,
+          mint: mint,
+          creatorTokenAccount: creatorTokenAccount,
+          tokenProgram: TOKEN_PROGRAM_ID,
+        })
+        .rpc();
+      expect.fail("Should have failed with InvalidSchedule");
+    } catch (err: any) {
+      expect(err.message).to.contain("InvalidSchedule");
+    }
+  });
+
+  it("Fails when end date is in the past", async () => {
+    const now = Math.floor(Date.now() / 1000);
+    const startTs = new anchor.BN(now - 200);
+    const endTs = new anchor.BN(now - 100);
+    const pastNonce = new anchor.BN(333);
+
+    try {
+      await program.methods
+        .createStream(amount, startTs, endTs, pastNonce)
+        .accounts({
+          creator: creator.publicKey,
+          recipient: recipient.publicKey,
+          mint: mint,
+          creatorTokenAccount: creatorTokenAccount,
+          tokenProgram: TOKEN_PROGRAM_ID,
+        })
+        .rpc();
+      expect.fail("Should have failed with InvalidEndDate");
+    } catch (err: any) {
+      expect(err.message).to.contain("InvalidEndDate");
+    }
+  });
   it("Program is deployed on-chain", async () => {
     const accountInfo = await provider.connection.getAccountInfo(
       program.programId
@@ -124,5 +194,4 @@ describe("solana-program", () => {
     expect(accountInfo).to.not.be.null;
     expect(accountInfo?.executable).to.be.true;
   });
-
 });

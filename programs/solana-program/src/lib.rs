@@ -14,6 +14,12 @@ pub mod solana_program {
         end_ts: i64,
         nonce: u64,
     ) -> Result<()> {
+        let now = Clock::get()?.unix_timestamp;
+
+        require!(amount > 0, ErrorCode::InvalidAmount);
+        require!(end_ts > start_ts, ErrorCode::InvalidSchedule);
+        require!(end_ts > now, ErrorCode::InvalidEndDate);
+
         let stream = &mut ctx.accounts.stream;
         stream.creator = ctx.accounts.creator.key();
         stream.recipient = ctx.accounts.recipient.key();
@@ -156,6 +162,10 @@ pub struct MilestoneAccount {
 
 #[error_code]
 pub enum ErrorCode {
-    #[msg("Insufficient unlocked balance")]
-    InsufficientUnlockedBalance,
+    #[msg("Amount must be greater than zero")]
+    InvalidAmount,
+    #[msg("End date must be after start date")]
+    InvalidSchedule,
+    #[msg("End date must be in the future")]
+    InvalidEndDate,
 }
