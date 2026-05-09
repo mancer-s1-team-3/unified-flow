@@ -9,7 +9,15 @@ import {
   TOKEN_PROGRAM_ID,
   getAccount,
 } from "@solana/spl-token";
-
+import {
+  TOKEN_2022_PROGRAM_ID,
+  ExtensionType,
+  createInitializeTransferFeeConfigInstruction,
+  createInitializeMintInstruction,
+  getMintLen,
+  createAssociatedTokenAccountIdempotent,
+  mintToChecked,
+} from "@solana/spl-token";
 import { expect } from "chai";
 
 import {
@@ -455,6 +463,121 @@ describe("solana-program", () => {
     } catch (err: any) {
       expect(err.toString()).to.contain(
         "InsufficientBalance"
+      );
+    }
+  });
+
+  it("Rejects Token-2022 transfer fee mint", async () => {
+    const feeMintKeypair = Keypair.generate();
+
+    const decimals = 6;
+
+    const extensions = [ExtensionType.TransferFeeConfig];
+
+    const mintLen = getMintLen(extensions);
+
+    const lamports =
+      await provider.connection.getMinimumBalanceForRentExemption(
+        mintLen
+      );
+
+    const tx = new anchor.web3.Transaction();
+
+    // Create mint account
+    tx.add(
+      SystemProgram.createAccount({
+        fromPubkey: creator.publicKey,
+        newAccountPubkey: feeMintKeypair.publicKey,
+        lamports,
+        space: mintLen,
+        programId: TOKEN_2022_PROGRAM_ID,
+      })
+    );
+
+    // Initialize transfer fee extension
+    tx.add(
+      createInitializeTransferFeeConfigInstruction(
+        feeMintKeypair.publicKey,
+        creator.publicKey,
+        creator.publicKey,
+        100, // 1%
+        BigInt(1_000_000),
+        TOKEN_2022_PROGRAM_ID
+      )
+    );
+
+    // Initialize mint
+    tx.add(
+      createInitializeMintInstruction(
+        feeMintKeypair.publicKey,
+        decimals,
+        creator.publicKey,
+        null,
+        TOKEN_2022_PROGRAM_ID
+      )
+    );
+
+    await provider.sendAndConfirm(tx, [feeMintKeypair]);
+
+    // Creator ATA
+    const creatorFeeTokenAccount =
+      await getOrCreateAssociatedTokenAccount(
+        provider.connection,
+        creator,
+        feeMintKeypair.publicKey,
+        creator.publicKey,
+        undefined,
+        undefined,
+        undefined,
+        TOKEN_2022_PROGRAM_ID
+      );
+
+    // Mint tokens
+    await mintToChecked(
+      provider.connection,
+      creator,
+      feeMintKeypair.publicKey,
+      creatorFeeTokenAccount.address,
+      creator,
+      1_000_000,
+      decimals,
+      [],
+      undefined,
+      TOKEN_2022_PROGRAM_ID
+    );
+
+    const nonce = new anchor.BN(999999);
+
+    const startTs = new anchor.BN(
+      Math.floor(Date.now() / 1000) + 10
+    );
+
+    const endTs = startTs.add(new anchor.BN(100));
+
+    try {
+      await program.methods
+        .createStream(
+          new anchor.BN(1_000_000),
+          startTs,
+          endTs,
+          nonce
+        )
+        .accounts({
+          creator: creator.publicKey,
+          recipient: recipient.publicKey,
+          mint: feeMintKeypair.publicKey,
+          creatorTokenAccount:
+            creatorFeeTokenAccount.address,
+          tokenProgram: TOKEN_2022_PROGRAM_ID,
+        })
+        .rpc();
+
+      expect.fail(
+        "Should fail with TransferFeeMintUnsupported"
+      );
+    } catch (err: any) {
+      expect(err.toString()).to.contain(
+        "TransferFeeMintUnsupported"
       );
     }
   });
