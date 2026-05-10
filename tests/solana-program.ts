@@ -435,10 +435,7 @@ describe("solana-program", () => {
       )
     ).amount;
 
-    const hugeAmount = new anchor.BN(
-      Number(creatorBalance) + 1
-    );
-
+    const hugeAmount = new anchor.BN(creatorBalance.toString()).add(new anchor.BN(1))
     try {
       await program.methods
         .createStream(
