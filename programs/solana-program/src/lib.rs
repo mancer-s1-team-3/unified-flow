@@ -203,11 +203,9 @@ pub mod solana_program {
 
     // fees
     config.withdraw_fee_bps = 100; // 1%
-    config.cancel_fee_lamports = 5_000;
 
     // fee limits
     config.max_withdraw_fee_bps = 500; // 5%
-    config.max_cancel_fee_lamports = 1_000_000;
 
     // timelock
     config.fee_change_timelock_seconds = 86400; // 24h
@@ -364,7 +362,6 @@ pub struct InitializeConfig<'info> {
 )]
 pub struct PendingFees {
     pub new_withdraw_fee_bps: u16,
-    pub new_cancel_fee_lamports: u64,
     pub effective_at: i64,
 }
 
