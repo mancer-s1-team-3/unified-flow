@@ -198,6 +198,30 @@ describe("solana-program", () => {
       );
 
     expect(
+      streamAccount.creator.toBase58()
+    ).to.equal(creator.publicKey.toBase58());
+
+    expect(
+      streamAccount.recipient.toBase58()
+    ).to.equal(recipient.publicKey.toBase58());
+
+    expect(
+      streamAccount.mint.toBase58()
+    ).to.equal(mint.toBase58());
+
+    expect(
+      streamAccount.startTs.toString()
+    ).to.equal(startTs.toString());
+
+    expect(
+      streamAccount.endTs.toString()
+    ).to.equal(endTs.toString());
+
+    expect(
+      streamAccount.vault.toBase58()
+    ).to.equal(vault.toBase58());
+
+    expect(
       streamAccount.totalAmount.toString()
     ).to.equal(amount.toString());
 
