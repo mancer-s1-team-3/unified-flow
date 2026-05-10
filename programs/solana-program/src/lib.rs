@@ -375,11 +375,9 @@ pub struct ConfigAccount {
 
 
     pub withdraw_fee_bps: u16,
-    pub cancel_fee_lamports: u64,
 
 
     pub max_withdraw_fee_bps: u16,
-    pub max_cancel_fee_lamports: u64,
 
     pub fee_change_timelock_seconds: u64,
 
