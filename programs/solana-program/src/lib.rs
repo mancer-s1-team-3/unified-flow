@@ -486,6 +486,12 @@ pub enum ErrorCode {
 
     #[msg("Transfer fee tokens unsupported")]
     TransferFeeMintUnsupported,
+
+    #[msg("Stream not active")]
+    StreamNotActive,
+
+    #[msg("Stream not cancelable")]
+    StreamNotCancelable,
 }
 
 #[event]
