@@ -467,7 +467,10 @@ describe("solana-program", () => {
       )
     ).amount;
 
-    const hugeAmount = new anchor.BN(creatorBalance.toString()).add(new anchor.BN(1))
+    const hugeAmount =
+      new anchor.BN(creatorBalance.toString())
+        .add(new anchor.BN(1));
+
     try {
       await program.methods
         .createStream(
@@ -577,7 +580,7 @@ describe("solana-program", () => {
     const nonce = new anchor.BN(999999);
 
     const startTs = new anchor.BN(
-      Math.floor(Date.now() / 1000) + 10
+      Math.floor(Date.now() / 1000) + 60
     );
 
     const endTs = startTs.add(new anchor.BN(100));
