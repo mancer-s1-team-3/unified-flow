@@ -155,7 +155,7 @@ describe("solana-program", () => {
 
     const now = Math.floor(Date.now() / 1000);
 
-    const startTs = new anchor.BN(now + 5);
+    const startTs = new anchor.BN(now + 60);
 
     const endTs = startTs.add(new anchor.BN(100));
 
@@ -225,7 +225,7 @@ describe("solana-program", () => {
 
     const now = Math.floor(Date.now() / 1000);
 
-    const startTs = new anchor.BN(now + 5);
+    const startTs = new anchor.BN(now + 60);
 
     const endTs = startTs.add(new anchor.BN(100));
 
@@ -384,7 +384,7 @@ describe("solana-program", () => {
 
     const now = Math.floor(Date.now() / 1000);
 
-    const startTs = new anchor.BN(now + 5);
+    const startTs = new anchor.BN(now + 60);
 
     const endTs = startTs.add(new anchor.BN(100));
 
@@ -424,7 +424,7 @@ describe("solana-program", () => {
 
     const now = Math.floor(Date.now() / 1000);
 
-    const startTs = new anchor.BN(now + 5);
+    const startTs = new anchor.BN(now + 60);
 
     const endTs = startTs.add(new anchor.BN(100));
 
