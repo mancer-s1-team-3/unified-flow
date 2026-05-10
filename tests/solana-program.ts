@@ -238,6 +238,14 @@ describe("solana-program", () => {
     expect(
       vaultAccount.amount.toString()
     ).to.equal(amount.toString());
+
+    expect(
+      vaultAccount.owner.toBase58()
+    ).to.equal(streamPDA.toBase58());
+
+    expect(
+      vaultAccount.mint.toBase58()
+    ).to.equal(mint.toBase58());
   });
 
   // =========================================================
