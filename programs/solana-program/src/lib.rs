@@ -11,6 +11,7 @@ declare_id!("8M5yieUh7pxwUi1YBByDF82nqoorZwaKi8dBoMVpurFa");
 
 const MIN_STREAM_DURATION: i64 = 60;
 const STREAM_STATUS_ACTIVE: u8 = 1;
+const VESTING_TYPE_LINEAR: u8 = 0;
 #[program]
 pub mod solana_program {
     use super::*;
@@ -120,7 +121,7 @@ pub mod solana_program {
         stream.nonce = nonce;
         stream.bump = ctx.bumps.stream;
 
-        stream.vesting_type = 0;
+        stream.vesting_type = VESTING_TYPE_LINEAR;
         stream.status = STREAM_STATUS_ACTIVE;
         stream.cancelable = true;
         stream.milestone_count = 0;
@@ -277,8 +278,64 @@ pub struct CreateStream<'info> {
 #[derive(Accounts)]
 pub struct Withdraw {}
 
+
 #[derive(Accounts)]
-pub struct Cancel {}
+pub struct Cancel<'info> {
+    #[account(mut)]
+    pub creator: Signer<'info>,
+
+    pub mint: InterfaceAccount<'info, Mint>,
+
+    #[account(
+        mut,
+        seeds = [
+            b"stream",
+            stream.creator.as_ref(),
+            stream.recipient.as_ref(),
+            &stream.nonce.to_le_bytes()
+        ],
+        bump = stream.bump,
+        has_one = creator,
+        has_one = mint,
+        constraint = stream.status == STREAM_STATUS_ACTIVE
+            @ ErrorCode::StreamNotActive,
+        constraint = stream.cancelable
+            @ ErrorCode::StreamNotCancelable,
+    )]
+    pub stream: Account<'info, StreamAccount>,
+
+    #[account(
+        mut,
+        associated_token::mint = mint,
+        associated_token::authority = stream,
+        associated_token::token_program = token_program,
+    )]
+    pub vault: InterfaceAccount<'info, TokenAccount>,
+
+    #[account(
+        mut,
+        constraint = creator_token_account.owner == creator.key()
+            @ ErrorCode::InvalidTokenOwner,
+        constraint = creator_token_account.mint == mint.key()
+            @ ErrorCode::InvalidMint,
+    )]
+    pub creator_token_account:
+        InterfaceAccount<'info, TokenAccount>,
+
+    #[account(
+        mut,
+        constraint = recipient_token_account.owner
+            == stream.recipient
+            @ ErrorCode::InvalidRecipient,
+        constraint = recipient_token_account.mint
+            == mint.key()
+            @ ErrorCode::InvalidMint,
+    )]
+    pub recipient_token_account:
+        InterfaceAccount<'info, TokenAccount>,
+
+    pub token_program: Interface<'info, TokenInterface>,
+}
 
 #[derive(Accounts)]
 pub struct InitializeConfig<'info> {
