@@ -12,6 +12,7 @@ declare_id!("8M5yieUh7pxwUi1YBByDF82nqoorZwaKi8dBoMVpurFa");
 const MIN_STREAM_DURATION: i64 = 60;
 const STREAM_STATUS_ACTIVE: u8 = 1;
 const VESTING_TYPE_LINEAR: u8 = 0;
+
 #[program]
 pub mod solana_program {
     use super::*;
