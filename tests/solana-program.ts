@@ -613,6 +613,91 @@ describe("solana-program", () => {
     }
   });
 
+  it("Fails when stream PDA already exists", async () => {
+    const nonce = new anchor.BN(777777);
+
+    const now = Math.floor(Date.now() / 1000);
+
+    const startTs = new anchor.BN(now + 60);
+
+    const endTs = startTs.add(new anchor.BN(100));
+
+    // =====================================
+    // Derive Stream PDA
+    // =====================================
+
+    const [streamPDA] =
+      PublicKey.findProgramAddressSync(
+        [
+          Buffer.from("stream"),
+          creator.publicKey.toBuffer(),
+          recipient.publicKey.toBuffer(),
+          nonce.toArrayLike(Buffer, "le", 8),
+        ],
+        program.programId
+      );
+
+    // =====================================
+    // First Create -> SUCCESS
+    // =====================================
+
+    await program.methods
+      .createStream(
+        amount,
+        startTs,
+        endTs,
+        nonce
+      )
+      .accounts({
+        creator: creator.publicKey,
+        recipient: recipient.publicKey,
+        mint,
+        creatorTokenAccount,
+        tokenProgram: TOKEN_PROGRAM_ID,
+      })
+      .rpc();
+
+    const streamAccount =
+      await program.account.streamAccount.fetch(
+        streamPDA
+      );
+
+    expect(
+      streamAccount.totalAmount.toString()
+    ).to.equal(amount.toString());
+
+    // =====================================
+    // Second Create Same Nonce -> FAIL
+    // =====================================
+
+    try {
+      await program.methods
+        .createStream(
+          amount,
+          startTs,
+          endTs,
+          nonce
+        )
+        .accounts({
+          creator: creator.publicKey,
+          recipient: recipient.publicKey,
+          mint,
+          creatorTokenAccount,
+          tokenProgram: TOKEN_PROGRAM_ID,
+        })
+        .rpc();
+
+      expect.fail(
+        "Should fail because stream PDA already exists"
+      );
+    } catch (err: any) {
+      expect(err.toString()).to.satisfy((msg: string) =>
+        msg.includes("already in use") ||
+        msg.includes("AccountAlreadyInitialized") ||
+        msg.includes("custom program error")
+      );
+    }
+  });
   // =========================================================
   // PROGRAM DEPLOYED
   // =========================================================
