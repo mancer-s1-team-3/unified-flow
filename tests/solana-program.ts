@@ -698,6 +698,79 @@ describe("solana-program", () => {
       );
     }
   });
+
+  it("Fails when startTs equals endTs", async () => {
+    const nonce = new anchor.BN(888888);
+
+    const now = Math.floor(Date.now() / 1000);
+
+    const startTs = new anchor.BN(now + 60);
+
+    const endTs = startTs;
+
+    try {
+      await program.methods
+        .createStream(
+          amount,
+          startTs,
+          endTs,
+          nonce
+        )
+        .accounts({
+          creator: creator.publicKey,
+          recipient: recipient.publicKey,
+          mint,
+          creatorTokenAccount,
+          tokenProgram: TOKEN_PROGRAM_ID,
+        })
+        .rpc();
+
+      expect.fail(
+        "Should fail with InvalidSchedule"
+      );
+    } catch (err: any) {
+      expect(err.toString()).to.contain(
+        "InvalidSchedule"
+      );
+    }
+  });
+
+  it("Fails when stream duration is too short", async () => {
+    const nonce = new anchor.BN(888888);
+
+    const now = Math.floor(Date.now() / 1000);
+
+    const startTs = new anchor.BN(now + 60);
+
+    // Only 30 seconds duration
+    const endTs = startTs.add(new anchor.BN(30));
+
+    try {
+      await program.methods
+        .createStream(
+          amount,
+          startTs,
+          endTs,
+          nonce
+        )
+        .accounts({
+          creator: creator.publicKey,
+          recipient: recipient.publicKey,
+          mint,
+          creatorTokenAccount,
+          tokenProgram: TOKEN_PROGRAM_ID,
+        })
+        .rpc();
+
+      expect.fail(
+        "Should fail with DurationTooShort"
+      );
+    } catch (err: any) {
+      expect(err.toString()).to.contain(
+        "DurationTooShort"
+      );
+    }
+  });
   // =========================================================
   // PROGRAM DEPLOYED
   // =========================================================
