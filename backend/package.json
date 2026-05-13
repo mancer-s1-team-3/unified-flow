@@ -6,21 +6,34 @@
   "scripts": {
     "start": "node dist/index.js",
     "dev": "nodemon src/index.ts",
+    "test:create-stream": "ts-node src/scripts/createStream.ts",
+    "init-config": "ts-node src/scripts/initConfig.ts",
     "build": "tsc"
   },
   "dependencies": {
-    "cors": "^2.8.5",
-    "dotenv": "^16.4.5",
-    "express": "^4.19.2",
-    "pg": "^8.11.5"
+    "@coral-xyz/anchor": "^0.32.1",
+    "@prisma/adapter-pg": "^7.8.0",
+    "@prisma/client": "^7.8.0",
+    "@solana/spl-token": "^0.4.14",
+    "@solana/web3.js": "^1.98.4",
+    "bs58": "^6.0.0",
+    "cors": "^2.8.6",
+    "dotenv": "^16.6.1",
+    "express": "^4.22.2",
+    "pg": "^8.20.0",
+    "prisma": "^7.8.0"
   },
   "devDependencies": {
     "@types/cors": "^2.8.17",
-    "@types/express": "^4.17.21",
-    "@types/node": "^20.12.7",
+    "@types/express": "^4.17.25",
+    "@types/node": "^20.19.41",
     "@types/pg": "^8.11.6",
-    "nodemon": "^3.1.0",
+    "nodemon": "^3.1.14",
     "ts-node": "^10.9.2",
-    "typescript": "^5.4.5"
-  }
+    "typescript": "^5.9.3"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs"
 }
