@@ -698,6 +698,42 @@ describe("solana-program", () => {
       );
     }
   });
+
+  it("Fails when startTs equals endTs", async () => {
+    const nonce = new anchor.BN(888888);
+
+    const now = Math.floor(Date.now() / 1000);
+
+    const startTs = new anchor.BN(now + 60);
+
+    const endTs = startTs;
+
+    try {
+      await program.methods
+        .createStream(
+          amount,
+          startTs,
+          endTs,
+          nonce
+        )
+        .accounts({
+          creator: creator.publicKey,
+          recipient: recipient.publicKey,
+          mint,
+          creatorTokenAccount,
+          tokenProgram: TOKEN_PROGRAM_ID,
+        })
+        .rpc();
+
+      expect.fail(
+        "Should fail with InvalidSchedule"
+      );
+    } catch (err: any) {
+      expect(err.toString()).to.contain(
+        "InvalidSchedule"
+      );
+    }
+  });
   // =========================================================
   // PROGRAM DEPLOYED
   // =========================================================
