@@ -16,9 +16,38 @@ Target vesting models:
 
 Core program instructions currently scaffolded:
 
-- `create_stream`
-- `withdraw`
-- `cancel`
+## `create_stream` Instruction
+
+The `create_stream` instruction initializes a new token vesting stream and locks SPL tokens into a program-controlled vault account.
+
+Current implementation supports linear vesting streams.
+
+### Parameters
+
+| Parameter | Type | Description |
+| --- | --- | --- |
+| `amount` | `u64` | Total token amount locked into the stream |
+| `start_ts` | `i64` | Vesting start timestamp (Unix timestamp) |
+| `end_ts` | `i64` | Vesting end timestamp (Unix timestamp) |
+| `nonce` | `u64` | Unique nonce used for PDA derivation |
+
+### PDA Structure
+
+The stream account PDA is derived using:
+
+```text
+[
+  "stream",
+  creator,
+  recipient,
+  nonce
+]
+```
+## `withdraw` Instruction
+
+
+## `cancel` Instruction
+
 
 ## Component Status
 
