@@ -1,0 +1,52 @@
+generator client {
+  provider = "prisma-client-js"
+  output   = "../app/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+model Stream {
+  id        String @id
+  creator   String
+  recipient String
+  mint      String
+  vault     String
+
+  totalAmount BigInt
+  withdrawn   BigInt
+
+  startTs BigInt
+  cliffTs BigInt
+  endTs   BigInt
+
+  vestingType Int
+  status      Int
+
+  cancelable     Boolean
+  milestoneCount Int
+
+  nonce BigInt
+  bump  Int
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  transactions Transaction[]
+}
+
+model Transaction {
+  id        String @id
+  signature String @unique
+  slot      BigInt
+
+  streamId String?
+  stream   Stream? @relation(fields: [streamId], references: [id])
+
+  type String
+
+  raw Json
+
+  createdAt DateTime @default(now())
+}
