@@ -458,6 +458,52 @@ describe("withdraw", () => {
     expect(after3.status).to.equal(2); // COMPLETED
   });
 
+  // ══════════════════════════════════════════════════════════════════════════
+  // Vesting percentage checks: 0%, 25%, 50%, 100%
+  // ══════════════════════════════════════════════════════════════════════════
+
+  it("vesting 0%: at stream start elapsed=0, vested=0, NothingToWithdraw", async () => {
+    const futureStart = BASE_NOW + 200;
+
+    await setTime(context, BASE_NOW);
+    const { streamPda, recipientAta } = await setupStream({
+      startTs: futureStart,
+      endTs: futureStart + STREAM_DURATION,
+    });
+
+    // Set clock exactly at startTs — elapsed = 0 → vested = 0
+    await setTime(context, futureStart);
+    updateFeed(PRICE_RAW, PRICE_DECIMALS, futureStart);
+
+    const stream = await program.account.streamAccount.fetch(streamPda);
+    expect(stream.withdrawn.toNumber()).to.equal(0);
+
+    await expectError(
+      doWithdraw(streamPda, recipientAta),
+      "NothingToWithdraw"
+    );
+  });
+
+  it("vesting 25%: at 25% elapsed, correct token amount transferred", async () => {
+    await setTime(context, BASE_NOW);
+    const { streamPda, recipientAta, startTs, endTs, amount } = await setupStream();
+
+    const ts25 = startTs + Math.floor((endTs - startTs) * 0.25);
+    await setTime(context, ts25);
+    updateFeed(PRICE_RAW, PRICE_DECIMALS, ts25);
+
+    const tokenBefore = await getTokenBalance(context, recipientAta);
+    await doWithdraw(streamPda, recipientAta);
+    const tokenAfter = await getTokenBalance(context, recipientAta);
+
+    const expected25 = Math.floor(amount * 0.25);
+    expect(Number(tokenAfter - tokenBefore)).to.be.closeTo(expected25, 1);
+
+    const stream = await program.account.streamAccount.fetch(streamPda);
+    expect(stream.withdrawn.toNumber()).to.be.closeTo(expected25, 1);
+    expect(stream.status).to.equal(1); // still ACTIVE
+  });
+
   it("fee is proportional to SOL price: $200 SOL → ~half the lamports", async () => {
     await setTime(context, BASE_NOW);
     const { streamPda, recipientAta, endTs } = await setupStream();
