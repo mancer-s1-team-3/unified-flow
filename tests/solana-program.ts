@@ -17,7 +17,6 @@ import {
   getMintLen,
   mintToChecked,
 } from "@solana/spl-token";
-
 import { expect } from "chai";
 
 import {
