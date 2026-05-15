@@ -501,65 +501,6 @@ pub struct Cancel<'info> {
     pub token_program: Interface<'info, TokenInterface>,
 }
 
-
-#[derive(Accounts)]
-pub struct Cancel<'info> {
-    #[account(mut)]
-    pub creator: Signer<'info>,
-
-    pub mint: InterfaceAccount<'info, Mint>,
-
-    #[account(
-        mut,
-        seeds = [
-            b"stream",
-            stream.creator.as_ref(),
-            stream.recipient.as_ref(),
-            &stream.nonce.to_le_bytes()
-        ],
-        bump = stream.bump,
-        has_one = creator,
-        has_one = mint,
-        constraint = stream.status == STREAM_STATUS_ACTIVE
-            @ ErrorCode::StreamNotActive,
-        constraint = stream.cancelable
-            @ ErrorCode::StreamNotCancelable,
-    )]
-    pub stream: Account<'info, StreamAccount>,
-
-    #[account(
-        mut,
-        associated_token::mint = mint,
-        associated_token::authority = stream,
-        associated_token::token_program = token_program,
-    )]
-    pub vault: InterfaceAccount<'info, TokenAccount>,
-
-    #[account(
-        mut,
-        constraint = creator_token_account.owner == creator.key()
-            @ ErrorCode::InvalidTokenOwner,
-        constraint = creator_token_account.mint == mint.key()
-            @ ErrorCode::InvalidMint,
-    )]
-    pub creator_token_account:
-        InterfaceAccount<'info, TokenAccount>,
-
-    #[account(
-        mut,
-        constraint = recipient_token_account.owner
-            == stream.recipient
-            @ ErrorCode::InvalidRecipient,
-        constraint = recipient_token_account.mint
-            == mint.key()
-            @ ErrorCode::InvalidMint,
-    )]
-    pub recipient_token_account:
-        InterfaceAccount<'info, TokenAccount>,
-
-    pub token_program: Interface<'info, TokenInterface>,
-}
-
 #[derive(Accounts)]
 pub struct InitializeConfig<'info> {
     #[account(mut)]
