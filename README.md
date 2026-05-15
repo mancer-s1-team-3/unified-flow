@@ -45,6 +45,50 @@ The stream account PDA is derived using:
 ```
 ## `withdraw` Instruction
 
+The `withdraw` instruction allows the stream recipient to claim tokens that have already vested. Tokens unlock linearly over time — the recipient can call `withdraw` at any point after vesting begins and receive whatever portion has unlocked since the last claim.
+
+### How the unlock amount is calculated
+
+```
+vested   = total_amount × (elapsed / duration)
+claimable = vested − already_withdrawn
+```
+
+Where `elapsed = now − start_ts` and `duration = end_ts − start_ts`. Before `start_ts` the claimable amount is zero. At or after `end_ts` the full amount is claimable.
+
+### Parameters
+
+| Parameter | Type | Description |
+| --- | --- | --- |
+| `_amount_to_withdraw` | `u64` | Unused by the program; included only to ensure unique transaction signatures across calls |
+
+### Behavior
+
+- Computes the claimable amount at the current slot time.
+- Transfers exactly the claimable tokens from the vault PDA to the recipient's associated token account.
+- Charges a fixed **$0.99 USD** protocol fee in SOL **on every call**, regardless of how many tokens are claimed. The fee is priced in real time via the on-chain Chainlink SOL/USD feed and deducted from the recipient's SOL balance.
+- Updates `stream.withdrawn` to accumulate total claimed tokens.
+- Sets `stream.status = COMPLETED (2)` when the final tokens are claimed.
+- Partial withdrawals are fully supported — the recipient can call `withdraw` multiple times and accumulate claims over the lifetime of the stream.
+
+### Access control
+
+| Check | Error |
+| --- | --- |
+| Caller must be the stream recipient | `Unauthorized` |
+| Stream must be in `ACTIVE (1)` status | `StreamNotActive` |
+| Claimable amount must be greater than zero | `NothingToWithdraw` |
+| Protocol must not be paused | `ProtocolPaused` |
+| Oracle feed must match the expected address | `InvalidOracleFeed` |
+| Oracle price must not be stale (> 1 hour old) | `StaleOraclePrice` |
+| Fee receiver must match `config.fee_authority` | `InvalidFeeReceiver` |
+
+### Example flow
+
+1. Creator locks 1,000 tokens over 100 days via `create_stream`.
+2. After 25 days, recipient calls `withdraw` → receives 250 tokens and pays **$0.99** in SOL.
+3. After 50 days, recipient calls `withdraw` again → receives 250 more tokens (not 500, because 250 were already claimed) and pays **$0.99** again.
+4. After 100 days, recipient calls `withdraw` a final time → receives remaining 500 tokens, pays **$0.99** again, and stream moves to `COMPLETED`.
 
 ## `cancel` Instruction
 

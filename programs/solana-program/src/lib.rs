@@ -1,17 +1,22 @@
 use anchor_lang::prelude::*;
 use anchor_spl::token_interface::{
-    transfer_checked,
-    Mint,
-    TokenAccount,
-    TokenInterface,
-    TransferChecked,
+    transfer_checked, Mint, TokenAccount, TokenInterface, TransferChecked,
 };
+
+mod oracle;
+
+use oracle::{read_chainlink_round, CHAINLINK_PROGRAM_ID, SOL_USD_FEED};
 
 declare_id!("8M5yieUh7pxwUi1YBByDF82nqoorZwaKi8dBoMVpurFa");
 
 const MIN_STREAM_DURATION: i64 = 60;
 const STREAM_STATUS_ACTIVE: u8 = 1;
 const VESTING_TYPE_LINEAR: u8 = 0;
+const STREAM_STATUS_COMPLETED: u8 = 2;
+
+// Fee = $0.99 in SOL
+const WITHDRAW_FEE_USD_CENTS: u128 = 99; // $0.99
+const LAMPORTS_PER_SOL: u128 = 1_000_000_000;
 
 #[program]
 pub mod solana_program {
@@ -181,10 +186,102 @@ pub mod solana_program {
         Ok(())
     }
 
-    pub fn withdraw(
-        _ctx: Context<Withdraw>,
-        _amount_to_withdraw: u64,
-    ) -> Result<()> {
+    pub fn withdraw(ctx: Context<Withdraw>, _amount_to_withdraw: u64) -> Result<()> {
+        let now = Clock::get()?.unix_timestamp;
+
+        require!(!ctx.accounts.config.paused, ErrorCode::ProtocolPaused);
+
+        let vested = vested_amount(&ctx.accounts.stream, now)?;
+        let claimable = vested
+            .checked_sub(ctx.accounts.stream.withdrawn)
+            .ok_or(ErrorCode::MathOverflow)?;
+        require!(claimable > 0, ErrorCode::NothingToWithdraw);
+
+        let round = read_chainlink_round(&ctx.accounts.chainlink_feed, now)?;
+        let decimals_factor = 10u128
+            .checked_pow(round.decimals as u32)
+            .ok_or(ErrorCode::MathOverflow)?;
+        let fee_lamports = WITHDRAW_FEE_USD_CENTS
+            .checked_mul(LAMPORTS_PER_SOL)
+            .ok_or(ErrorCode::MathOverflow)?
+            .checked_mul(decimals_factor)
+            .ok_or(ErrorCode::MathOverflow)?
+            .checked_div(
+                100u128
+                    .checked_mul(round.answer as u128)
+                    .ok_or(ErrorCode::MathOverflow)?,
+            )
+            .ok_or(ErrorCode::MathOverflow)? as u64;
+        require!(fee_lamports > 0, ErrorCode::InvalidOraclePrice);
+
+        // CEI: mutate stream state in a block so the mutable borrow drops before CPI
+        let (creator_key, recipient_key, nonce_bytes, bump_bytes, stream_key, withdrawn_total) = {
+            let stream = &mut ctx.accounts.stream;
+            stream.withdrawn = stream
+                .withdrawn
+                .checked_add(claimable)
+                .ok_or(ErrorCode::MathOverflow)?;
+            if stream.withdrawn == stream.total_amount {
+                stream.status = STREAM_STATUS_COMPLETED;
+            }
+            (
+                stream.creator,
+                stream.recipient,
+                stream.nonce.to_le_bytes(),
+                [stream.bump],
+                stream.key(),
+                stream.withdrawn,
+            )
+        };
+
+        anchor_lang::system_program::transfer(
+            CpiContext::new(
+                ctx.accounts.system_program.to_account_info(),
+                anchor_lang::system_program::Transfer {
+                    from: ctx.accounts.recipient.to_account_info(),
+                    to: ctx.accounts.fee_receiver.to_account_info(),
+                },
+            ),
+            fee_lamports,
+        )?;
+
+        let signer_seeds: &[&[&[u8]]] = &[&[
+            b"stream",
+            creator_key.as_ref(),
+            recipient_key.as_ref(),
+            &nonce_bytes,
+            &bump_bytes,
+        ]];
+
+        let cpi_accounts = TransferChecked {
+            from: ctx.accounts.vault.to_account_info(),
+            to: ctx.accounts.recipient_ata.to_account_info(),
+            authority: ctx.accounts.stream.to_account_info(),
+            mint: ctx.accounts.mint.to_account_info(),
+        };
+        transfer_checked(
+            CpiContext::new_with_signer(
+                ctx.accounts.token_program.to_account_info(),
+                cpi_accounts,
+                signer_seeds,
+            ),
+            claimable,
+            ctx.accounts.mint.decimals,
+        )?;
+
+        // =====================
+        // Emit Event
+        // =====================
+        emit!(TokensClaimed {
+            stream: stream_key,
+            recipient: ctx.accounts.recipient.key(),
+            mint: ctx.accounts.mint.key(),
+            claimable,
+            fee_lamports,
+            withdrawn_total,
+            timestamp: now,
+        });
+
         Ok(())
     }
 
@@ -275,7 +372,75 @@ pub struct CreateStream<'info> {
 }
 
 #[derive(Accounts)]
-pub struct Withdraw {}
+pub struct Withdraw<'info> {
+    #[account(mut)]
+    pub recipient: Signer<'info>,
+
+    pub mint: InterfaceAccount<'info, Mint>,
+
+    #[account(
+        seeds = [b"config"],
+        bump = config.bump,
+    )]
+    pub config: Account<'info, ConfigAccount>,
+
+    /// Stream account
+    #[account(
+        mut,
+        seeds = [
+            b"stream",
+            stream.creator.as_ref(),
+            stream.recipient.as_ref(),
+            &stream.nonce.to_le_bytes()
+        ],
+        bump = stream.bump,
+        constraint = stream.recipient == recipient.key()
+            @ ErrorCode::Unauthorized,
+        constraint = stream.status == STREAM_STATUS_ACTIVE
+            @ ErrorCode::StreamNotActive,
+        has_one = mint @ ErrorCode::InvalidMint,
+    )]
+    pub stream: Account<'info, StreamAccount>,
+
+    /// Vault token account (ATA owned by stream PDA)
+    #[account(
+        mut,
+        associated_token::mint = mint,
+        associated_token::authority = stream,
+        associated_token::token_program = token_program,
+    )]
+    pub vault: InterfaceAccount<'info, TokenAccount>,
+
+    /// Token account recipient
+    #[account(
+        mut,
+        constraint = recipient_ata.owner == recipient.key()
+            @ ErrorCode::InvalidTokenOwner,
+        constraint = recipient_ata.mint == mint.key()
+            @ ErrorCode::InvalidMint,
+    )]
+    pub recipient_ata: InterfaceAccount<'info, TokenAccount>,
+
+    /// Recipient fee SOL
+    #[account(
+        mut,
+        constraint = fee_receiver.key() == config.fee_authority
+            @ ErrorCode::InvalidFeeReceiver,
+    )]
+    pub fee_receiver: SystemAccount<'info>,
+
+    /// CHECK: Address and owner validated via constraints; data read in read_chainlink_round()
+    #[account(
+        constraint = chainlink_feed.key() == SOL_USD_FEED
+            @ ErrorCode::InvalidOracleFeed,
+        constraint = chainlink_feed.owner == &CHAINLINK_PROGRAM_ID
+            @ ErrorCode::InvalidOracleFeed,
+    )]
+    pub chainlink_feed: AccountInfo<'info>,
+
+    pub token_program: Interface<'info, TokenInterface>,
+    pub system_program: Program<'info, System>,
+}
 
 
 #[derive(Accounts)]
@@ -436,6 +601,32 @@ pub struct MilestoneAccount {
     pub bump: u8,
 }
 
+fn vested_amount(stream: &StreamAccount, now: i64) -> Result<u64> {
+    if now < stream.start_ts {
+        return Ok(0);
+    }
+    if now >= stream.end_ts {
+        return Ok(stream.total_amount);
+    }
+
+    let elapsed = now
+        .checked_sub(stream.start_ts)
+        .ok_or(ErrorCode::MathOverflow)? as u64;
+
+    let duration = stream
+        .end_ts
+        .checked_sub(stream.start_ts)
+        .ok_or(ErrorCode::MathOverflow)? as u64;
+
+    let vested = (stream.total_amount as u128)
+        .checked_mul(elapsed as u128)
+        .ok_or(ErrorCode::MathOverflow)?
+        .checked_div(duration as u128)
+        .ok_or(ErrorCode::MathOverflow)? as u64;
+
+    Ok(vested)
+}
+
 #[error_code]
 pub enum ErrorCode {
     #[msg("Amount must be greater than zero")]
@@ -488,6 +679,24 @@ pub enum ErrorCode {
 
     #[msg("Stream not cancelable")]
     StreamNotCancelable,
+
+    #[msg("No tokens available to withdraw")]
+    NothingToWithdraw,
+
+    #[msg("Signer is not the stream recipient")]
+    Unauthorized,
+
+    #[msg("Invalid oracle price feed")]
+    InvalidOracleFeed,
+
+    #[msg("Oracle price is stale (> 1 hour)")]
+    StaleOraclePrice,
+
+    #[msg("Oracle returned invalid price")]
+    InvalidOraclePrice,
+
+    #[msg("Invalid fee receiver account")]
+    InvalidFeeReceiver,
 }
 
 #[event]
@@ -506,4 +715,15 @@ pub struct StreamCreated {
     pub nonce: u64,
 
     pub created_at: i64,
+}
+
+#[event]
+pub struct TokensClaimed {
+    pub stream: Pubkey,
+    pub recipient: Pubkey,
+    pub mint: Pubkey,
+    pub claimable: u64,
+    pub fee_lamports: u64,
+    pub withdrawn_total: u64,
+    pub timestamp: i64,
 }
