@@ -28,6 +28,7 @@ import {
 describe("create-stream", () => {
     const provider = anchor.AnchorProvider.env();
 
+
     anchor.setProvider(provider);
 
     const program =
@@ -49,6 +50,10 @@ describe("create-stream", () => {
     let configPDA: PublicKey;
 
     const amount = new anchor.BN(1_000_000);
+    const VESTING_TYPE_LINEAR = 0;
+    const VESTING_TYPE_CLIFF = 1;
+    const VESTING_TYPE_MILESTONE = 2;
+
 
     before(async () => {
         // =====================================
@@ -148,7 +153,7 @@ describe("create-stream", () => {
     // SUCCESS
     // =========================================================
 
-    it("Creates a stream", async () => {
+    it("Creates a linear stream", async () => {
         const nonce = new anchor.BN(
             Math.floor(Math.random() * 1_000_000)
         );
@@ -180,7 +185,10 @@ describe("create-stream", () => {
             .createStream(
                 amount,
                 startTs,
+                startTs, // cliffTs
                 endTs,
+                VESTING_TYPE_LINEAR,
+                [],
                 nonce
             )
             .accounts({
@@ -249,6 +257,199 @@ describe("create-stream", () => {
     });
 
     // =========================================================
+    // CLIFF VESTING
+    // =========================================================
+
+    it("Creates a cliff vesting stream", async () => {
+        const nonce = new anchor.BN(900001);
+
+        const now = Math.floor(Date.now() / 1000);
+
+        const startTs = new anchor.BN(now + 60);
+
+        // Cliff unlock after 1 hour
+        const cliffTs = startTs.add(
+            new anchor.BN(3600)
+        );
+
+        const endTs = cliffTs.add(
+            new anchor.BN(100)
+        );
+
+        const [streamPDA] =
+            PublicKey.findProgramAddressSync(
+                [
+                    Buffer.from("stream"),
+                    creator.publicKey.toBuffer(),
+                    recipient.publicKey.toBuffer(),
+                    nonce.toArrayLike(Buffer, "le", 8),
+                ],
+                program.programId
+            );
+
+        await program.methods
+            .createStream(
+                amount,
+                startTs,
+                cliffTs,
+                endTs,
+                VESTING_TYPE_CLIFF,
+                [],
+                nonce
+            )
+            .accounts({
+                creator: creator.publicKey,
+                recipient: recipient.publicKey,
+                mint,
+                creatorTokenAccount,
+                tokenProgram: TOKEN_PROGRAM_ID,
+            })
+            .rpc();
+
+        const stream =
+            await program.account.streamAccount.fetch(
+                streamPDA
+            );
+
+        expect(
+            stream.vestingType
+        ).to.equal(VESTING_TYPE_CLIFF);
+
+        expect(
+            stream.startTs.toString()
+        ).to.equal(startTs.toString());
+
+        expect(
+            stream.cliffTs.toString()
+        ).to.equal(cliffTs.toString());
+
+        expect(
+            stream.endTs.toString()
+        ).to.equal(endTs.toString());
+
+        expect(
+            stream.totalAmount.toString()
+        ).to.equal(amount.toString());
+
+        expect(
+            stream.withdrawn.toString()
+        ).to.equal("0");
+    });
+
+    // =========================================================
+    // MILESTONE VESTING
+    // =========================================================
+
+    it("Creates and unlocks milestone vesting stream", async () => {
+        const nonce = new anchor.BN(900002);
+
+        const now = Math.floor(Date.now() / 1000);
+
+        const startTs = new anchor.BN(now + 60);
+
+        // not really used for milestone
+        const cliffTs = startTs;
+
+        const endTs = startTs.add(
+            new anchor.BN(86400)
+        );
+
+        const VESTING_TYPE_MILESTONE = 2;
+
+
+        // =====================================
+        // Derive PDA
+        // =====================================
+
+        const [streamPDA] =
+            PublicKey.findProgramAddressSync(
+                [
+                    Buffer.from("stream"),
+                    creator.publicKey.toBuffer(),
+                    recipient.publicKey.toBuffer(),
+                    nonce.toArrayLike(Buffer, "le", 8),
+                ],
+                program.programId
+            );
+
+        const remainingAccounts = [];
+        for (let i = 0; i < 4; i++) {
+            const [pda] = PublicKey.findProgramAddressSync(
+                [
+                    Buffer.from("milestone"),
+                    streamPDA.toBuffer(),
+                    Buffer.from([i])
+                ],
+                program.programId
+            );
+            remainingAccounts.push({
+                pubkey: pda,
+                isWritable: true,
+                isSigner: false
+            });
+        }
+
+        await program.methods
+            .createStream(
+                amount,
+                startTs,
+                cliffTs,
+                endTs,
+                VESTING_TYPE_MILESTONE,
+                [
+                    { amount: amount.div(new anchor.BN(4)) },
+                    { amount: amount.div(new anchor.BN(4)) },
+                    { amount: amount.div(new anchor.BN(4)) },
+                    { amount: amount.div(new anchor.BN(4)) },
+                ],
+                nonce
+            )
+            .accounts({
+                creator: creator.publicKey,
+                recipient: recipient.publicKey,
+                mint,
+                creatorTokenAccount,
+                tokenProgram: TOKEN_PROGRAM_ID,
+            })
+            .remainingAccounts(remainingAccounts)
+            .rpc();
+
+        // =====================================
+        // Validate initial state
+        // =====================================
+
+        let stream =
+            await program.account.streamAccount.fetch(
+                streamPDA
+            );
+
+        expect(
+            stream.vestingType
+        ).to.equal(VESTING_TYPE_MILESTONE);
+
+
+        // =====================================
+        // Unlock milestone
+        // =====================================
+
+        await program.methods
+            .unlockMilestone()
+            .accounts({
+                stream: streamPDA,
+                milestone: remainingAccounts[0].pubkey
+            })
+            .rpc();
+
+        const milestone =
+            await program.account.milestoneAccount.fetch(
+                remainingAccounts[0].pubkey
+            );
+
+        expect(milestone.approved).to.equal(true);
+
+
+    });
+    // =========================================================
     // INVALID AMOUNT
     // =========================================================
 
@@ -266,7 +467,10 @@ describe("create-stream", () => {
                 .createStream(
                     new anchor.BN(0),
                     startTs,
+                    startTs, // cliffTs
                     endTs,
+                    VESTING_TYPE_LINEAR,
+                    [],
                     nonce
                 )
                 .accounts({
@@ -306,7 +510,10 @@ describe("create-stream", () => {
                 .createStream(
                     amount,
                     startTs,
+                    startTs, // cliffTs
                     endTs,
+                    VESTING_TYPE_LINEAR,
+                    [],
                     nonce
                 )
                 .accounts({
@@ -346,7 +553,10 @@ describe("create-stream", () => {
                 .createStream(
                     amount,
                     startTs,
+                    startTs, // cliffTs
                     endTs,
+                    VESTING_TYPE_LINEAR,
+                    [],
                     nonce
                 )
                 .accounts({
@@ -385,7 +595,10 @@ describe("create-stream", () => {
                 .createStream(
                     amount,
                     startTs,
+                    startTs, // cliffTs
                     endTs,
+                    VESTING_TYPE_LINEAR,
+                    [],
                     nonce
                 )
                 .accounts({
@@ -425,7 +638,10 @@ describe("create-stream", () => {
                 .createStream(
                     amount,
                     startTs,
+                    startTs, // cliffTs
                     endTs,
+                    VESTING_TYPE_LINEAR,
+                    [],
                     nonce
                 )
                 .accounts({
@@ -476,7 +692,10 @@ describe("create-stream", () => {
                 .createStream(
                     hugeAmount,
                     startTs,
+                    startTs, // cliffTs
                     endTs,
+                    VESTING_TYPE_LINEAR,
+                    [],
                     nonce
                 )
                 .accounts({
@@ -590,7 +809,10 @@ describe("create-stream", () => {
                 .createStream(
                     new anchor.BN(1_000_000),
                     startTs,
+                    startTs, // cliffTs
                     endTs,
+                    VESTING_TYPE_LINEAR,
+                    [],
                     nonce
                 )
                 .accounts({
@@ -645,7 +867,10 @@ describe("create-stream", () => {
             .createStream(
                 amount,
                 startTs,
+                startTs, // cliffTs
                 endTs,
+                VESTING_TYPE_LINEAR,
+                [],
                 nonce
             )
             .accounts({
@@ -675,7 +900,10 @@ describe("create-stream", () => {
                 .createStream(
                     amount,
                     startTs,
+                    startTs, // cliffTs
                     endTs,
+                    VESTING_TYPE_LINEAR,
+                    [],
                     nonce
                 )
                 .accounts({
@@ -713,7 +941,10 @@ describe("create-stream", () => {
                 .createStream(
                     amount,
                     startTs,
+                    startTs, // cliffTs
                     endTs,
+                    VESTING_TYPE_LINEAR,
+                    [],
                     nonce
                 )
                 .accounts({
@@ -750,7 +981,10 @@ describe("create-stream", () => {
                 .createStream(
                     amount,
                     startTs,
+                    startTs, // cliffTs
                     endTs,
+                    VESTING_TYPE_LINEAR,
+                    [],
                     nonce
                 )
                 .accounts({
@@ -799,7 +1033,10 @@ describe("create-stream", () => {
                 .createStream(
                     amount,
                     startTs,
+                    startTs, // cliffTs
                     endTs,
+                    VESTING_TYPE_LINEAR,
+                    [],
                     nonce
                 )
                 .accounts({
@@ -887,7 +1124,10 @@ describe("create-stream", () => {
                 .createStream(
                     amount,
                     startTs,
+                    startTs, // cliffTs
                     endTs,
+                    VESTING_TYPE_LINEAR,
+                    [],
                     nonce
                 )
                 .accounts({
@@ -983,7 +1223,10 @@ describe("create-stream", () => {
                 .createStream(
                     amount,
                     startTs,
+                    startTs, // cliffTs
                     endTs,
+                    VESTING_TYPE_LINEAR,
+                    [], // milestone_count
                     nonce
                 )
                 .accounts({
@@ -1051,7 +1294,10 @@ describe("create-stream", () => {
             .createStream(
                 amount,
                 startTs,
+                startTs, // cliffTs
                 endTs,
+                VESTING_TYPE_LINEAR,
+                [], // milestone_count
                 nonce
             )
             .accounts({
@@ -1085,7 +1331,10 @@ describe("create-stream", () => {
                 .createStream(
                     amount,
                     startTs,
+                    startTs, // cliffTs
                     endTs,
+                    VESTING_TYPE_LINEAR,
+                    [], // milestone_count
                     nonce
                 )
                 .accounts({
@@ -1216,7 +1465,10 @@ describe("create-stream", () => {
             .createStream(
                 amount,
                 startTs,
+                startTs, // cliffTs
                 endTs,
+                VESTING_TYPE_LINEAR,
+                [], // milestone_count
                 nonceA
             )
             .accounts({
@@ -1236,7 +1488,10 @@ describe("create-stream", () => {
             .createStream(
                 amount,
                 startTs,
+                startTs, // cliffTs
                 endTs,
+                VESTING_TYPE_LINEAR,
+                [], // milestone_count
                 nonceB
             )
             .accounts({
