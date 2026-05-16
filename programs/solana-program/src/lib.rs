@@ -255,9 +255,9 @@ pub fn create_stream<'info>(
                     ctx.program_id,
                 ),
                 &[
-                    creator_info.clone(),
+                    ctx.accounts.creator.to_account_info(),
                     milestone_info.clone(),
-                    system_program_info.clone(),
+                    ctx.accounts.system_program.to_account_info(),
                 ],
                 &[&[
                     b"milestone",
@@ -464,17 +464,63 @@ pub fn create_stream<'info>(
  pub fn cancel(_ctx: Context<Cancel>) -> Result<()> {
    Ok(())
 }
-pub fn unlock_milestone(
-    ctx: Context<UnlockMilestone>,
-) -> Result<()> {
+pub fn unlock_milestone(ctx: Context<UnlockMilestone>) -> Result<()> {
+    let stream = &ctx.accounts.stream;
+    let stream_key = stream.key();
     let milestone = &mut ctx.accounts.milestone;
+
+    require!(
+        stream.vesting_type == VESTING_TYPE_MILESTONE,
+        ErrorCode::InvalidVestingType
+    );
 
     require!(
         !milestone.approved,
         ErrorCode::MilestoneAlreadyUnlocked
     );
 
+    // ================================
+    // enforce sequential unlock
+    // ================================
+    if milestone.index > 0 {
+        let prev_index = milestone.index - 1;
+
+        let (prev_pda, _) = Pubkey::find_program_address(
+            &[
+                b"milestone",
+                stream_key.as_ref(),
+                &[prev_index],
+            ],
+            ctx.program_id,
+        );
+       let prev_info = ctx
+            .remaining_accounts
+            .iter()
+            .find(|a| a.key() == prev_pda)
+            .ok_or(ErrorCode::PreviousMilestoneMissing)?;
+   
+        require!(
+            prev_info.key() == prev_pda,
+            ErrorCode::InvalidMilestonePda
+        );
+
+        let prev_data = prev_info.try_borrow_data()?;
+        let prev_milestone = MilestoneAccount::try_deserialize(&mut &prev_data[..])?;
+
+        require!(
+            prev_milestone.approved,
+            ErrorCode::PreviousMilestoneNotApproved
+        );
+
+        require!(
+            prev_milestone.index + 1 == milestone.index,
+            ErrorCode::InvalidMilestoneOrder
+        );
+    }
+
     milestone.approved = true;
+    milestone.unlocked = true;
+    milestone.unlock_ts = Clock::get()?.unix_timestamp;
 
     Ok(())
 }
@@ -723,8 +769,9 @@ pub struct UnlockMilestone<'info> {
         constraint = milestone.stream == stream.key()
     )]
     pub milestone: Account<'info, MilestoneAccount>,
-}
 
+    pub system_program: Program<'info, System>,
+}
 #[derive(
     AnchorSerialize,
     AnchorDeserialize,
@@ -932,6 +979,15 @@ pub enum ErrorCode {
 
     #[msg("Invalid milestone amount")]
     InvalidMilestoneAmount,
+    
+    #[msg("Previous milestone not approved")]
+    PreviousMilestoneNotApproved,
+
+    #[msg("Invalid milestone order")]
+    InvalidMilestoneOrder,
+
+    #[msg("Previous milestone missing")]
+    PreviousMilestoneMissing,
 }
 
 #[event]

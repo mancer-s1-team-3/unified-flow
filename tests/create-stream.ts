@@ -436,7 +436,7 @@ describe("create-stream", () => {
             .unlockMilestone()
             .accounts({
                 stream: streamPDA,
-                milestone: remainingAccounts[0].pubkey
+                milestone: remainingAccounts[0].pubkey,
             })
             .rpc();
 
@@ -447,7 +447,59 @@ describe("create-stream", () => {
 
         expect(milestone.approved).to.equal(true);
 
+        await program.methods
+            .unlockMilestone()
+            .accounts({
+                stream: streamPDA,
+                milestone: remainingAccounts[1].pubkey,
+            })
+            .remainingAccounts([
+                { pubkey: remainingAccounts[0].pubkey, isWritable: false, isSigner: false }
+            ])
+            .rpc();
+        const m1 = await program.account.milestoneAccount.fetch(
+            remainingAccounts[1].pubkey
+        );
 
+        expect(m1.approved).to.equal(true);
+
+        await program.methods
+            .unlockMilestone()
+            .accounts({
+                stream: streamPDA,
+                milestone: remainingAccounts[2].pubkey,
+            })
+            .remainingAccounts([
+                { pubkey: remainingAccounts[0].pubkey, isWritable: false, isSigner: false },
+                { pubkey: remainingAccounts[1].pubkey, isWritable: false, isSigner: false }
+            ])
+            .rpc();
+
+        const m2 = await program.account.milestoneAccount.fetch(
+            remainingAccounts[2].pubkey
+        );
+
+        expect(m2.approved).to.equal(true);
+
+
+        await program.methods
+            .unlockMilestone()
+            .accounts({
+                stream: streamPDA,
+                milestone: remainingAccounts[3].pubkey,
+            })
+            .remainingAccounts([
+                { pubkey: remainingAccounts[0].pubkey, isWritable: false, isSigner: false },
+                { pubkey: remainingAccounts[1].pubkey, isWritable: false, isSigner: false },
+                { pubkey: remainingAccounts[2].pubkey, isWritable: false, isSigner: false },
+            ])
+            .rpc();
+
+        const m3 = await program.account.milestoneAccount.fetch(
+            remainingAccounts[3].pubkey
+        );
+
+        expect(m3.approved).to.equal(true);
     });
     // =========================================================
     // INVALID AMOUNT
