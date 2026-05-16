@@ -2,7 +2,10 @@ use anchor_lang::prelude::*;
 use anchor_spl::token_interface::{
     transfer_checked, Mint, TokenAccount, TokenInterface, TransferChecked,
 };
-
+use anchor_lang::solana_program::{
+    program::invoke_signed,
+    system_instruction,
+};
 mod oracle;
 
 use oracle::{read_chainlink_round, CHAINLINK_PROGRAM_ID, SOL_USD_FEED};
@@ -10,9 +13,14 @@ use oracle::{read_chainlink_round, CHAINLINK_PROGRAM_ID, SOL_USD_FEED};
 declare_id!("8M5yieUh7pxwUi1YBByDF82nqoorZwaKi8dBoMVpurFa");
 
 const MIN_STREAM_DURATION: i64 = 60;
-const STREAM_STATUS_ACTIVE: u8 = 1;
+
 const VESTING_TYPE_LINEAR: u8 = 0;
+const VESTING_TYPE_CLIFF: u8 = 1;
+const VESTING_TYPE_MILESTONE: u8 = 2;
+
+const STREAM_STATUS_ACTIVE: u8 = 1;
 const STREAM_STATUS_COMPLETED: u8 = 2;
+const STREAM_STATUS_CANCELLED: u8 = 3;
 
 // Fee = $0.99 in SOL
 const WITHDRAW_FEE_USD_CENTS: u128 = 99; // $0.99
@@ -22,169 +30,337 @@ const LAMPORTS_PER_SOL: u128 = 1_000_000_000;
 pub mod solana_program {
     use super::*;
 
-    pub fn create_stream(
-        ctx: Context<CreateStream>,
-        amount: u64,
-        start_ts: i64,
-        end_ts: i64,
-        nonce: u64,
-    ) -> Result<()> {
-        let now = Clock::get()?.unix_timestamp;
+ 
 
-        let config = &ctx.accounts.config;
+pub fn create_stream<'info>(
+    ctx: Context<'_, '_, '_, 'info, CreateStream<'info>>,
+    amount: u64,
+    start_ts: i64,
+    cliff_ts: i64,
+    end_ts: i64,
+    vesting_type: u8,
+    milestones: Vec<MilestoneInput>,
+    nonce: u64,
+) -> Result<()> {
+    let now = Clock::get()?.unix_timestamp;
+    let creator_key = ctx.accounts.creator.key();
+    let stream_key = ctx.accounts.stream.key();
+    let recipient_key = ctx.accounts.recipient.key();
+    let mint_key = ctx.accounts.mint.key();
+    let vault_key = ctx.accounts.vault.key();
 
-        // =========================
-        // Protocol State Validation
-        // =========================
 
-        require!(!config.paused, ErrorCode::ProtocolPaused);
+    let config = &ctx.accounts.config;
 
-        // =========================
-        // Amount Validation
-        // =========================
+    // =========================
+    // Protocol State Validation
+    // =========================
 
-        require!(amount > 0, ErrorCode::InvalidAmount);
+    require!(!config.paused, ErrorCode::ProtocolPaused);
 
-        // =========================
-        // Time Validation
-        // =========================
+    // =========================
+    // Amount Validation
+    // =========================
 
-        require!(start_ts >= now, ErrorCode::InvalidStartDate);
+    require!(amount > 0, ErrorCode::InvalidAmount);
 
-        require!(end_ts > now, ErrorCode::InvalidEndDate);
+    // =========================
+    // Vesting Type Validation
+    // =========================
 
-        require!(end_ts > start_ts, ErrorCode::InvalidSchedule);
+    require!(
+        vesting_type <= VESTING_TYPE_MILESTONE,
+        ErrorCode::InvalidVestingType
+    );
 
-        let duration = end_ts
-            .checked_sub(start_ts)
-            .ok_or(ErrorCode::MathOverflow)?;
+    let milestone_count = milestones.len() as u8;
 
+    // =========================
+    // Milestone Validation
+    // =========================
+
+    if vesting_type == VESTING_TYPE_MILESTONE {
         require!(
-            duration >= MIN_STREAM_DURATION,
-            ErrorCode::DurationTooShort
+            milestone_count > 0,
+            ErrorCode::InvalidMilestoneCount
         );
 
-        // =========================
-        // Recipient Validation
-        // =========================
-
         require!(
-            ctx.accounts.creator.key() != ctx.accounts.recipient.key(),
-            ErrorCode::InvalidRecipient
+            ctx.remaining_accounts.len() == milestone_count as usize,
+            ErrorCode::InvalidMilestoneCount
         );
 
-        // =========================
-        // Mint Validation
-        // =========================
+        let mut total_milestone_amount: u64 = 0;
 
-        if !config.allowed_mints.is_empty() {
+        for milestone in &milestones {
             require!(
-                config.allowed_mints.contains(&ctx.accounts.mint.key()),
-                ErrorCode::MintNotAllowed
+                milestone.amount > 0,
+                ErrorCode::InvalidAmount
             );
+
+            total_milestone_amount = total_milestone_amount
+                .checked_add(milestone.amount)
+                .ok_or(ErrorCode::MathOverflow)?;
         }
 
         require!(
-            ctx.accounts.creator_token_account.mint == ctx.accounts.mint.key(),
-            ErrorCode::InvalidMint
+            total_milestone_amount == amount,
+            ErrorCode::InvalidMilestoneAmount
         );
-
+    } else {
         require!(
-            ctx.accounts.creator_token_account.owner == ctx.accounts.creator.key(),
-            ErrorCode::InvalidTokenOwner
+            milestone_count == 0,
+            ErrorCode::InvalidMilestoneCount
         );
-
-        require!(
-            ctx.accounts.creator_token_account.amount >= amount,
-            ErrorCode::InsufficientBalance
-        );
-
-        require!(
-            ctx.accounts.mint.decimals > 0,
-            ErrorCode::InvalidMintDecimals
-        );
-
-     
-
-        // =========================
-        // Stream Init
-        // =========================
-
-        let stream = &mut ctx.accounts.stream;
-
-        stream.creator = ctx.accounts.creator.key();
-        stream.recipient = ctx.accounts.recipient.key();
-        stream.mint = ctx.accounts.mint.key();
-        stream.vault = ctx.accounts.vault.key();
-
-        stream.total_amount = amount;
-        stream.withdrawn = 0;
-
-        stream.start_ts = start_ts;
-        stream.cliff_ts = start_ts;
-        stream.end_ts = end_ts;
-
-        stream.nonce = nonce;
-        stream.bump = ctx.bumps.stream;
-
-        stream.vesting_type = VESTING_TYPE_LINEAR;
-        stream.status = STREAM_STATUS_ACTIVE;
-        stream.cancelable = true;
-        stream.milestone_count = 0;
-
-
-
-        // =========================
-        // Transfer Tokens
-        // =========================
-
-        let cpi_accounts = TransferChecked {
-            from: ctx.accounts.creator_token_account.to_account_info(),
-            to: ctx.accounts.vault.to_account_info(),
-            authority: ctx.accounts.creator.to_account_info(),
-            mint: ctx.accounts.mint.to_account_info(),
-        };
-
-        let cpi_program = ctx.accounts.token_program.to_account_info();
-
-        let cpi_ctx = CpiContext::new(cpi_program, cpi_accounts);
-
-        transfer_checked(
-            cpi_ctx,
-            amount,
-            ctx.accounts.mint.decimals,
-        )?;
-
-        // =========================
-        // Reload Vault
-        // =========================
-
-        ctx.accounts.vault.reload()?;
-
-        // Reject transfer-fee tokens
-        require!(
-            ctx.accounts.vault.amount == amount,
-            ErrorCode::TransferFeeMintUnsupported
-        );
-
-        emit!(StreamCreated {
-    stream: stream.key(),
-    creator: ctx.accounts.creator.key(),
-    recipient: ctx.accounts.recipient.key(),
-    mint: ctx.accounts.mint.key(),
-    vault: ctx.accounts.vault.key(),
-
-    total_amount: amount,
-
-    start_ts,
-    end_ts,
-
-    nonce,
-
-    created_at: now,
-});
-        Ok(())
     }
+
+    // =========================
+    // Time Validation
+    // =========================
+
+    require!(start_ts >= now, ErrorCode::InvalidStartDate);
+
+    require!(end_ts > now, ErrorCode::InvalidEndDate);
+
+    require!(cliff_ts >= start_ts, ErrorCode::InvalidSchedule);
+
+    require!(end_ts > start_ts, ErrorCode::InvalidSchedule);
+
+    let duration = end_ts
+        .checked_sub(start_ts)
+        .ok_or(ErrorCode::MathOverflow)?;
+
+    require!(
+        duration >= MIN_STREAM_DURATION,
+        ErrorCode::DurationTooShort
+    );
+
+    // =========================
+    // Recipient Validation
+    // =========================
+
+    require!(
+        ctx.accounts.creator.key() != ctx.accounts.recipient.key(),
+        ErrorCode::InvalidRecipient
+    );
+
+    // =========================
+    // Mint Validation
+    // =========================
+
+    if !config.allowed_mints.is_empty() {
+        require!(
+            config.allowed_mints.contains(&ctx.accounts.mint.key()),
+            ErrorCode::MintNotAllowed
+        );
+    }
+
+    require!(
+        ctx.accounts.creator_token_account.mint
+            == ctx.accounts.mint.key(),
+        ErrorCode::InvalidMint
+    );
+
+    require!(
+        ctx.accounts.creator_token_account.owner
+            == ctx.accounts.creator.key(),
+        ErrorCode::InvalidTokenOwner
+    );
+
+    require!(
+        ctx.accounts.creator_token_account.amount >= amount,
+        ErrorCode::InsufficientBalance
+    );
+
+    require!(
+        ctx.accounts.mint.decimals > 0,
+        ErrorCode::InvalidMintDecimals
+    );
+
+    // =========================
+    // Stream Init
+    // =========================
+
+    let stream = &mut ctx.accounts.stream;
+
+    stream.creator = creator_key;
+    stream.recipient = recipient_key;
+
+    stream.mint = mint_key;
+    stream.vault = vault_key;
+
+    stream.total_amount = amount;
+    stream.withdrawn = 0;
+
+    stream.start_ts = start_ts;
+    stream.cliff_ts = cliff_ts;
+    stream.end_ts = end_ts;
+
+    stream.vesting_type = vesting_type;
+
+    stream.status = STREAM_STATUS_ACTIVE;
+
+    stream.cancelable = true;
+
+    stream.milestone_count = milestone_count;
+
+    stream.cancelled = false;
+
+    stream.nonce = nonce;
+    stream.bump = ctx.bumps.stream;
+
+    // =========================
+    // Initialize Milestones
+    // =========================
+
+    if vesting_type == VESTING_TYPE_MILESTONE {
+        let creator_info = ctx.accounts.creator.to_account_info();
+
+        let system_program_info =
+            ctx.accounts.system_program.to_account_info();
+
+        for i in 0..milestone_count {
+            let milestone_info = ctx
+                .remaining_accounts
+                .get(i as usize)
+                .ok_or(ErrorCode::InvalidMilestoneCount)?;
+
+            let (milestone_pda, bump) =
+                Pubkey::find_program_address(
+                    &[
+                        b"milestone",
+                        stream_key.as_ref(),
+                        &[i],
+                    ],
+                    ctx.program_id,
+                );
+
+            require!(
+                milestone_pda == *milestone_info.key,
+                ErrorCode::InvalidMilestonePda
+            );
+
+            let space = 8 + MilestoneAccount::INIT_SPACE;
+
+            let rent = Rent::get()?;
+
+            let lamports = rent.minimum_balance(space);
+
+            invoke_signed(
+                &system_instruction::create_account(
+                    &creator_key,
+                    milestone_info.key,
+                    lamports,
+                    space as u64,
+                    ctx.program_id,
+                ),
+                &[
+                    creator_info.clone(),
+                    milestone_info.clone(),
+                    system_program_info.clone(),
+                ],
+                &[&[
+                    b"milestone",
+                    stream_key.as_ref(),
+                    &[i],
+                    &[bump],
+                ]],
+            )?;
+
+            let input = &milestones[i as usize];
+
+            let milestone_data = MilestoneAccount {
+                stream: stream_key,
+
+                index: i,
+                unlock_ts: 0,
+
+                amount: input.amount,
+
+                approved: false,
+                unlocked: false,
+
+                bump,
+            };
+
+            let mut data = milestone_info.data.borrow_mut();
+
+            milestone_data.try_serialize(&mut &mut data[..])?;
+        }
+    }
+
+    // =========================
+    // Transfer Tokens
+    // =========================
+
+    let cpi_accounts = TransferChecked {
+        from: ctx
+            .accounts
+            .creator_token_account
+            .to_account_info(),
+
+        to: ctx.accounts.vault.to_account_info(),
+
+        authority: ctx.accounts.creator.to_account_info(),
+
+        mint: ctx.accounts.mint.to_account_info(),
+    };
+
+    let cpi_program = ctx.accounts.token_program.to_account_info();
+
+    let cpi_ctx = CpiContext::new(cpi_program, cpi_accounts);
+
+    transfer_checked(
+        cpi_ctx,
+        amount,
+        ctx.accounts.mint.decimals,
+    )?;
+
+    // =========================
+    // Reload Vault
+    // =========================
+
+    ctx.accounts.vault.reload()?;
+
+    require!(
+        ctx.accounts.vault.amount == amount,
+        ErrorCode::TransferFeeMintUnsupported
+    );
+
+    // =========================
+    // Emit Event
+    // =========================
+
+    emit!(StreamCreated {
+        stream: stream_key,
+
+        creator: creator_key,
+
+        recipient: recipient_key,
+
+        mint: mint_key,
+
+        vault: vault_key,
+
+        total_amount: amount,
+
+        vesting_type,
+
+        start_ts,
+        cliff_ts,
+        end_ts,
+
+        milestone_count,
+
+        cancelable: true,
+
+        nonce,
+
+        created_at: now,
+    });
+
+    Ok(())
+}
 
     pub fn withdraw(ctx: Context<Withdraw>, _amount_to_withdraw: u64) -> Result<()> {
         let now = Clock::get()?.unix_timestamp;
@@ -285,9 +461,23 @@ pub mod solana_program {
         Ok(())
     }
 
-    pub fn cancel(_ctx: Context<Cancel>) -> Result<()> {
-        Ok(())
-    }
+ pub fn cancel(_ctx: Context<Cancel>) -> Result<()> {
+   Ok(())
+}
+pub fn unlock_milestone(
+    ctx: Context<UnlockMilestone>,
+) -> Result<()> {
+    let milestone = &mut ctx.accounts.milestone;
+
+    require!(
+        !milestone.approved,
+        ErrorCode::MilestoneAlreadyUnlocked
+    );
+
+    milestone.approved = true;
+
+    Ok(())
+}
 
     pub fn initialize_config(
     ctx: Context<InitializeConfig>,
@@ -321,7 +511,7 @@ pub mod solana_program {
 }
 
 #[derive(Accounts)]
-#[instruction(amount: u64, start_ts: i64, end_ts: i64, nonce: u64)]
+#[instruction(amount: u64, start_ts: i64, cliff_ts: i64, end_ts: i64, vesting_type: u8, milestones: Vec<MilestoneInput>, nonce: u64)]
 pub struct CreateStream<'info> {
     #[account(mut)]
     pub creator: Signer<'info>,
@@ -518,6 +708,23 @@ pub struct InitializeConfig<'info> {
     pub system_program: Program<'info, System>,
 }
 
+#[derive(Accounts)]
+pub struct UnlockMilestone<'info> {
+    #[account(mut)]
+    pub creator: Signer<'info>,
+
+    #[account(
+        has_one = creator @ ErrorCode::Unauthorized
+    )]
+    pub stream: Account<'info, StreamAccount>,
+
+    #[account(
+        mut,
+        constraint = milestone.stream == stream.key()
+    )]
+    pub milestone: Account<'info, MilestoneAccount>,
+}
+
 #[derive(
     AnchorSerialize,
     AnchorDeserialize,
@@ -577,11 +784,15 @@ pub struct StreamAccount {
     pub cancelable: bool,
     pub milestone_count: u8,
 
+    pub cancelled: bool,
+
+
     pub nonce: u64,
     pub bump: u8,
 }
 
 #[account]
+#[derive(InitSpace)]
 pub struct MilestoneAccount {
     pub stream: Pubkey,
     pub index: u8,
@@ -691,20 +902,53 @@ pub enum ErrorCode {
 
     #[msg("Invalid fee receiver account")]
     InvalidFeeReceiver,
+
+    #[msg("Already cancelled")]
+    AlreadyCancelled,
+
+    #[msg("Fully vested")]
+    FullyVested,
+
+    #[msg("Stream expired")]
+    StreamExpired,
+
+    #[msg("Milestone already unlocked")]
+    MilestoneAlreadyUnlocked,
+
+    #[msg("Invalid vesting type")]
+    InvalidVestingType,
+
+    #[msg("Invalid milestone count")]
+    InvalidMilestoneCount,
+
+    #[msg("Invalid milestone PDA")]
+    InvalidMilestonePda,
+
+    #[msg("Invalid milestone amount")]
+    InvalidMilestoneAmount,
 }
 
 #[event]
 pub struct StreamCreated {
     pub stream: Pubkey,
+
     pub creator: Pubkey,
     pub recipient: Pubkey,
+
     pub mint: Pubkey,
     pub vault: Pubkey,
 
     pub total_amount: u64,
 
+    pub vesting_type: u8,
+
     pub start_ts: i64,
+    pub cliff_ts: i64,
     pub end_ts: i64,
+
+    pub milestone_count: u8,
+
+    pub cancelable: bool,
 
     pub nonce: u64,
 
@@ -720,4 +964,8 @@ pub struct TokensClaimed {
     pub fee_lamports: u64,
     pub withdrawn_total: u64,
     pub timestamp: i64,
+}
+#[derive(AnchorSerialize, AnchorDeserialize, Clone)]
+pub struct MilestoneInput {
+    pub amount: u64,
 }
