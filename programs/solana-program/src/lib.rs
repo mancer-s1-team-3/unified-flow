@@ -541,6 +541,95 @@ pub fn unlock_milestone(ctx: Context<UnlockMilestone>) -> Result<()> {
     });
     Ok(())
 }
+pub fn edit_milestone(
+    ctx: Context<EditMilestone>,
+    new_amount: u64,
+) -> Result<()> {
+    let stream = &ctx.accounts.stream;
+    let milestone = &mut ctx.accounts.milestone;
+
+    require!(
+        stream.vesting_type == VESTING_TYPE_MILESTONE,
+        ErrorCode::InvalidVestingType
+    );
+
+    require!(
+        stream.status == STREAM_STATUS_ACTIVE,
+        ErrorCode::StreamNotActive
+    );
+
+    require!(
+        !milestone.unlocked,
+        ErrorCode::MilestoneAlreadyUnlocked
+    );
+
+    require!(
+        new_amount > 0,
+        ErrorCode::InvalidAmount
+    );
+
+    let old_amount = milestone.amount;
+
+    milestone.amount = new_amount;
+
+    emit!(MilestoneEdited {
+        stream: stream.key(),
+        milestone: milestone.key(),
+        index: milestone.index,
+        old_amount,
+        new_amount,
+        timestamp: Clock::get()?.unix_timestamp,
+    });
+
+    Ok(())
+}
+pub fn edit_cliff(
+    ctx: Context<EditCliff>,
+    new_cliff_ts: i64,
+) -> Result<()> {
+    let stream = &mut ctx.accounts.stream;
+
+    let now = Clock::get()?.unix_timestamp;
+
+    require!(
+        stream.status == STREAM_STATUS_ACTIVE,
+        ErrorCode::StreamNotActive
+    );
+
+    require!(
+        stream.withdrawn == 0,
+        ErrorCode::StreamAlreadyStarted
+    );
+
+    require!(
+        new_cliff_ts >= stream.start_ts,
+        ErrorCode::InvalidSchedule
+    );
+
+    require!(
+        new_cliff_ts <= stream.end_ts,
+        ErrorCode::InvalidSchedule
+    );
+
+    require!(
+        new_cliff_ts >= now,
+        ErrorCode::InvalidStartDate
+    );
+
+    let old_cliff = stream.cliff_ts;
+
+    stream.cliff_ts = new_cliff_ts;
+
+    emit!(CliffEdited {
+        stream: stream.key(),
+        old_cliff_ts: old_cliff,
+        new_cliff_ts,
+        timestamp: Clock::get()?.unix_timestamp,
+    });
+
+    Ok(())
+}
+
 
     pub fn initialize_config(
     ctx: Context<InitializeConfig>,
@@ -623,6 +712,7 @@ pub struct CreateStream<'info> {
     pub associated_token_program:
         Program<'info, anchor_spl::associated_token::AssociatedToken>,
 }
+
 
 #[derive(Accounts)]
 pub struct Withdraw<'info> {
@@ -753,7 +843,34 @@ pub struct Cancel<'info> {
 
     pub token_program: Interface<'info, TokenInterface>,
 }
+#[derive(Accounts)]
+pub struct EditMilestone<'info> {
+    #[account(mut)]
+    pub creator: Signer<'info>,
 
+    #[account(
+        mut,
+        has_one = creator @ ErrorCode::Unauthorized
+    )]
+    pub stream: Account<'info, StreamAccount>,
+
+    #[account(
+        mut,
+        constraint = milestone.stream == stream.key()
+    )]
+    pub milestone: Account<'info, MilestoneAccount>,
+}
+#[derive(Accounts)]
+pub struct EditCliff<'info> {
+    #[account(mut)]
+    pub creator: Signer<'info>,
+
+    #[account(
+        mut,
+        has_one = creator @ ErrorCode::Unauthorized
+    )]
+    pub stream: Account<'info, StreamAccount>,
+}
 #[derive(Accounts)]
 pub struct InitializeConfig<'info> {
     #[account(mut)]
@@ -1001,6 +1118,9 @@ pub enum ErrorCode {
 
     #[msg("Previous milestone missing")]
     PreviousMilestoneMissing,
+
+    #[msg("Stream already started and cannot be modified")]
+    StreamAlreadyStarted,
 }
 
 #[event]
@@ -1051,4 +1171,21 @@ pub struct MilestoneUnlocked {
     pub index: u8,
     pub amount: u64,
     pub unlock_ts: i64,
+}
+#[event]
+pub struct MilestoneEdited {
+    pub stream: Pubkey,
+    pub milestone: Pubkey,
+    pub index: u8,
+    pub old_amount: u64,
+    pub new_amount: u64,
+    pub timestamp: i64,
+}
+
+#[event]
+pub struct CliffEdited {
+    pub stream: Pubkey,
+    pub old_cliff_ts: i64,
+    pub new_cliff_ts: i64,
+    pub timestamp: i64,
 }
