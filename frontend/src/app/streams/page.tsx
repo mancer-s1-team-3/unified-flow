@@ -3,6 +3,8 @@
 import { useState, useEffect } from "react";
 import { api } from "@/lib/api";
 import Link from "next/link";
+import { useWallet } from "@solana/wallet-adapter-react";
+import { WalletMultiButton } from "@solana/wallet-adapter-react-ui";
 import { 
   Sparkles, Layers, ChevronRight, Copy, Check, X, Info, 
   History, Calendar, RefreshCw, ArrowDownRight, XCircle, 
@@ -10,6 +12,7 @@ import {
 } from "lucide-react";
 
 export default function StreamsPage() {
+  const wallet = useWallet();
   const [streams, setStreams] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
   const [copiedId, setCopiedId] = useState<string | null>(null);
@@ -101,6 +104,14 @@ export default function StreamsPage() {
       return matchesSearch && isSquadsAssociated;
     }
 
+    if (wallet.connected && wallet.publicKey) {
+      const walletAddr = wallet.publicKey.toString().toLowerCase();
+      const isWalletAssociated =
+        stream.creator.toLowerCase() === walletAddr ||
+        stream.recipient.toLowerCase() === walletAddr;
+      return matchesSearch && isWalletAssociated;
+    }
+
     return matchesSearch;
   });
 
@@ -133,6 +144,7 @@ export default function StreamsPage() {
             <BookOpen className="w-3.5 h-3.5" />
             Developer Docs
           </Link>
+          <WalletMultiButton className="!bg-zinc-900 hover:!bg-zinc-800 !text-xs !font-semibold !rounded-xl !h-auto !py-2 !px-3.5 !border !border-zinc-800 !transition-all text-white font-sans" />
         </div>
       </header>
 

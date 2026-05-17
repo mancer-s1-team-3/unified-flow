@@ -270,7 +270,17 @@ export default function Home() {
       return matchesSearch && isSquadsAssociated;
     }
 
-    return matchesSearch;
+    // 3. Connected wallet filter
+    if (wallet.connected && wallet.publicKey) {
+      const walletAddr = wallet.publicKey.toString().toLowerCase();
+      const isWalletAssociated =
+        stream.creator.toLowerCase() === walletAddr ||
+        stream.recipient.toLowerCase() === walletAddr;
+      return matchesSearch && isWalletAssociated;
+    }
+
+    // If not connected and no active Squads filter is loaded, do not display unrelated streams
+    return false;
   });
 
   // Simulators / Submit Handlers
@@ -643,8 +653,17 @@ export default function Home() {
                 ) : filteredStreams.length === 0 ? (
                   <div className="flex flex-col items-center justify-center py-20 text-zinc-400 border-2 border-dashed border-zinc-900 rounded-2xl">
                     <Layers className="w-10 h-10 text-zinc-700 mb-3" />
-                    <span className="text-xs font-bold text-zinc-300">No matching streams indexed</span>
-                    <span className="text-[10px] text-zinc-500 max-w-xs text-center mt-1">Adjust your search query or verify that the correct Squads Multisig address has been inputted.</span>
+                    {!wallet.connected && !(showOnlySquads && filterSquadsAddress.trim() !== "") ? (
+                      <>
+                        <span className="text-xs font-bold text-zinc-300">Wallet Disconnected</span>
+                        <span className="text-[10px] text-zinc-500 max-w-xs text-center mt-1">Connect your Solana wallet in the header or activate the Squads Multisig filter to view active streams.</span>
+                      </>
+                    ) : (
+                      <>
+                        <span className="text-xs font-bold text-zinc-300">No matching streams indexed</span>
+                        <span className="text-[10px] text-zinc-500 max-w-xs text-center mt-1">Adjust your search query or verify that the correct Squads Multisig address has been inputted.</span>
+                      </>
+                    )}
                   </div>
                 ) : (
                   <div className="flex flex-col gap-6">
