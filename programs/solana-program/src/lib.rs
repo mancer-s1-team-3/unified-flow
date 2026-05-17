@@ -192,7 +192,7 @@ pub fn create_stream<'info>(
     stream.bump = ctx.bumps.stream;
     stream.unlocked_milestone_amount = 0;
 
-    // =========================
+   // =========================
     // Initialize Milestones
     // =========================
     if vesting_type == VESTING_TYPE_MILESTONE {
@@ -212,35 +212,46 @@ pub fn create_stream<'info>(
                     ctx.program_id,
                 );
 
-            require!(
-                milestone_pda == *milestone_info.key,
+            require_keys_eq!(
+                milestone_pda,
+                *milestone_info.key,
                 ErrorCode::InvalidMilestonePda
             );
 
             let space = 8 + MilestoneAccount::INIT_SPACE;
             let rent = Rent::get()?;
-            let lamports = rent.minimum_balance(space);
+            let required_lamports = rent.minimum_balance(space);
+            
+            // PERBAIKAN BUG 1: Cek saldo saat ini, jika kurang baru top-up (Anti-DoS)
+            let current_lamports = milestone_info.lamports();
+            if current_lamports < required_lamports {
+                let diff = required_lamports.checked_sub(current_lamports).unwrap();
+                anchor_lang::system_program::transfer(
+                    CpiContext::new(
+                        ctx.accounts.system_program.to_account_info(),
+                        anchor_lang::system_program::Transfer {
+                            from: ctx.accounts.creator.to_account_info(),
+                            to: milestone_info.clone(),
+                        },
+                    ),
+                    diff,
+                )?;
+            }
 
-            invoke_signed(
-                &system_instruction::create_account(
-                    &creator_key,
-                    milestone_info.key,
-                    lamports,
-                    space as u64,
-                    ctx.program_id,
-                ),
-                &[
-                    ctx.accounts.creator.to_account_info(),
-                    milestone_info.clone(),
-                    ctx.accounts.system_program.to_account_info(),
-                ],
-                &[&[
-                    b"milestone",
-                    stream_key.as_ref(),
-                    &[i],
-                    &[bump],
-                ]],
-            )?;
+            // Alokasikan space akun secara aman
+            if milestone_info.data_is_empty() {
+                invoke_signed(
+                    &system_instruction::allocate(milestone_info.key, space as u64),
+                    &[milestone_info.clone(), ctx.accounts.system_program.to_account_info()],
+                    &[&[b"milestone", stream_key.as_ref(), &[i], &[bump]]],
+                )?;
+
+                invoke_signed(
+                    &system_instruction::assign(milestone_info.key, ctx.program_id),
+                    &[milestone_info.clone(), ctx.accounts.system_program.to_account_info()],
+                    &[&[b"milestone", stream_key.as_ref(), &[i], &[bump]]],
+                )?;
+            }
 
             let input = &milestones[i as usize];
 
@@ -258,7 +269,6 @@ pub fn create_stream<'info>(
             milestone_data.try_serialize(&mut &mut data[..])?;
         }
     }
-
     // =========================
     // Transfer Tokens
     // =========================
