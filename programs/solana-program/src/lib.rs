@@ -631,41 +631,68 @@ pub fn edit_cliff(ctx: Context<EditCliff>, new_cliff_ts: i64) -> Result<()> {
 pub fn edit_linear(
     ctx: Context<EditLinear>,
     new_end_ts: i64,
+    topup_amount: u64,
 ) -> Result<()> {
     let stream = &mut ctx.accounts.stream;
     let now = Clock::get()?.unix_timestamp;
 
-    // Hanya untuk linear/cliff
     require!(
         stream.vesting_type == VESTING_TYPE_LINEAR
             || stream.vesting_type == VESTING_TYPE_CLIFF,
         ErrorCode::InvalidVestingType
     );
-
     require!(
         stream.status == STREAM_STATUS_ACTIVE,
         ErrorCode::StreamNotActive
     );
 
-    // Hanya boleh EXTEND, tidak boleh memperpendek
-    // → melindungi recipient
+    // Minimal salah satu harus diisi
     require!(
-        new_end_ts > stream.end_ts,
-        ErrorCode::InvalidSchedule
+        new_end_ts > stream.end_ts || topup_amount > 0,
+        ErrorCode::InvalidAmount
     );
 
-    require!(
-        new_end_ts > now,
-        ErrorCode::InvalidEndDate
-    );
-
+    // Extend end date
     let old_end_ts = stream.end_ts;
-    stream.end_ts = new_end_ts;
+    if new_end_ts > stream.end_ts {
+        require!(new_end_ts > now, ErrorCode::InvalidEndDate);
+        stream.end_ts = new_end_ts;
+    }
+
+    // Top-up
+    let old_total = stream.total_amount;
+    if topup_amount > 0 {
+        require!(
+            ctx.accounts.creator_token_account.amount >= topup_amount,
+            ErrorCode::InsufficientBalance
+        );
+
+        stream.total_amount = stream.total_amount
+            .checked_add(topup_amount)
+            .ok_or(ErrorCode::MathOverflow)?;
+
+        transfer_checked(
+            CpiContext::new(
+                ctx.accounts.token_program.to_account_info(),
+                TransferChecked {
+                    from: ctx.accounts.creator_token_account.to_account_info(),
+                    to: ctx.accounts.vault.to_account_info(),
+                    authority: ctx.accounts.creator.to_account_info(),
+                    mint: ctx.accounts.mint.to_account_info(),
+                },
+            ),
+            topup_amount,
+            ctx.accounts.mint.decimals,
+        )?;
+    }
 
     emit!(LinearEdited {
         stream: stream.key(),
         old_end_ts,
-        new_end_ts,
+        new_end_ts: stream.end_ts,
+        old_total_amount: old_total,
+        new_total_amount: stream.total_amount,
+        topup_amount,
         timestamp: now,
     });
 
@@ -889,6 +916,8 @@ pub struct EditLinear<'info> {
     #[account(mut)]
     pub creator: Signer<'info>,
 
+    pub mint: InterfaceAccount<'info, Mint>,
+
     #[account(
         mut,
         seeds = [
@@ -899,8 +928,28 @@ pub struct EditLinear<'info> {
         ],
         bump = stream.bump,
         has_one = creator @ ErrorCode::Unauthorized,
+        has_one = mint @ ErrorCode::InvalidMint,
     )]
     pub stream: Account<'info, StreamAccount>,
+
+    #[account(
+        mut,
+        associated_token::mint = mint,
+        associated_token::authority = stream,
+        associated_token::token_program = token_program,
+    )]
+    pub vault: InterfaceAccount<'info, TokenAccount>,
+
+    #[account(
+        mut,
+        constraint = creator_token_account.owner == creator.key()
+            @ ErrorCode::InvalidTokenOwner,
+        constraint = creator_token_account.mint == mint.key()
+            @ ErrorCode::InvalidMint,
+    )]
+    pub creator_token_account: InterfaceAccount<'info, TokenAccount>,
+
+    pub token_program: Interface<'info, TokenInterface>,
 }
 #[derive(Accounts)]
 pub struct EditMilestone<'info> {
@@ -1308,6 +1357,9 @@ pub struct LinearEdited {
     pub stream: Pubkey,
     pub old_end_ts: i64,
     pub new_end_ts: i64,
+    pub old_total_amount: u64,
+    pub new_total_amount: u64,
+    pub topup_amount: u64,
     pub timestamp: i64,
 }
 #[event]
