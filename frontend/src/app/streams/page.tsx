@@ -6,7 +6,7 @@ import Link from "next/link";
 import { 
   Sparkles, Layers, ChevronRight, Copy, Check, X, Info, 
   History, Calendar, RefreshCw, ArrowDownRight, XCircle, 
-  Unlock, Settings, ArrowLeft, ArrowUpRight
+  Unlock, Settings, ArrowLeft, ArrowUpRight, Search, Users, BookOpen
 } from "lucide-react";
 
 export default function StreamsPage() {
@@ -14,9 +14,22 @@ export default function StreamsPage() {
   const [loading, setLoading] = useState(false);
   const [copiedId, setCopiedId] = useState<string | null>(null);
 
+  // Search & Filter States
+  const [searchQuery, setSearchQuery] = useState("");
+  const [filterSquadsAddress, setFilterSquadsAddress] = useState("");
+  const [showOnlySquads, setShowOnlySquads] = useState(false);
+
   // Drawer details state
   const [selectedStream, setSelectedStream] = useState<any | null>(null);
   const [loadingDetails, setLoadingDetails] = useState(false);
+
+  // Pagination State
+  const [currentPage, setCurrentPage] = useState(1);
+  const itemsPerPage = 8;
+
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [searchQuery, showOnlySquads]);
 
   const fetchStreams = async () => {
     setLoading(true);
@@ -45,8 +58,24 @@ export default function StreamsPage() {
   useEffect(() => {
     fetchStreams();
     const interval = setInterval(fetchStreams, 15000);
+
+    // Load Squads persistence
+    if (typeof window !== "undefined") {
+      const savedSquads = localStorage.getItem("squads_multisig_address");
+      if (savedSquads) {
+        setFilterSquadsAddress(savedSquads);
+      }
+    }
+
     return () => clearInterval(interval);
   }, []);
+
+  const handleSquadsAddressChange = (val: string) => {
+    setFilterSquadsAddress(val);
+    if (typeof window !== "undefined") {
+      localStorage.setItem("squads_multisig_address", val);
+    }
+  };
 
   const formatDate = (ts: string) => new Date(Number(ts) * 1000).toLocaleString();
   const shorten = (address: string) => address ? `${address.slice(0, 6)}...${address.slice(-6)}` : "";
@@ -56,6 +85,24 @@ export default function StreamsPage() {
     setCopiedId(id);
     setTimeout(() => setCopiedId(null), 2000);
   };
+
+  // Filter streams client-side
+  const filteredStreams = streams.filter(stream => {
+    const matchesSearch = searchQuery.trim() === "" ||
+      stream.id.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      stream.creator.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      stream.recipient.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      stream.mint.toLowerCase().includes(searchQuery.toLowerCase());
+
+    if (showOnlySquads && filterSquadsAddress.trim() !== "") {
+      const isSquadsAssociated =
+        stream.creator.toLowerCase() === filterSquadsAddress.toLowerCase() ||
+        stream.recipient.toLowerCase() === filterSquadsAddress.toLowerCase();
+      return matchesSearch && isSquadsAssociated;
+    }
+
+    return matchesSearch;
+  });
 
   return (
     <main className="min-h-screen bg-zinc-950 text-zinc-50 font-sans relative overflow-hidden flex flex-col justify-between selection:bg-indigo-500/30 selection:text-indigo-200">
@@ -83,7 +130,7 @@ export default function StreamsPage() {
             href="/docs"
             className="flex items-center gap-1.5 text-xs text-zinc-400 hover:text-indigo-400 font-medium transition-colors border border-zinc-800 hover:border-zinc-700 bg-zinc-900/50 px-3.5 py-2 rounded-xl"
           >
-            <BookOpenIcon className="w-3.5 h-3.5" />
+            <BookOpen className="w-3.5 h-3.5" />
             Developer Docs
           </Link>
         </div>
@@ -108,112 +155,233 @@ export default function StreamsPage() {
           </button>
         </div>
 
+        {/* 🔍 PREMIUM DUAL SEARCH & FILTER BAR */}
+        <div className="grid gap-3 sm:grid-cols-2 mb-8 bg-zinc-900/20 border border-zinc-900 rounded-2xl p-4">
+          {/* Address search query */}
+          <div className="relative">
+            <Search className="absolute left-3 top-3 w-4 h-4 text-zinc-500" />
+            <input
+              type="text"
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              placeholder="Search by Creator, Recipient, Mint, or PDA ID..."
+              className="w-full bg-zinc-950 border border-zinc-800 rounded-xl pl-9 pr-4 py-2.5 text-xs text-zinc-200 placeholder-zinc-500 focus:outline-none focus:border-indigo-500 font-mono"
+            />
+          </div>
+
+          {/* Persistent Squads Filter Switch */}
+          <div className="flex flex-col sm:flex-row gap-3">
+            <div className="flex items-center gap-2 bg-zinc-950 border border-zinc-850 px-3.5 py-1 rounded-xl shrink-0">
+              <input
+                type="checkbox"
+                id="squads-filter-toggle-p"
+                checked={showOnlySquads}
+                onChange={(e) => setShowOnlySquads(e.target.checked)}
+                className="w-4 h-4 rounded border-zinc-805 text-indigo-600 bg-zinc-950 focus:ring-0 focus:ring-offset-0 cursor-pointer"
+              />
+              <label htmlFor="squads-filter-toggle-p" className="text-xs font-bold text-zinc-350 cursor-pointer select-none flex items-center gap-1.5">
+                <Users className="w-3.5 h-3.5 text-indigo-400" />
+                Squads View
+              </label>
+            </div>
+
+            <input
+              type="text"
+              value={filterSquadsAddress}
+              onChange={(e) => handleSquadsAddressChange(e.target.value)}
+              placeholder="Paste Squads Multisig PDA..."
+              disabled={!showOnlySquads}
+              className={`w-full bg-zinc-950 border rounded-xl px-4 py-2 text-xs font-mono transition-all ${
+                showOnlySquads 
+                  ? "border-indigo-500 text-zinc-200 focus:outline-none focus:border-indigo-400" 
+                  : "border-zinc-850 text-zinc-650 opacity-45 cursor-not-allowed"
+              }`}
+            />
+          </div>
+        </div>
+
         {loading && streams.length === 0 ? (
           <div className="flex flex-col items-center justify-center py-24 text-zinc-400 gap-3">
             <RefreshCw className="w-8 h-8 animate-spin text-indigo-500" />
             <span className="text-xs font-medium">Fetching real-time on-chain data...</span>
           </div>
-        ) : streams.length === 0 ? (
+        ) : filteredStreams.length === 0 ? (
           <div className="flex flex-col items-center justify-center py-24 text-zinc-400 border-2 border-dashed border-zinc-900 rounded-3xl">
             <Layers className="w-12 h-12 text-zinc-700 mb-3" />
-            <span className="text-sm font-bold text-zinc-300">No active streams indexed</span>
-            <span className="text-xs text-zinc-500 max-w-xs text-center mt-1">Create one using the main dashboard or verify your backfiller configuration.</span>
+            <span className="text-sm font-bold text-zinc-300">No matching streams indexed</span>
+            <span className="text-xs text-zinc-500 max-w-xs text-center mt-1">Adjust your search filter parameters or confirm your backfiller status.</span>
           </div>
         ) : (
-          <div className="grid gap-5">
-            {streams.map((stream) => {
-              const now = Math.floor(Date.now() / 1000);
-              const start = Number(stream.startTs);
-              const end = Number(stream.endTs);
-              const total = Number(stream.totalAmount);
-              const withdrawn = Number(stream.withdrawn);
-              
-              const duration = end - start || 1;
-              const elapsed = Math.min(Math.max(now - start, 0), duration);
-              const vested = Math.floor((total * elapsed) / duration);
-              const claimable = Math.max(vested - withdrawn, 0);
-              const progress = Math.min((elapsed / duration) * 100, 100);
+          <div className="flex flex-col gap-6">
+            <div className="grid gap-5">
+              {(() => {
+                const paginatedStreams = filteredStreams.slice(
+                  (currentPage - 1) * itemsPerPage,
+                  currentPage * itemsPerPage
+                );
+                return paginatedStreams.map((stream) => {
+                  const now = Math.floor(Date.now() / 1000);
+                  const start = Number(stream.startTs);
+                  const end = Number(stream.endTs);
+                  const cliff = Number(stream.cliffTs);
+                  const total = Number(stream.totalAmount);
+                  const withdrawn = Number(stream.withdrawn);
+                  const unlocked = Number(stream.unlockedAmount || 0);
 
-              const isCompleted = withdrawn >= total;
-              const isNotStarted = now < start;
-              const isEnded = now >= end;
+                  let vested = 0;
+                  let progress = 0;
 
+                  if (stream.vestingType === 1) {
+                    // Milestone-based: progress is discrete based on unlocked amount
+                    vested = unlocked;
+                    progress = Math.min((unlocked / total) * 100, 100);
+                  } else if (stream.vestingType === 2) {
+                    // Cliff-based: 0 before cliff timestamp, 100% after
+                    if (now < cliff) {
+                      vested = 0;
+                      progress = 0;
+                    } else {
+                      vested = total;
+                      progress = 100;
+                    }
+                  } else {
+                    // Linear-based
+                    const duration = end - start || 1;
+                    const elapsed = Math.min(Math.max(now - start, 0), duration);
+                    vested = Math.floor((total * elapsed) / duration);
+                    progress = Math.min((elapsed / duration) * 100, 100);
+                  }
+
+                  const claimable = Math.max(vested - withdrawn, 0);
+
+                  const isCompleted = withdrawn >= total;
+                  const isNotStarted = now < start;
+                  const isEnded = now >= end;
+
+                  return (
+                    <div 
+                      key={stream.id}
+                      onClick={() => fetchStreamDetails(stream.id)}
+                      className="bg-zinc-900/10 border border-zinc-900 hover:border-indigo-500/50 hover:bg-zinc-900/30 rounded-2xl p-5 transition-all shadow-md group relative overflow-hidden cursor-pointer animate-in fade-in-30 duration-200"
+                    >
+                      <div className="absolute top-0 right-0 w-24 h-24 bg-indigo-500/5 rounded-full blur-2xl group-hover:bg-indigo-500/10 transition-colors pointer-events-none" />
+
+                      {/* Top Status & PDA */}
+                      <div className="flex items-center justify-between mb-4">
+                        <div className="flex items-center gap-2">
+                          <span className="text-[10px] font-bold text-zinc-500 uppercase tracking-wider font-mono">Stream PDA</span>
+                          <div className="flex items-center gap-1 bg-zinc-950 px-2 py-0.5 rounded font-mono text-[10px] border border-zinc-850">
+                            <span>{shorten(stream.id)}</span>
+                          </div>
+                          {stream.isCsvCreated && (
+                            <span className="text-[8px] bg-emerald-500/10 text-emerald-400 border border-emerald-500/30 px-1.5 py-0.2 rounded font-bold uppercase tracking-wider">CSV Created</span>
+                          )}
+                        </div>
+                        
+                        <span className={`text-[10px] px-2.5 py-0.5 rounded-full font-bold uppercase tracking-widest ${
+                          isCompleted 
+                            ? "bg-emerald-500/10 text-emerald-400 border border-emerald-500/25"
+                            : isEnded
+                            ? "bg-amber-500/10 text-amber-400 border border-amber-500/25"
+                            : isNotStarted
+                            ? "bg-indigo-500/10 text-indigo-400 border border-indigo-500/25"
+                            : "bg-blue-500/10 text-blue-400 border border-blue-500/25"
+                        }`}>
+                          {isCompleted ? "Completed" : isEnded ? "Ended" : isNotStarted ? "Scheduled" : "Streaming"}
+                        </span>
+                      </div>
+
+                      {/* Progress Bar */}
+                      <div className="mb-4">
+                        <div className="flex justify-between items-center text-xs mb-1.5">
+                          <span className="font-semibold text-zinc-400">Vesting Completion</span>
+                          <span className="font-mono text-zinc-200 font-bold">{progress.toFixed(2)}%</span>
+                        </div>
+                        <div className="h-2 w-full bg-zinc-950 rounded-full overflow-hidden border border-zinc-850">
+                          <div 
+                            className="h-full bg-gradient-to-r from-indigo-500 to-purple-500 rounded-full transition-all duration-500"
+                            style={{ width: `${progress}%` }}
+                          />
+                        </div>
+                      </div>
+
+                      {/* Data Grid */}
+                      <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 bg-zinc-950/20 border border-zinc-900/60 rounded-xl p-3.5 text-xs">
+                        <div>
+                          <div className="text-zinc-500 font-medium">Total Amount</div>
+                          <div className="font-bold text-zinc-200">{total.toLocaleString()} tokens</div>
+                        </div>
+                        <div>
+                          <div className="text-zinc-500 font-medium">Claimable</div>
+                          <div className="font-bold text-indigo-400">{claimable.toLocaleString()} tokens</div>
+                        </div>
+                        <div>
+                          <div className="text-zinc-500 font-medium">Withdrawn</div>
+                          <div className="font-bold text-zinc-200">{withdrawn.toLocaleString()} tokens</div>
+                        </div>
+                        <div>
+                          <div className="text-zinc-500 font-medium">Type</div>
+                          <div className="font-semibold text-zinc-300 uppercase tracking-wider text-[10px]">
+                            {stream.vestingType === 0 ? "Linear" : stream.vestingType === 1 ? "Milestone" : "Cliff"}
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Footer link trigger */}
+                      <div className="mt-4 flex justify-between items-center text-[10px] text-zinc-500 font-mono">
+                        <span>Start: {formatDate(stream.startTs)}</span>
+                        <span className="text-indigo-400 flex items-center gap-0.5 font-bold group-hover:translate-x-0.5 transition-transform">
+                          View Detailed Timeline <ChevronRight className="w-3.5 h-3.5" />
+                        </span>
+                      </div>
+                    </div>
+                  );
+                });
+              })()}
+            </div>
+
+            {/* Premium Pagination Control */}
+            {(() => {
+              const totalPages = Math.ceil(filteredStreams.length / itemsPerPage);
+              if (totalPages <= 1) return null;
               return (
-                <div 
-                  key={stream.id}
-                  onClick={() => fetchStreamDetails(stream.id)}
-                  className="bg-zinc-900/10 border border-zinc-900 hover:border-indigo-500/50 hover:bg-zinc-900/30 rounded-2xl p-5 transition-all shadow-md group relative overflow-hidden cursor-pointer"
-                >
-                  <div className="absolute top-0 right-0 w-24 h-24 bg-indigo-500/5 rounded-full blur-2xl group-hover:bg-indigo-500/10 transition-colors pointer-events-none" />
+                <div className="flex items-center justify-between border border-zinc-900 bg-zinc-900/10 rounded-2xl p-4 text-xs mt-2">
+                  <span className="text-zinc-400 font-medium">
+                    Showing <span className="text-zinc-200 font-bold">{(currentPage - 1) * itemsPerPage + 1}</span> to{" "}
+                    <span className="text-zinc-200 font-bold">{Math.min(currentPage * itemsPerPage, filteredStreams.length)}</span> of{" "}
+                    <span className="text-indigo-400 font-black">{filteredStreams.length}</span> active streams
+                  </span>
 
-                  {/* Top Status & PDA */}
-                  <div className="flex items-center justify-between mb-4">
-                    <div className="flex items-center gap-2">
-                      <span className="text-[10px] font-bold text-zinc-500 uppercase tracking-wider font-mono">Stream PDA</span>
-                      <div className="flex items-center gap-1 bg-zinc-950 px-2 py-0.5 rounded font-mono text-[10px] border border-zinc-850">
-                        <span>{shorten(stream.id)}</span>
-                      </div>
-                    </div>
+                  <div className="flex items-center gap-2">
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setCurrentPage(prev => Math.max(prev - 1, 1));
+                      }}
+                      disabled={currentPage === 1}
+                      className="px-3 py-1.5 bg-zinc-950 border border-zinc-850 hover:border-zinc-750 text-zinc-350 hover:text-zinc-50 rounded-xl transition-all disabled:opacity-40 disabled:hover:text-zinc-350 disabled:cursor-not-allowed font-semibold"
+                    >
+                      Previous
+                    </button>
                     
-                    <span className={`text-[10px] px-2.5 py-0.5 rounded-full font-bold uppercase tracking-widest ${
-                      isCompleted 
-                        ? "bg-emerald-500/10 text-emerald-400 border border-emerald-500/25"
-                        : isEnded
-                        ? "bg-amber-500/10 text-amber-400 border border-amber-500/25"
-                        : isNotStarted
-                        ? "bg-indigo-500/10 text-indigo-400 border border-indigo-500/25"
-                        : "bg-blue-500/10 text-blue-400 border border-blue-500/25"
-                    }`}>
-                      {isCompleted ? "Completed" : isEnded ? "Ended" : isNotStarted ? "Scheduled" : "Streaming"}
-                    </span>
-                  </div>
+                    <div className="bg-zinc-950 border border-zinc-850 px-3 py-1.5 rounded-xl font-mono font-bold text-zinc-350 text-[10px]">
+                      {currentPage} / {totalPages}
+                    </div>
 
-                  {/* Progress Bar */}
-                  <div className="mb-4">
-                    <div className="flex justify-between items-center text-xs mb-1.5">
-                      <span className="font-semibold text-zinc-400">Vesting Completion</span>
-                      <span className="font-mono text-zinc-200 font-bold">{progress.toFixed(2)}%</span>
-                    </div>
-                    <div className="h-2 w-full bg-zinc-950 rounded-full overflow-hidden border border-zinc-850">
-                      <div 
-                        className="h-full bg-gradient-to-r from-indigo-500 to-purple-500 rounded-full transition-all duration-500"
-                        style={{ width: `${progress}%` }}
-                      />
-                    </div>
-                  </div>
-
-                  {/* Data Grid */}
-                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 bg-zinc-950/20 border border-zinc-900/60 rounded-xl p-3.5 text-xs">
-                    <div>
-                      <div className="text-zinc-500 font-medium">Total Amount</div>
-                      <div className="font-bold text-zinc-200">{total.toLocaleString()} tokens</div>
-                    </div>
-                    <div>
-                      <div className="text-zinc-500 font-medium">Claimable</div>
-                      <div className="font-bold text-indigo-400">{claimable.toLocaleString()} tokens</div>
-                    </div>
-                    <div>
-                      <div className="text-zinc-500 font-medium">Withdrawn</div>
-                      <div className="font-bold text-zinc-200">{withdrawn.toLocaleString()} tokens</div>
-                    </div>
-                    <div>
-                      <div className="text-zinc-500 font-medium">Type</div>
-                      <div className="font-semibold text-zinc-300 uppercase tracking-wider text-[10px]">
-                        {stream.vestingType === 0 ? "Linear" : stream.vestingType === 1 ? "Milestone" : "Cliff"}
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* Footer link trigger */}
-                  <div className="mt-4 flex justify-between items-center text-[10px] text-zinc-500 font-mono">
-                    <span>Start: {formatDate(stream.startTs)}</span>
-                    <span className="text-indigo-400 flex items-center gap-0.5 font-bold group-hover:translate-x-0.5 transition-transform">
-                      View Detailed Timeline <ChevronRight className="w-3.5 h-3.5" />
-                    </span>
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setCurrentPage(prev => Math.min(prev + 1, totalPages));
+                      }}
+                      disabled={currentPage === totalPages}
+                      className="px-3 py-1.5 bg-zinc-950 border border-zinc-850 hover:border-zinc-750 text-zinc-350 hover:text-zinc-50 rounded-xl transition-all disabled:opacity-40 disabled:hover:text-zinc-350 disabled:cursor-not-allowed font-semibold"
+                    >
+                      Next
+                    </button>
                   </div>
                 </div>
               );
-            })}
+            })()}
           </div>
         )}
 
@@ -254,24 +422,37 @@ export default function StreamsPage() {
                 <>
                   {/* Interactive Progress Metric */}
                   <div className="bg-zinc-900/40 border border-zinc-900 rounded-2xl p-4 mb-5">
-                    <div className="text-[10px] text-zinc-500 font-bold uppercase tracking-widest mb-1.5">Completeness Index</div>
+                    <div className="text-[10px] text-zinc-500 font-bold uppercase tracking-widest mb-1.5">
+                      {selectedStream.vestingType === 1 ? "Milestone Unlock Progress" : "Claim Completeness Index"}
+                    </div>
                     <div className="flex justify-between items-end mb-2">
                       <span className="text-xl font-black font-mono bg-gradient-to-r from-indigo-400 to-purple-400 bg-clip-text text-transparent">
                         {(() => {
                           const total = Number(selectedStream.totalAmount);
                           const withdrawn = Number(selectedStream.withdrawn);
-                          return ((withdrawn / total) * 100).toFixed(1);
+                          const unlocked = Number(selectedStream.unlockedAmount || 0);
+                          const value = selectedStream.vestingType === 1 ? unlocked : withdrawn;
+                          return ((value / total) * 100).toFixed(1);
                         })()}%
                       </span>
                       <span className="text-[10px] text-zinc-400 font-mono">
-                        {Number(selectedStream.withdrawn).toLocaleString()} / {Number(selectedStream.totalAmount).toLocaleString()} Claimed
+                        {selectedStream.vestingType === 1 ? (
+                          `${Number(selectedStream.unlockedAmount || 0).toLocaleString()} / ${Number(selectedStream.totalAmount).toLocaleString()} Unlocked`
+                        ) : (
+                          `${Number(selectedStream.withdrawn).toLocaleString()} / ${Number(selectedStream.totalAmount).toLocaleString()} Claimed`
+                        )}
                       </span>
                     </div>
                     <div className="h-2 w-full bg-zinc-950 rounded-full overflow-hidden border border-zinc-850">
                       <div 
                         className="h-full bg-gradient-to-r from-emerald-500 to-teal-500 rounded-full transition-all duration-300"
                         style={{ 
-                          width: `${Math.min((Number(selectedStream.withdrawn) / Number(selectedStream.totalAmount)) * 100, 100)}%` 
+                          width: `${Math.min(((() => {
+                            const total = Number(selectedStream.totalAmount);
+                            const withdrawn = Number(selectedStream.withdrawn);
+                            const unlocked = Number(selectedStream.unlockedAmount || 0);
+                            return selectedStream.vestingType === 1 ? unlocked : withdrawn;
+                          })() / Number(selectedStream.totalAmount)) * 100, 100)}%` 
                         }}
                       />
                     </div>
@@ -322,6 +503,23 @@ export default function StreamsPage() {
                         <span className="font-semibold text-zinc-300 font-mono">{selectedStream.milestoneCount} milestones</span>
                       </div>
                     </div>
+
+                    {selectedStream.vestingType === 1 && (
+                      <div className="grid grid-cols-2 gap-4 border-t border-zinc-900/60 pt-3">
+                        <div>
+                          <span className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest block mb-0.5">Unlocked Amount</span>
+                          <span className="font-semibold text-emerald-400 font-mono">
+                            {Number(selectedStream.unlockedAmount || 0).toLocaleString()} tokens
+                          </span>
+                        </div>
+                        <div>
+                          <span className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest block mb-0.5">Claimable Remaining</span>
+                          <span className="font-semibold text-indigo-400 font-mono">
+                            {Math.max(Number(selectedStream.unlockedAmount || 0) - Number(selectedStream.withdrawn), 0).toLocaleString()} tokens
+                          </span>
+                        </div>
+                      </div>
+                    )}
 
                     <div className="border-t border-zinc-900/60 pt-3">
                       <span className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest block mb-0.5">Creator Account</span>
@@ -427,7 +625,7 @@ export default function StreamsPage() {
 
                   <Link
                     href={`/?tab=${selectedStream.vestingType === 0 ? "edit_linear" : selectedStream.vestingType === 1 ? "edit_milestone" : "edit_cliff"}&streamId=${selectedStream.id}`}
-                    className="col-span-2 flex items-center justify-center gap-1.5 bg-zinc-900 hover:bg-zinc-800 text-zinc-400 hover:text-zinc-200 border border-zinc-850 hover:border-zinc-750 py-2.5 rounded-xl transition-all"
+                    className="col-span-2 flex items-center justify-center gap-1.5 bg-zinc-900 hover:bg-zinc-800 text-zinc-400 hover:text-zinc-200 border border-zinc-855 hover:border-zinc-750 py-2.5 rounded-xl transition-all"
                   >
                     <Settings className="w-3.5 h-3.5" />
                     Modify Vesting Structure
@@ -460,26 +658,5 @@ export default function StreamsPage() {
         </div>
       </footer>
     </main>
-  );
-}
-
-// Custom simple book open icon to avoid next compilation issue
-function BookOpenIcon(props: any) {
-  return (
-    <svg
-      {...props}
-      xmlns="http://www.w3.org/2000/svg"
-      width="24"
-      height="24"
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="2"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-    >
-      <path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z" />
-      <path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z" />
-    </svg>
   );
 }

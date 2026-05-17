@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useWallet } from "@solana/wallet-adapter-react";
 import { WalletMultiButton } from "@solana/wallet-adapter-react-ui";
 import { api } from "@/lib/api";
@@ -9,7 +9,8 @@ import {
   Sparkles, PlusCircle, Layers, ArrowDownRight, XCircle, 
   Settings, RefreshCw, BookOpen, Clock, Unlock, ChevronRight, 
   Terminal, Shield, CheckCircle2, AlertCircle, Copy, Check, X,
-  ArrowUpRight, Info, History, Calendar, FileText, Lock
+  ArrowUpRight, Info, History, Calendar, FileText, Lock,
+  Download, Upload, FileOutput, Search, Users
 } from "lucide-react";
 
 type TabId = 
@@ -45,6 +46,22 @@ export default function Home() {
   const [csvEditText, setCsvEditText] = useState(
     "id,amount,duration,cancelable\nStreamCSV-XXXXX,1800,10800,false"
   );
+
+  // Search & Filter States
+  const [searchQuery, setSearchQuery] = useState("");
+  const [filterSquadsAddress, setFilterSquadsAddress] = useState("");
+  const [showOnlySquads, setShowOnlySquads] = useState(false);
+
+  // Pagination State
+  const [currentPage, setCurrentPage] = useState(1);
+  const itemsPerPage = 5;
+
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [searchQuery, showOnlySquads]);
+
+  const fileInputCreateRef = useRef<HTMLInputElement>(null);
+  const fileInputEditRef = useRef<HTMLInputElement>(null);
 
   // Form States
   const [createForm, setCreateForm] = useState({
@@ -130,10 +147,23 @@ export default function Home() {
         if (tab === "edit_linear") setEditLinearForm(prev => ({ ...prev, streamId }));
         if (tab === "edit_cliff") setEditCliffForm(prev => ({ ...prev, streamId }));
       }
+
+      // Load Squads persistence
+      const savedSquads = localStorage.getItem("squads_multisig_address");
+      if (savedSquads) {
+        setFilterSquadsAddress(savedSquads);
+      }
     }
 
     return () => clearInterval(interval);
   }, []);
+
+  const handleSquadsAddressChange = (val: string) => {
+    setFilterSquadsAddress(val);
+    if (typeof window !== "undefined") {
+      localStorage.setItem("squads_multisig_address", val);
+    }
+  };
 
   // Format Helpers
   const formatDate = (ts: string) => new Date(Number(ts) * 1000).toLocaleString();
@@ -156,11 +186,92 @@ export default function Home() {
     });
   };
 
+  // CSV File Reader / Selection handlers
+  const handleCsvUpload = (e: React.ChangeEvent<HTMLInputElement>, mode: "create" | "edit") => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      const text = event.target?.result as string;
+      if (mode === "create") {
+        setCsvCreateText(text);
+        showNotification("success", `CSV Loaded: ${file.name} successfully imported and loaded!`);
+      } else {
+        setCsvEditText(text);
+        showNotification("success", `CSV Loaded: ${file.name} successfully imported and loaded!`);
+      }
+    };
+    reader.readAsText(file);
+  };
+
+  // Download template utility
+  const downloadTemplate = (mode: "create" | "edit") => {
+    const headers = mode === "create"
+      ? "recipient,amount,mint,type,duration,cancelable\nAoFGFuBasrNZ7bs9XddzyvMvYhZPGJHpWKGLG2CU62EY,1500,EHHDgoeiRa4FCNgwCtjuL69wX2Hre3q3bSddh1LZB3pr,0,7200,true\nAoFGFuBasrNZ7bs9XddzyvMvYhZPGJHpWKGLG2CU62EY,2500,EHHDgoeiRa4FCNgwCtjuL69wX2Hre3q3bSddh1LZB3pr,1,9000,false"
+      : "id,amount,duration,cancelable\nStreamCSV-XXXXX,1800,10800,false";
+
+    const blob = new Blob([headers], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.setAttribute("href", url);
+    link.setAttribute("download", mode === "create" ? "create_streams_template.csv" : "edit_streams_template.csv");
+    link.style.visibility = "hidden";
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    showNotification("success", `${mode === "create" ? "Creation" : "Editing"} CSV template downloaded!`);
+  };
+
+  // Export active loaded database streams to CSV
+  const exportStreamsToCsv = () => {
+    if (streams.length === 0) {
+      showNotification("info", "No active streams indexed to export.");
+      return;
+    }
+
+    const headers = "id,creator,recipient,mint,totalAmount,withdrawn,startTs,endTs,vestingType,status,cancelable,isCsvCreated\n";
+    const rows = streams.map(s => 
+      `"${s.id}","${s.creator}","${s.recipient}","${s.mint}",${s.totalAmount},${s.withdrawn},${s.startTs},${s.endTs},${s.vestingType},${s.status},${s.cancelable},${s.isCsvCreated}`
+    ).join("\n");
+
+    const blob = new Blob([headers + rows], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.setAttribute("href", url);
+    link.setAttribute("download", "unified_flow_streams_export.csv");
+    link.style.visibility = "hidden";
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    showNotification("success", "Active streams successfully exported as CSV!");
+  };
+
   // Check if a Stream was created via CSV
   const isStreamCsvCreated = (streamId: string): boolean => {
     const stream = streams.find(s => s.id === streamId);
     return stream ? stream.isCsvCreated : false;
   };
+
+  // Filter logic for search querying and Squads Multisig address
+  const filteredStreams = streams.filter(stream => {
+    // 1. Address search query filter
+    const matchesSearch = searchQuery.trim() === "" ||
+      stream.id.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      stream.creator.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      stream.recipient.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      stream.mint.toLowerCase().includes(searchQuery.toLowerCase());
+
+    // 2. Squads address filter
+    if (showOnlySquads && filterSquadsAddress.trim() !== "") {
+      const isSquadsAssociated =
+        stream.creator.toLowerCase() === filterSquadsAddress.toLowerCase() ||
+        stream.recipient.toLowerCase() === filterSquadsAddress.toLowerCase();
+      return matchesSearch && isSquadsAssociated;
+    }
+
+    return matchesSearch;
+  });
 
   // Simulators / Submit Handlers
   const handleAction = async (actionName: string, data: any) => {
@@ -458,14 +569,70 @@ export default function Home() {
                     <h2 className="text-2xl font-extrabold tracking-tight">Active Streams</h2>
                     <p className="text-xs text-zinc-400">Click on any stream to open deep details, timelines, and transactions</p>
                   </div>
-                  <button
-                    onClick={fetchStreams}
-                    disabled={loading}
-                    className="flex items-center gap-2 px-3 py-2 border border-zinc-800 bg-zinc-900 hover:bg-zinc-800 rounded-xl transition-all text-xs font-semibold"
-                  >
-                    <RefreshCw className={`w-3.5 h-3.5 ${loading ? "animate-spin text-indigo-400" : "text-zinc-400"}`} />
-                    Refresh
-                  </button>
+                  
+                  <div className="flex items-center gap-2">
+                    <button
+                      onClick={exportStreamsToCsv}
+                      className="flex items-center gap-1.5 px-3 py-2 border border-emerald-900/60 bg-emerald-950/20 text-emerald-400 hover:bg-emerald-950/40 rounded-xl transition-all text-xs font-semibold"
+                    >
+                      <FileOutput className="w-3.5 h-3.5" />
+                      Export CSV
+                    </button>
+                    
+                    <button
+                      onClick={fetchStreams}
+                      disabled={loading}
+                      className="flex items-center gap-2 px-3 py-2 border border-zinc-800 bg-zinc-900 hover:bg-zinc-800 rounded-xl transition-all text-xs font-semibold"
+                    >
+                      <RefreshCw className={`w-3.5 h-3.5 ${loading ? "animate-spin text-indigo-400" : "text-zinc-400"}`} />
+                      Refresh
+                    </button>
+                  </div>
+                </div>
+
+                {/* 🔍 PREMIUM DUAL SEARCH & FILTER BAR */}
+                <div className="grid gap-3 sm:grid-cols-2 mb-6 bg-zinc-950/45 border border-zinc-900 rounded-2xl p-4">
+                  {/* Address search query */}
+                  <div className="relative">
+                    <Search className="absolute left-3 top-3 w-4 h-4 text-zinc-500" />
+                    <input
+                      type="text"
+                      value={searchQuery}
+                      onChange={(e) => setSearchQuery(e.target.value)}
+                      placeholder="Search by Creator, Recipient, Mint, or PDA ID..."
+                      className="w-full bg-zinc-900 border border-zinc-800 rounded-xl pl-9 pr-4 py-2.5 text-xs text-zinc-200 placeholder-zinc-500 focus:outline-none focus:border-indigo-500 font-mono"
+                    />
+                  </div>
+
+                  {/* Persistent Squads Filter Switch */}
+                  <div className="flex flex-col sm:flex-row gap-3">
+                    <div className="flex items-center gap-2 bg-zinc-900 border border-zinc-800 px-3.5 py-1 rounded-xl shrink-0">
+                      <input
+                        type="checkbox"
+                        id="squads-filter-toggle"
+                        checked={showOnlySquads}
+                        onChange={(e) => setShowOnlySquads(e.target.checked)}
+                        className="w-4 h-4 rounded border-zinc-800 text-indigo-600 bg-zinc-950 focus:ring-0 focus:ring-offset-0 cursor-pointer"
+                      />
+                      <label htmlFor="squads-filter-toggle" className="text-xs font-bold text-zinc-350 cursor-pointer select-none flex items-center gap-1.5">
+                        <Users className="w-3.5 h-3.5 text-indigo-400" />
+                        Squads View
+                      </label>
+                    </div>
+
+                    <input
+                      type="text"
+                      value={filterSquadsAddress}
+                      onChange={(e) => handleSquadsAddressChange(e.target.value)}
+                      placeholder="Paste Squads Multisig PDA..."
+                      disabled={!showOnlySquads}
+                      className={`w-full bg-zinc-900 border rounded-xl px-4 py-2 text-xs font-mono transition-all ${
+                        showOnlySquads 
+                          ? "border-indigo-500 text-zinc-200 focus:outline-none focus:border-indigo-400" 
+                          : "border-zinc-850 text-zinc-650 opacity-45 cursor-not-allowed"
+                      }`}
+                    />
+                  </div>
                 </div>
 
                 {loading && streams.length === 0 ? (
@@ -473,113 +640,186 @@ export default function Home() {
                     <RefreshCw className="w-8 h-8 animate-spin text-indigo-500" />
                     <span className="text-xs font-medium">Fetching real-time on-chain data...</span>
                   </div>
-                ) : streams.length === 0 ? (
+                ) : filteredStreams.length === 0 ? (
                   <div className="flex flex-col items-center justify-center py-20 text-zinc-400 border-2 border-dashed border-zinc-900 rounded-2xl">
                     <Layers className="w-10 h-10 text-zinc-700 mb-3" />
-                    <span className="text-xs font-bold text-zinc-300">No active streams indexed</span>
-                    <span className="text-[10px] text-zinc-500 max-w-xs text-center mt-1">Create one using the tab operation or run a backfill sync command on your backend.</span>
+                    <span className="text-xs font-bold text-zinc-300">No matching streams indexed</span>
+                    <span className="text-[10px] text-zinc-500 max-w-xs text-center mt-1">Adjust your search query or verify that the correct Squads Multisig address has been inputted.</span>
                   </div>
                 ) : (
-                  <div className="grid gap-5">
-                    {streams.map((stream) => {
-                      const now = Math.floor(Date.now() / 1000);
-                      const start = Number(stream.startTs);
-                      const end = Number(stream.endTs);
-                      const total = Number(stream.totalAmount);
-                      const withdrawn = Number(stream.withdrawn);
-                      
-                      const duration = end - start || 1;
-                      const elapsed = Math.min(Math.max(now - start, 0), duration);
-                      const vested = Math.floor((total * elapsed) / duration);
-                      const claimable = Math.max(vested - withdrawn, 0);
-                      const progress = Math.min((elapsed / duration) * 100, 100);
+                  <div className="flex flex-col gap-6">
+                    <div className="grid gap-5">
+                      {(() => {
+                        const paginatedStreams = filteredStreams.slice(
+                          (currentPage - 1) * itemsPerPage,
+                          currentPage * itemsPerPage
+                        );
+                        return paginatedStreams.map((stream) => {
+                          const now = Math.floor(Date.now() / 1000);
+                          const start = Number(stream.startTs);
+                          const end = Number(stream.endTs);
+                          const cliff = Number(stream.cliffTs);
+                          const total = Number(stream.totalAmount);
+                          const withdrawn = Number(stream.withdrawn);
+                          const unlocked = Number(stream.unlockedAmount || 0);
 
-                      const isCompleted = withdrawn >= total;
-                      const isNotStarted = now < start;
-                      const isEnded = now >= end;
+                          let vested = 0;
+                          let progress = 0;
 
+                          if (stream.vestingType === 1) {
+                            // Milestone-based: progress is discrete based on unlocked amount
+                            vested = unlocked;
+                            progress = Math.min((unlocked / total) * 100, 100);
+                          } else if (stream.vestingType === 2) {
+                            // Cliff-based: 0 before cliff timestamp, 100% after
+                            if (now < cliff) {
+                              vested = 0;
+                              progress = 0;
+                            } else {
+                              vested = total;
+                              progress = 100;
+                            }
+                          } else {
+                            // Linear-based
+                            const duration = end - start || 1;
+                            const elapsed = Math.min(Math.max(now - start, 0), duration);
+                            vested = Math.floor((total * elapsed) / duration);
+                            progress = Math.min((elapsed / duration) * 100, 100);
+                          }
+
+                          const claimable = Math.max(vested - withdrawn, 0);
+
+                          const isCompleted = withdrawn >= total;
+                          const isNotStarted = now < start;
+                          const isEnded = now >= end;
+
+                          return (
+                            <div 
+                              key={stream.id}
+                              onClick={() => fetchStreamDetails(stream.id)}
+                              className="bg-zinc-950/65 border border-zinc-900 hover:border-indigo-500/50 hover:bg-zinc-950/90 rounded-2xl p-5 transition-all shadow-md group relative overflow-hidden cursor-pointer"
+                            >
+                              {/* Hover Accent Glow */}
+                              <div className="absolute top-0 right-0 w-24 h-24 bg-indigo-500/5 rounded-full blur-2xl group-hover:bg-indigo-500/10 transition-colors pointer-events-none" />
+
+                              {/* Top Status and Copy Actions */}
+                              <div className="flex items-center justify-between mb-4">
+                                <div className="flex items-center gap-2">
+                                  <span className="text-[10px] font-bold text-zinc-500 uppercase tracking-wider font-mono">Stream PDA</span>
+                                  <div className="flex items-center gap-1 bg-zinc-900 px-2 py-0.5 rounded font-mono text-[10px] border border-zinc-850">
+                                    <span>{shorten(stream.id)}</span>
+                                  </div>
+                                  {stream.isCsvCreated && (
+                                    <span className="text-[8px] bg-emerald-500/10 text-emerald-400 border border-emerald-500/30 px-1.5 py-0.2 rounded font-bold uppercase tracking-wider">CSV Created</span>
+                                  )}
+                                </div>
+                                
+                                <span className={`text-[10px] px-2.5 py-0.5 rounded-full font-bold uppercase tracking-widest ${
+                                  isCompleted 
+                                    ? "bg-emerald-500/10 text-emerald-400 border border-emerald-500/25"
+                                    : isEnded
+                                    ? "bg-amber-500/10 text-amber-400 border border-amber-500/25"
+                                    : isNotStarted
+                                    ? "bg-indigo-500/10 text-indigo-400 border border-indigo-500/25"
+                                    : "bg-blue-500/10 text-blue-400 border border-blue-500/25"
+                                }`}>
+                                  {isCompleted ? "Completed" : isEnded ? "Ended" : isNotStarted ? "Scheduled" : "Streaming"}
+                                </span>
+                              </div>
+
+                              {/* Progress Bar */}
+                              <div className="mb-4">
+                                <div className="flex justify-between items-center text-xs mb-1.5">
+                                  <span className="font-semibold text-zinc-400">Vesting Completion</span>
+                                  <span className="font-mono text-zinc-200 font-bold">{progress.toFixed(2)}%</span>
+                                </div>
+                                <div className="h-2 w-full bg-zinc-900 rounded-full overflow-hidden border border-zinc-800/40">
+                                  <div 
+                                    className="h-full bg-gradient-to-r from-indigo-500 to-purple-500 rounded-full transition-all duration-500"
+                                    style={{ width: `${progress}%` }}
+                                  />
+                                </div>
+                              </div>
+
+                              {/* Data Matrix */}
+                              <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 bg-zinc-900/35 border border-zinc-900/60 rounded-xl p-3.5 text-xs">
+                                <div>
+                                  <div className="text-zinc-500 font-medium">Total Amount</div>
+                                  <div className="font-bold text-zinc-200">{total.toLocaleString()} tokens</div>
+                                </div>
+                                <div>
+                                  <div className="text-zinc-500 font-medium">Claimable</div>
+                                  <div className="font-bold text-indigo-400">{claimable.toLocaleString()} tokens</div>
+                                </div>
+                                <div>
+                                  <div className="text-zinc-500 font-medium">Withdrawn</div>
+                                  <div className="font-bold text-zinc-200">{withdrawn.toLocaleString()} tokens</div>
+                                </div>
+                                <div>
+                                  <div className="text-zinc-500 font-medium">Type</div>
+                                  <div className="font-semibold text-zinc-300 uppercase tracking-wider text-[10px]">
+                                    {stream.vestingType === 0 ? "Linear" : stream.vestingType === 1 ? "Milestone" : "Cliff"}
+                                  </div>
+                                </div>
+                              </div>
+
+                              {/* Click Indicator */}
+                              <div className="mt-4 flex justify-between items-center text-[10px] text-zinc-500 font-mono">
+                                <span>Start: {formatDate(stream.startTs)}</span>
+                                <span className="text-indigo-400 flex items-center gap-0.5 font-bold group-hover:translate-x-0.5 transition-transform">
+                                  View Detailed Timeline <ChevronRight className="w-3.5 h-3.5" />
+                                </span>
+                              </div>
+                            </div>
+                          );
+                        });
+                      })()}
+                    </div>
+
+                    {/* Premium Pagination Control */}
+                    {(() => {
+                      const totalPages = Math.ceil(filteredStreams.length / itemsPerPage);
+                      if (totalPages <= 1) return null;
                       return (
-                        <div 
-                          key={stream.id}
-                          onClick={() => fetchStreamDetails(stream.id)}
-                          className="bg-zinc-950/65 border border-zinc-900 hover:border-indigo-500/50 hover:bg-zinc-950/90 rounded-2xl p-5 transition-all shadow-md group relative overflow-hidden cursor-pointer"
-                        >
-                          {/* Hover Accent Glow */}
-                          <div className="absolute top-0 right-0 w-24 h-24 bg-indigo-500/5 rounded-full blur-2xl group-hover:bg-indigo-500/10 transition-colors pointer-events-none" />
+                        <div className="flex items-center justify-between border border-zinc-900 bg-zinc-900/10 rounded-2xl p-4 text-xs mt-2">
+                          <span className="text-zinc-400 font-medium">
+                            Showing <span className="text-zinc-200 font-bold">{(currentPage - 1) * itemsPerPage + 1}</span> to{" "}
+                            <span className="text-zinc-200 font-bold">{Math.min(currentPage * itemsPerPage, filteredStreams.length)}</span> of{" "}
+                            <span className="text-indigo-400 font-black">{filteredStreams.length}</span> active streams
+                          </span>
 
-                          {/* Top Status and Copy Actions */}
-                          <div className="flex items-center justify-between mb-4">
-                            <div className="flex items-center gap-2">
-                              <span className="text-[10px] font-bold text-zinc-500 uppercase tracking-wider font-mono">Stream PDA</span>
-                              <div className="flex items-center gap-1 bg-zinc-900 px-2 py-0.5 rounded font-mono text-[10px] border border-zinc-850">
-                                <span>{shorten(stream.id)}</span>
-                              </div>
-                              {stream.isCsvCreated && (
-                                <span className="text-[8px] bg-emerald-500/10 text-emerald-400 border border-emerald-500/30 px-1.5 py-0.2 rounded font-bold uppercase tracking-wider">CSV Created</span>
-                              )}
-                            </div>
+                          <div className="flex items-center gap-2">
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setCurrentPage(prev => Math.max(prev - 1, 1));
+                              }}
+                              disabled={currentPage === 1}
+                              className="px-3 py-1.5 bg-zinc-950 border border-zinc-850 hover:border-zinc-750 text-zinc-350 hover:text-zinc-50 rounded-xl transition-all disabled:opacity-40 disabled:hover:text-zinc-350 disabled:cursor-not-allowed font-semibold"
+                            >
+                              Previous
+                            </button>
                             
-                            <span className={`text-[10px] px-2.5 py-0.5 rounded-full font-bold uppercase tracking-widest ${
-                              isCompleted 
-                                ? "bg-emerald-500/10 text-emerald-400 border border-emerald-500/25"
-                                : isEnded
-                                ? "bg-amber-500/10 text-amber-400 border border-amber-500/25"
-                                : isNotStarted
-                                ? "bg-indigo-500/10 text-indigo-400 border border-indigo-500/25"
-                                : "bg-blue-500/10 text-blue-400 border border-blue-500/25"
-                            }`}>
-                              {isCompleted ? "Completed" : isEnded ? "Ended" : isNotStarted ? "Scheduled" : "Streaming"}
-                            </span>
-                          </div>
+                            <div className="bg-zinc-950 border border-zinc-850 px-3 py-1.5 rounded-xl font-mono font-bold text-zinc-350 text-[10px]">
+                              {currentPage} / {totalPages}
+                            </div>
 
-                          {/* Progress Bar */}
-                          <div className="mb-4">
-                            <div className="flex justify-between items-center text-xs mb-1.5">
-                              <span className="font-semibold text-zinc-400">Vesting Completion</span>
-                              <span className="font-mono text-zinc-200 font-bold">{progress.toFixed(2)}%</span>
-                            </div>
-                            <div className="h-2 w-full bg-zinc-900 rounded-full overflow-hidden border border-zinc-800/40">
-                              <div 
-                                className="h-full bg-gradient-to-r from-indigo-500 to-purple-500 rounded-full transition-all duration-500"
-                                style={{ width: `${progress}%` }}
-                              />
-                            </div>
-                          </div>
-
-                          {/* Data Matrix */}
-                          <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 bg-zinc-900/35 border border-zinc-900/60 rounded-xl p-3.5 text-xs">
-                            <div>
-                              <div className="text-zinc-500 font-medium">Total Amount</div>
-                              <div className="font-bold text-zinc-200">{total.toLocaleString()} tokens</div>
-                            </div>
-                            <div>
-                              <div className="text-zinc-500 font-medium">Claimable</div>
-                              <div className="font-bold text-indigo-400">{claimable.toLocaleString()} tokens</div>
-                            </div>
-                            <div>
-                              <div className="text-zinc-500 font-medium">Withdrawn</div>
-                              <div className="font-bold text-zinc-200">{withdrawn.toLocaleString()} tokens</div>
-                            </div>
-                            <div>
-                              <div className="text-zinc-500 font-medium">Type</div>
-                              <div className="font-semibold text-zinc-300 uppercase tracking-wider text-[10px]">
-                                {stream.vestingType === 0 ? "Linear" : stream.vestingType === 1 ? "Milestone" : "Cliff"}
-                              </div>
-                            </div>
-                          </div>
-
-                          {/* Click Indicator */}
-                          <div className="mt-4 flex justify-between items-center text-[10px] text-zinc-500 font-mono">
-                            <span>Start: {formatDate(stream.startTs)}</span>
-                            <span className="text-indigo-400 flex items-center gap-0.5 font-bold group-hover:translate-x-0.5 transition-transform">
-                              View Detailed Timeline <ChevronRight className="w-3.5 h-3.5" />
-                            </span>
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setCurrentPage(prev => Math.min(prev + 1, totalPages));
+                              }}
+                              disabled={currentPage === totalPages}
+                              className="px-3 py-1.5 bg-zinc-950 border border-zinc-850 hover:border-zinc-750 text-zinc-350 hover:text-zinc-50 rounded-xl transition-all disabled:opacity-40 disabled:hover:text-zinc-350 disabled:cursor-not-allowed font-semibold"
+                            >
+                              Next
+                            </button>
                           </div>
                         </div>
                       );
-                    })}
+                    })()}
                   </div>
-                )}
+                )} 
               </div>
             )}
 
@@ -716,13 +956,38 @@ export default function Home() {
                   </div>
                 ) : (
                   <div className="grid gap-4">
-                    <div className="bg-zinc-950 border border-zinc-900 rounded-xl p-4 text-[10px] text-zinc-400 leading-relaxed font-mono">
-                      <div className="font-bold text-indigo-400 mb-1">CSV Template Instructions:</div>
-                      Provide fields: <span className="text-zinc-200">recipient, amount, mint, type, duration, cancelable</span>
+                    {/* CSV Toolbar */}
+                    <div className="flex flex-wrap items-center gap-3 bg-zinc-950 border border-zinc-900 rounded-2xl p-4">
+                      
+                      <button
+                        onClick={() => downloadTemplate("create")}
+                        className="flex items-center gap-1.5 px-3.5 py-2 border border-zinc-800 hover:border-zinc-700 bg-zinc-900/50 rounded-xl text-xs font-semibold text-zinc-300 transition-all"
+                      >
+                        <Download className="w-3.5 h-3.5 text-indigo-400" />
+                        Download Template
+                      </button>
+
+                      <button
+                        onClick={() => fileInputCreateRef.current?.click()}
+                        className="flex items-center gap-1.5 px-3.5 py-2 border border-indigo-900/60 bg-indigo-950/20 hover:bg-indigo-950/40 text-indigo-400 rounded-xl text-xs font-semibold transition-all"
+                      >
+                        <Upload className="w-3.5 h-3.5" />
+                        Upload CSV File
+                      </button>
+
+                      <input
+                        type="file"
+                        accept=".csv"
+                        ref={fileInputCreateRef}
+                        onChange={(e) => handleCsvUpload(e, "create")}
+                        className="hidden"
+                      />
+                      
+                      <span className="text-[10px] text-zinc-500 font-medium">CSV Columns: recipient, amount, mint, type, duration, cancelable</span>
                     </div>
 
                     <div>
-                      <label className="block text-xs font-semibold text-zinc-400 uppercase tracking-wider mb-1.5">Pasted CSV Payload</label>
+                      <label className="block text-xs font-semibold text-zinc-400 uppercase tracking-wider mb-1.5">CSV Payload Preview / Editor</label>
                       <textarea
                         rows={6}
                         value={csvCreateText}
@@ -751,14 +1016,38 @@ export default function Home() {
                 </div>
 
                 <div className="grid gap-4">
-                  <div className="bg-zinc-950 border border-zinc-900 rounded-xl p-4 text-[10px] text-zinc-400 leading-relaxed font-mono">
-                    <div className="font-bold text-emerald-400 mb-1">CSV Edit Template:</div>
-                    Provide fields: <span className="text-zinc-200">id, amount, duration, cancelable</span><br/>
-                    <span className="text-zinc-500">Note: Manual streams will be strictly blocked from edits!</span>
+                  {/* CSV Edit Toolbar */}
+                  <div className="flex flex-wrap items-center gap-3 bg-zinc-950 border border-zinc-900 rounded-2xl p-4">
+                    
+                    <button
+                      onClick={() => downloadTemplate("edit")}
+                      className="flex items-center gap-1.5 px-3.5 py-2 border border-zinc-800 hover:border-zinc-700 bg-zinc-900/50 rounded-xl text-xs font-semibold text-zinc-300 transition-all"
+                    >
+                      <Download className="w-3.5 h-3.5 text-emerald-400" />
+                      Download Template
+                    </button>
+
+                    <button
+                      onClick={() => fileInputEditRef.current?.click()}
+                      className="flex items-center gap-1.5 px-3.5 py-2 border border-emerald-900/60 bg-emerald-950/20 hover:bg-emerald-950/40 text-emerald-400 rounded-xl text-xs font-semibold transition-all"
+                    >
+                      <Upload className="w-3.5 h-3.5" />
+                      Upload CSV File
+                    </button>
+
+                    <input
+                      type="file"
+                      accept=".csv"
+                      ref={fileInputEditRef}
+                      onChange={(e) => handleCsvUpload(e, "edit")}
+                      className="hidden"
+                    />
+
+                    <span className="text-[10px] text-zinc-500 font-medium">CSV Columns: id, amount, duration, cancelable</span>
                   </div>
 
                   <div>
-                    <label className="block text-xs font-semibold text-zinc-400 uppercase tracking-wider mb-1.5">Pasted CSV Edit Payload</label>
+                    <label className="block text-xs font-semibold text-zinc-400 uppercase tracking-wider mb-1.5">CSV Edit Payload Preview / Editor</label>
                     <textarea
                       rows={6}
                       value={csvEditText}
@@ -1171,24 +1460,37 @@ export default function Home() {
                     <>
                       {/* Interactive Progress Metric */}
                       <div className="bg-zinc-900/40 border border-zinc-900 rounded-2xl p-4 mb-5">
-                        <div className="text-[10px] text-zinc-500 font-bold uppercase tracking-widest mb-1.5">Completeness Index</div>
+                        <div className="text-[10px] text-zinc-500 font-bold uppercase tracking-widest mb-1.5">
+                          {selectedStream.vestingType === 1 ? "Milestone Unlock Progress" : "Claim Completeness Index"}
+                        </div>
                         <div className="flex justify-between items-end mb-2">
                           <span className="text-xl font-black font-mono bg-gradient-to-r from-indigo-400 to-purple-400 bg-clip-text text-transparent">
                             {(() => {
                               const total = Number(selectedStream.totalAmount);
                               const withdrawn = Number(selectedStream.withdrawn);
-                              return ((withdrawn / total) * 100).toFixed(1);
+                              const unlocked = Number(selectedStream.unlockedAmount || 0);
+                              const value = selectedStream.vestingType === 1 ? unlocked : withdrawn;
+                              return ((value / total) * 100).toFixed(1);
                             })()}%
                           </span>
                           <span className="text-[10px] text-zinc-400 font-mono">
-                            {Number(selectedStream.withdrawn).toLocaleString()} / {Number(selectedStream.totalAmount).toLocaleString()} Claimed
+                            {selectedStream.vestingType === 1 ? (
+                              `${Number(selectedStream.unlockedAmount || 0).toLocaleString()} / ${Number(selectedStream.totalAmount).toLocaleString()} Unlocked`
+                            ) : (
+                              `${Number(selectedStream.withdrawn).toLocaleString()} / ${Number(selectedStream.totalAmount).toLocaleString()} Claimed`
+                            )}
                           </span>
                         </div>
                         <div className="h-2 w-full bg-zinc-950 rounded-full overflow-hidden border border-zinc-850">
                           <div 
                             className="h-full bg-gradient-to-r from-emerald-500 to-teal-500 rounded-full transition-all duration-300"
                             style={{ 
-                              width: `${Math.min((Number(selectedStream.withdrawn) / Number(selectedStream.totalAmount)) * 100, 100)}%` 
+                              width: `${Math.min(((() => {
+                                const total = Number(selectedStream.totalAmount);
+                                const withdrawn = Number(selectedStream.withdrawn);
+                                const unlocked = Number(selectedStream.unlockedAmount || 0);
+                                return selectedStream.vestingType === 1 ? unlocked : withdrawn;
+                              })() / Number(selectedStream.totalAmount)) * 100, 100)}%` 
                             }}
                           />
                         </div>
@@ -1239,6 +1541,23 @@ export default function Home() {
                             <span className="font-semibold text-zinc-300 font-mono">{selectedStream.milestoneCount} milestones</span>
                           </div>
                         </div>
+
+                        {selectedStream.vestingType === 1 && (
+                          <div className="grid grid-cols-2 gap-4 border-t border-zinc-900/60 pt-3">
+                            <div>
+                              <span className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest block mb-0.5">Unlocked Amount</span>
+                              <span className="font-semibold text-emerald-400 font-mono">
+                                {Number(selectedStream.unlockedAmount || 0).toLocaleString()} tokens
+                              </span>
+                            </div>
+                            <div>
+                              <span className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest block mb-0.5">Claimable Remaining</span>
+                              <span className="font-semibold text-indigo-400 font-mono">
+                                {Math.max(Number(selectedStream.unlockedAmount || 0) - Number(selectedStream.withdrawn), 0).toLocaleString()} tokens
+                              </span>
+                            </div>
+                          </div>
+                        )}
 
                         <div className="border-t border-zinc-900/60 pt-3">
                           <span className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest block mb-0.5">Creator Account</span>

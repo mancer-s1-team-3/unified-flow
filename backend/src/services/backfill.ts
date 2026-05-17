@@ -73,6 +73,8 @@ export async function backfill() {
                         await handleStreamCreated(event.data, tx, sigInfo.signature);
                     } else if (event.name === "TokensClaimed") {
                         await handleTokensClaimed(event.data, tx, sigInfo.signature);
+                    } else if (event.name === "MilestoneUnlocked") {
+                        await handleMilestoneUnlocked(event.data, tx, sigInfo.signature);
                     }
                 }
             } catch (err) {
@@ -180,4 +182,47 @@ async function handleTokensClaimed(
     });
 
     console.log(`Backfilled withdrawal for stream ${streamId}: ${event.claimable.toString()} tokens`);
+}
+
+async function handleMilestoneUnlocked(
+    event: any,
+    tx: any,
+    signature: string
+) {
+    console.log("MILESTONE UNLOCKED (BACKFILL):", event);
+
+    const streamId = event.stream.toString();
+    const milestoneAmount = BigInt(event.amount.toString());
+
+    // Fetch stream to update its unlockedAmount
+    const stream = await prisma.stream.findUnique({
+        where: { id: streamId }
+    });
+
+    if (stream) {
+        const currentUnlocked = stream.unlockedAmount || BigInt(0);
+        await prisma.stream.update({
+            where: { id: streamId },
+            data: {
+                unlockedAmount: currentUnlocked + milestoneAmount
+            }
+        });
+    } else {
+        console.log(`Stream ${streamId} not found in database during milestone unlock, skipping.`);
+    }
+
+    await prisma.transaction.upsert({
+        where: { signature },
+        update: {},
+        create: {
+            id: signature,
+            signature,
+            slot: BigInt(tx.slot),
+            streamId: stream ? streamId : null,
+            type: "MILESTONE_UNLOCKED",
+            raw: JSON.parse(JSON.stringify(tx)),
+        }
+    });
+
+    console.log(`Backfilled milestone unlock for stream ${streamId}: unlocked ${milestoneAmount.toString()} tokens`);
 }
