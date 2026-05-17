@@ -9,6 +9,7 @@
     "test:create-stream": "ts-node src/scripts/createStream.ts",
     "init-config": "ts-node src/scripts/initConfig.ts",
     "mcp": "ts-node src/api/mcpServer.ts",
+    "cli": "ts-node src/api/cli.ts",
     "build": "tsc"
   },
   "dependencies": {

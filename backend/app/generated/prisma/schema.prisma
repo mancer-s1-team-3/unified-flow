@@ -27,8 +27,9 @@ model Stream {
   cancelable     Boolean
   milestoneCount Int
 
-  nonce BigInt
-  bump  Int
+  nonce        BigInt
+  bump         Int
+  isCsvCreated Boolean @default(false)
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt

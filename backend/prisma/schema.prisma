@@ -30,6 +30,7 @@ model Stream {
 
   nonce           BigInt
   bump            Int
+  isCsvCreated    Boolean @default(false)
 
   createdAt       DateTime @default (now())
   updatedAt       DateTime @updatedAt

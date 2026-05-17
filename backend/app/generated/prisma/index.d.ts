@@ -1042,6 +1042,7 @@ export namespace Prisma {
     milestoneCount: number | null
     nonce: bigint | null
     bump: number | null
+    isCsvCreated: boolean | null
     createdAt: Date | null
     updatedAt: Date | null
   }
@@ -1063,6 +1064,7 @@ export namespace Prisma {
     milestoneCount: number | null
     nonce: bigint | null
     bump: number | null
+    isCsvCreated: boolean | null
     createdAt: Date | null
     updatedAt: Date | null
   }
@@ -1084,6 +1086,7 @@ export namespace Prisma {
     milestoneCount: number
     nonce: number
     bump: number
+    isCsvCreated: number
     createdAt: number
     updatedAt: number
     _all: number
@@ -1133,6 +1136,7 @@ export namespace Prisma {
     milestoneCount?: true
     nonce?: true
     bump?: true
+    isCsvCreated?: true
     createdAt?: true
     updatedAt?: true
   }
@@ -1154,6 +1158,7 @@ export namespace Prisma {
     milestoneCount?: true
     nonce?: true
     bump?: true
+    isCsvCreated?: true
     createdAt?: true
     updatedAt?: true
   }
@@ -1175,6 +1180,7 @@ export namespace Prisma {
     milestoneCount?: true
     nonce?: true
     bump?: true
+    isCsvCreated?: true
     createdAt?: true
     updatedAt?: true
     _all?: true
@@ -1283,6 +1289,7 @@ export namespace Prisma {
     milestoneCount: number
     nonce: bigint
     bump: number
+    isCsvCreated: boolean
     createdAt: Date
     updatedAt: Date
     _count: StreamCountAggregateOutputType | null
@@ -1323,6 +1330,7 @@ export namespace Prisma {
     milestoneCount?: boolean
     nonce?: boolean
     bump?: boolean
+    isCsvCreated?: boolean
     createdAt?: boolean
     updatedAt?: boolean
     transactions?: boolean | Stream$transactionsArgs<ExtArgs>
@@ -1346,6 +1354,7 @@ export namespace Prisma {
     milestoneCount?: boolean
     nonce?: boolean
     bump?: boolean
+    isCsvCreated?: boolean
     createdAt?: boolean
     updatedAt?: boolean
   }, ExtArgs["result"]["stream"]>
@@ -1367,6 +1376,7 @@ export namespace Prisma {
     milestoneCount?: boolean
     nonce?: boolean
     bump?: boolean
+    isCsvCreated?: boolean
     createdAt?: boolean
     updatedAt?: boolean
   }, ExtArgs["result"]["stream"]>
@@ -1388,11 +1398,12 @@ export namespace Prisma {
     milestoneCount?: boolean
     nonce?: boolean
     bump?: boolean
+    isCsvCreated?: boolean
     createdAt?: boolean
     updatedAt?: boolean
   }
 
-  export type StreamOmit<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = $Extensions.GetOmit<"id" | "creator" | "recipient" | "mint" | "vault" | "totalAmount" | "withdrawn" | "startTs" | "cliffTs" | "endTs" | "vestingType" | "status" | "cancelable" | "milestoneCount" | "nonce" | "bump" | "createdAt" | "updatedAt", ExtArgs["result"]["stream"]>
+  export type StreamOmit<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = $Extensions.GetOmit<"id" | "creator" | "recipient" | "mint" | "vault" | "totalAmount" | "withdrawn" | "startTs" | "cliffTs" | "endTs" | "vestingType" | "status" | "cancelable" | "milestoneCount" | "nonce" | "bump" | "isCsvCreated" | "createdAt" | "updatedAt", ExtArgs["result"]["stream"]>
   export type StreamInclude<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
     transactions?: boolean | Stream$transactionsArgs<ExtArgs>
     _count?: boolean | StreamCountOutputTypeDefaultArgs<ExtArgs>
@@ -1422,6 +1433,7 @@ export namespace Prisma {
       milestoneCount: number
       nonce: bigint
       bump: number
+      isCsvCreated: boolean
       createdAt: Date
       updatedAt: Date
     }, ExtArgs["result"]["stream"]>
@@ -1864,6 +1876,7 @@ export namespace Prisma {
     readonly milestoneCount: FieldRef<"Stream", 'Int'>
     readonly nonce: FieldRef<"Stream", 'BigInt'>
     readonly bump: FieldRef<"Stream", 'Int'>
+    readonly isCsvCreated: FieldRef<"Stream", 'Boolean'>
     readonly createdAt: FieldRef<"Stream", 'DateTime'>
     readonly updatedAt: FieldRef<"Stream", 'DateTime'>
   }
@@ -3470,6 +3483,7 @@ export namespace Prisma {
     milestoneCount: 'milestoneCount',
     nonce: 'nonce',
     bump: 'bump',
+    isCsvCreated: 'isCsvCreated',
     createdAt: 'createdAt',
     updatedAt: 'updatedAt'
   };
@@ -3649,6 +3663,7 @@ export namespace Prisma {
     milestoneCount?: IntFilter<"Stream"> | number
     nonce?: BigIntFilter<"Stream"> | bigint | number
     bump?: IntFilter<"Stream"> | number
+    isCsvCreated?: BoolFilter<"Stream"> | boolean
     createdAt?: DateTimeFilter<"Stream"> | Date | string
     updatedAt?: DateTimeFilter<"Stream"> | Date | string
     transactions?: TransactionListRelationFilter
@@ -3671,6 +3686,7 @@ export namespace Prisma {
     milestoneCount?: SortOrder
     nonce?: SortOrder
     bump?: SortOrder
+    isCsvCreated?: SortOrder
     createdAt?: SortOrder
     updatedAt?: SortOrder
     transactions?: TransactionOrderByRelationAggregateInput
@@ -3696,6 +3712,7 @@ export namespace Prisma {
     milestoneCount?: IntFilter<"Stream"> | number
     nonce?: BigIntFilter<"Stream"> | bigint | number
     bump?: IntFilter<"Stream"> | number
+    isCsvCreated?: BoolFilter<"Stream"> | boolean
     createdAt?: DateTimeFilter<"Stream"> | Date | string
     updatedAt?: DateTimeFilter<"Stream"> | Date | string
     transactions?: TransactionListRelationFilter
@@ -3718,6 +3735,7 @@ export namespace Prisma {
     milestoneCount?: SortOrder
     nonce?: SortOrder
     bump?: SortOrder
+    isCsvCreated?: SortOrder
     createdAt?: SortOrder
     updatedAt?: SortOrder
     _count?: StreamCountOrderByAggregateInput
@@ -3747,6 +3765,7 @@ export namespace Prisma {
     milestoneCount?: IntWithAggregatesFilter<"Stream"> | number
     nonce?: BigIntWithAggregatesFilter<"Stream"> | bigint | number
     bump?: IntWithAggregatesFilter<"Stream"> | number
+    isCsvCreated?: BoolWithAggregatesFilter<"Stream"> | boolean
     createdAt?: DateTimeWithAggregatesFilter<"Stream"> | Date | string
     updatedAt?: DateTimeWithAggregatesFilter<"Stream"> | Date | string
   }
@@ -3835,6 +3854,7 @@ export namespace Prisma {
     milestoneCount: number
     nonce: bigint | number
     bump: number
+    isCsvCreated?: boolean
     createdAt?: Date | string
     updatedAt?: Date | string
     transactions?: TransactionCreateNestedManyWithoutStreamInput
@@ -3857,6 +3877,7 @@ export namespace Prisma {
     milestoneCount: number
     nonce: bigint | number
     bump: number
+    isCsvCreated?: boolean
     createdAt?: Date | string
     updatedAt?: Date | string
     transactions?: TransactionUncheckedCreateNestedManyWithoutStreamInput
@@ -3879,6 +3900,7 @@ export namespace Prisma {
     milestoneCount?: IntFieldUpdateOperationsInput | number
     nonce?: BigIntFieldUpdateOperationsInput | bigint | number
     bump?: IntFieldUpdateOperationsInput | number
+    isCsvCreated?: BoolFieldUpdateOperationsInput | boolean
     createdAt?: DateTimeFieldUpdateOperationsInput | Date | string
     updatedAt?: DateTimeFieldUpdateOperationsInput | Date | string
     transactions?: TransactionUpdateManyWithoutStreamNestedInput
@@ -3901,6 +3923,7 @@ export namespace Prisma {
     milestoneCount?: IntFieldUpdateOperationsInput | number
     nonce?: BigIntFieldUpdateOperationsInput | bigint | number
     bump?: IntFieldUpdateOperationsInput | number
+    isCsvCreated?: BoolFieldUpdateOperationsInput | boolean
     createdAt?: DateTimeFieldUpdateOperationsInput | Date | string
     updatedAt?: DateTimeFieldUpdateOperationsInput | Date | string
     transactions?: TransactionUncheckedUpdateManyWithoutStreamNestedInput
@@ -3923,6 +3946,7 @@ export namespace Prisma {
     milestoneCount: number
     nonce: bigint | number
     bump: number
+    isCsvCreated?: boolean
     createdAt?: Date | string
     updatedAt?: Date | string
   }
@@ -3944,6 +3968,7 @@ export namespace Prisma {
     milestoneCount?: IntFieldUpdateOperationsInput | number
     nonce?: BigIntFieldUpdateOperationsInput | bigint | number
     bump?: IntFieldUpdateOperationsInput | number
+    isCsvCreated?: BoolFieldUpdateOperationsInput | boolean
     createdAt?: DateTimeFieldUpdateOperationsInput | Date | string
     updatedAt?: DateTimeFieldUpdateOperationsInput | Date | string
   }
@@ -3965,6 +3990,7 @@ export namespace Prisma {
     milestoneCount?: IntFieldUpdateOperationsInput | number
     nonce?: BigIntFieldUpdateOperationsInput | bigint | number
     bump?: IntFieldUpdateOperationsInput | number
+    isCsvCreated?: BoolFieldUpdateOperationsInput | boolean
     createdAt?: DateTimeFieldUpdateOperationsInput | Date | string
     updatedAt?: DateTimeFieldUpdateOperationsInput | Date | string
   }
@@ -4118,6 +4144,7 @@ export namespace Prisma {
     milestoneCount?: SortOrder
     nonce?: SortOrder
     bump?: SortOrder
+    isCsvCreated?: SortOrder
     createdAt?: SortOrder
     updatedAt?: SortOrder
   }
@@ -4152,6 +4179,7 @@ export namespace Prisma {
     milestoneCount?: SortOrder
     nonce?: SortOrder
     bump?: SortOrder
+    isCsvCreated?: SortOrder
     createdAt?: SortOrder
     updatedAt?: SortOrder
   }
@@ -4173,6 +4201,7 @@ export namespace Prisma {
     milestoneCount?: SortOrder
     nonce?: SortOrder
     bump?: SortOrder
+    isCsvCreated?: SortOrder
     createdAt?: SortOrder
     updatedAt?: SortOrder
   }
@@ -4753,6 +4782,7 @@ export namespace Prisma {
     milestoneCount: number
     nonce: bigint | number
     bump: number
+    isCsvCreated?: boolean
     createdAt?: Date | string
     updatedAt?: Date | string
   }
@@ -4774,6 +4804,7 @@ export namespace Prisma {
     milestoneCount: number
     nonce: bigint | number
     bump: number
+    isCsvCreated?: boolean
     createdAt?: Date | string
     updatedAt?: Date | string
   }
@@ -4811,6 +4842,7 @@ export namespace Prisma {
     milestoneCount?: IntFieldUpdateOperationsInput | number
     nonce?: BigIntFieldUpdateOperationsInput | bigint | number
     bump?: IntFieldUpdateOperationsInput | number
+    isCsvCreated?: BoolFieldUpdateOperationsInput | boolean
     createdAt?: DateTimeFieldUpdateOperationsInput | Date | string
     updatedAt?: DateTimeFieldUpdateOperationsInput | Date | string
   }
@@ -4832,6 +4864,7 @@ export namespace Prisma {
     milestoneCount?: IntFieldUpdateOperationsInput | number
     nonce?: BigIntFieldUpdateOperationsInput | bigint | number
     bump?: IntFieldUpdateOperationsInput | number
+    isCsvCreated?: BoolFieldUpdateOperationsInput | boolean
     createdAt?: DateTimeFieldUpdateOperationsInput | Date | string
     updatedAt?: DateTimeFieldUpdateOperationsInput | Date | string
   }
