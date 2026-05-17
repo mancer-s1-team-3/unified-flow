@@ -628,10 +628,52 @@ pub fn edit_cliff(ctx: Context<EditCliff>, new_cliff_ts: i64) -> Result<()> {
         Ok(())
     }
 
+pub fn edit_linear(
+    ctx: Context<EditLinear>,
+    new_end_ts: i64,
+) -> Result<()> {
+    let stream = &mut ctx.accounts.stream;
+    let now = Clock::get()?.unix_timestamp;
 
+    // Hanya untuk linear/cliff
+    require!(
+        stream.vesting_type == VESTING_TYPE_LINEAR
+            || stream.vesting_type == VESTING_TYPE_CLIFF,
+        ErrorCode::InvalidVestingType
+    );
+
+    require!(
+        stream.status == STREAM_STATUS_ACTIVE,
+        ErrorCode::StreamNotActive
+    );
+
+    // Hanya boleh EXTEND, tidak boleh memperpendek
+    // → melindungi recipient
+    require!(
+        new_end_ts > stream.end_ts,
+        ErrorCode::InvalidSchedule
+    );
+
+    require!(
+        new_end_ts > now,
+        ErrorCode::InvalidEndDate
+    );
+
+    let old_end_ts = stream.end_ts;
+    stream.end_ts = new_end_ts;
+
+    emit!(LinearEdited {
+        stream: stream.key(),
+        old_end_ts,
+        new_end_ts,
+        timestamp: now,
+    });
+
+    Ok(())
+}
     pub fn initialize_config(
     ctx: Context<InitializeConfig>,
-) -> Result<()> {
+    ) -> Result<()> {
     let config = &mut ctx.accounts.config;
 
     config.admin_authority = ctx.accounts.admin.key();
@@ -842,6 +884,24 @@ pub struct Cancel<'info> {
     pub token_program: Interface<'info, TokenInterface>,
 }
 
+#[derive(Accounts)]
+pub struct EditLinear<'info> {
+    #[account(mut)]
+    pub creator: Signer<'info>,
+
+    #[account(
+        mut,
+        seeds = [
+            b"stream",
+            stream.creator.as_ref(),
+            stream.recipient.as_ref(),
+            &stream.nonce.to_le_bytes()
+        ],
+        bump = stream.bump,
+        has_one = creator @ ErrorCode::Unauthorized,
+    )]
+    pub stream: Account<'info, StreamAccount>,
+}
 #[derive(Accounts)]
 pub struct EditMilestone<'info> {
     #[account(mut)]
@@ -1237,7 +1297,13 @@ pub struct MilestoneEdited {
     pub new_amount: u64,
     pub timestamp: i64,
 }
-
+#[event]
+pub struct LinearEdited {
+    pub stream: Pubkey,
+    pub old_end_ts: i64,
+    pub new_end_ts: i64,
+    pub timestamp: i64,
+}
 #[event]
 pub struct CliffEdited {
     pub stream: Pubkey,
