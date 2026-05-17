@@ -57,6 +57,12 @@ export async function startIndexer() {
                             tx,
                             logInfo.signature
                         );
+                    } else if (event.name === "MilestoneUnlocked") {
+                        await handleMilestoneUnlocked(
+                            event.data,
+                            tx,
+                            logInfo.signature
+                        );
                     }
                 }
             } catch (err) {
@@ -161,4 +167,47 @@ async function handleTokensClaimed(
     });
 
     console.log(`Indexed withdrawal for stream ${streamId}: ${event.claimable.toString()} tokens`);
+}
+
+async function handleMilestoneUnlocked(
+    event: any,
+    tx: any,
+    signature: string
+) {
+    console.log("MILESTONE UNLOCKED:", event);
+
+    const streamId = event.stream.toString();
+    const milestoneAmount = BigInt(event.amount.toString());
+
+    // Fetch stream to update its unlockedAmount
+    const stream = await prisma.stream.findUnique({
+        where: { id: streamId }
+    });
+
+    if (stream) {
+        const currentUnlocked = stream.unlockedAmount || BigInt(0);
+        await prisma.stream.update({
+            where: { id: streamId },
+            data: {
+                unlockedAmount: currentUnlocked + milestoneAmount
+            }
+        });
+    } else {
+        console.log(`Stream ${streamId} not found in database during milestone unlock, skipping.`);
+    }
+
+    await prisma.transaction.upsert({
+        where: { signature },
+        update: {},
+        create: {
+            id: signature,
+            signature,
+            slot: BigInt(tx.slot),
+            streamId: stream ? streamId : null,
+            type: "MILESTONE_UNLOCKED",
+            raw: JSON.parse(JSON.stringify(tx)),
+        }
+    });
+
+    console.log(`Indexed milestone unlock for stream ${streamId}: unlocked ${milestoneAmount.toString()} tokens`);
 }
