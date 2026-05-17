@@ -49,25 +49,21 @@ pub fn create_stream<'info>(
     let mint_key = ctx.accounts.mint.key();
     let vault_key = ctx.accounts.vault.key();
 
-
     let config = &ctx.accounts.config;
 
     // =========================
     // Protocol State Validation
     // =========================
-
     require!(!config.paused, ErrorCode::ProtocolPaused);
 
     // =========================
     // Amount Validation
     // =========================
-
     require!(amount > 0, ErrorCode::InvalidAmount);
 
     // =========================
     // Vesting Type Validation
     // =========================
-
     require!(
         vesting_type <= VESTING_TYPE_MILESTONE,
         ErrorCode::InvalidVestingType
@@ -75,11 +71,11 @@ pub fn create_stream<'info>(
 
     let milestone_count = milestones.len() as u8;
 
-    // =========================
-    // Milestone Validation
-    // =========================
-
+    // ==========================================
+    // Milestone & Time Validation (Sudah Diperbaiki)
+    // ==========================================
     if vesting_type == VESTING_TYPE_MILESTONE {
+        // --- Validasi Khusus Milestone ---
         require!(
             milestone_count > 0,
             ErrorCode::InvalidMilestoneCount
@@ -108,37 +104,30 @@ pub fn create_stream<'info>(
             ErrorCode::InvalidMilestoneAmount
         );
     } else {
+        // --- Validasi Khusus Linear / Cliff (Berbasis Waktu) ---
         require!(
             milestone_count == 0,
             ErrorCode::InvalidMilestoneCount
         );
+
+        require!(start_ts >= now, ErrorCode::InvalidStartDate);
+        require!(end_ts > now, ErrorCode::InvalidEndDate);
+        require!(cliff_ts >= start_ts, ErrorCode::InvalidSchedule);
+        require!(end_ts > start_ts, ErrorCode::InvalidSchedule);
+
+        let duration = end_ts
+            .checked_sub(start_ts)
+            .ok_or(ErrorCode::MathOverflow)?;
+
+        require!(
+            duration >= MIN_STREAM_DURATION,
+            ErrorCode::DurationTooShort
+        );
     }
-
-    // =========================
-    // Time Validation
-    // =========================
-
-    require!(start_ts >= now, ErrorCode::InvalidStartDate);
-
-    require!(end_ts > now, ErrorCode::InvalidEndDate);
-
-    require!(cliff_ts >= start_ts, ErrorCode::InvalidSchedule);
-
-    require!(end_ts > start_ts, ErrorCode::InvalidSchedule);
-
-    let duration = end_ts
-        .checked_sub(start_ts)
-        .ok_or(ErrorCode::MathOverflow)?;
-
-    require!(
-        duration >= MIN_STREAM_DURATION,
-        ErrorCode::DurationTooShort
-    );
 
     // =========================
     // Recipient Validation
     // =========================
-
     require!(
         ctx.accounts.creator.key() != ctx.accounts.recipient.key(),
         ErrorCode::InvalidRecipient
@@ -147,7 +136,6 @@ pub fn create_stream<'info>(
     // =========================
     // Mint Validation
     // =========================
-
     if !config.allowed_mints.is_empty() {
         require!(
             config.allowed_mints.contains(&ctx.accounts.mint.key()),
@@ -180,41 +168,34 @@ pub fn create_stream<'info>(
     // =========================
     // Stream Init
     // =========================
-
     let stream = &mut ctx.accounts.stream;
 
     stream.creator = creator_key;
     stream.recipient = recipient_key;
-
     stream.mint = mint_key;
     stream.vault = vault_key;
-
     stream.total_amount = amount;
     stream.withdrawn = 0;
 
+    // Untuk Milestone, parameter waktu tetap disimpan (atau bernilai 0/apapun dari FE tidak masalah)
     stream.start_ts = start_ts;
     stream.cliff_ts = cliff_ts;
     stream.end_ts = end_ts;
 
     stream.vesting_type = vesting_type;
-
     stream.status = STREAM_STATUS_ACTIVE;
-
     stream.cancelable = true;
-
     stream.milestone_count = milestone_count;
     stream.next_milestone_index = 0;
     stream.cancelled = false;
-
     stream.nonce = nonce;
     stream.bump = ctx.bumps.stream;
+    stream.unlocked_milestone_amount = 0;
 
     // =========================
     // Initialize Milestones
     // =========================
-
     if vesting_type == VESTING_TYPE_MILESTONE {
-
         for i in 0..milestone_count {
             let milestone_info = ctx
                 .remaining_accounts
@@ -237,9 +218,7 @@ pub fn create_stream<'info>(
             );
 
             let space = 8 + MilestoneAccount::INIT_SPACE;
-
             let rent = Rent::get()?;
-
             let lamports = rent.minimum_balance(space);
 
             invoke_signed(
@@ -267,20 +246,15 @@ pub fn create_stream<'info>(
 
             let milestone_data = MilestoneAccount {
                 stream: stream_key,
-
                 index: i,
                 unlock_ts: 0,
-
                 amount: input.amount,
-
                 approved: false,
                 unlocked: false,
-
                 bump,
             };
 
             let mut data = milestone_info.data.borrow_mut();
-
             milestone_data.try_serialize(&mut &mut data[..])?;
         }
     }
@@ -288,22 +262,14 @@ pub fn create_stream<'info>(
     // =========================
     // Transfer Tokens
     // =========================
-
     let cpi_accounts = TransferChecked {
-        from: ctx
-            .accounts
-            .creator_token_account
-            .to_account_info(),
-
+        from: ctx.accounts.creator_token_account.to_account_info(),
         to: ctx.accounts.vault.to_account_info(),
-
         authority: ctx.accounts.creator.to_account_info(),
-
         mint: ctx.accounts.mint.to_account_info(),
     };
 
     let cpi_program = ctx.accounts.token_program.to_account_info();
-
     let cpi_ctx = CpiContext::new(cpi_program, cpi_accounts);
 
     transfer_checked(
@@ -315,7 +281,6 @@ pub fn create_stream<'info>(
     // =========================
     // Reload Vault
     // =========================
-
     ctx.accounts.vault.reload()?;
 
     require!(
@@ -326,32 +291,20 @@ pub fn create_stream<'info>(
     // =========================
     // Emit Event
     // =========================
-
     emit!(StreamCreated {
         stream: stream_key,
-
         creator: creator_key,
-
         recipient: recipient_key,
-
         mint: mint_key,
-
         vault: vault_key,
-
         total_amount: amount,
-
         vesting_type,
-
         start_ts,
         cliff_ts,
         end_ts,
-
         milestone_count,
-
         cancelable: true,
-
         nonce,
-
         created_at: now,
     });
 
@@ -462,76 +415,31 @@ pub fn create_stream<'info>(
 }
 pub fn unlock_milestone(ctx: Context<UnlockMilestone>) -> Result<()> {
     let stream = &mut ctx.accounts.stream;
-    let stream_key = stream.key();
     let milestone = &mut ctx.accounts.milestone;
 
     require!(
         stream.vesting_type == VESTING_TYPE_MILESTONE,
         ErrorCode::InvalidVestingType
     );
-
     require!(
         !milestone.approved,
         ErrorCode::MilestoneAlreadyUnlocked
     );
-    
-    // ================================
-    // enforce strict ordering (SOURCE OF TRUTH)
-    // ================================
-    require!(
-        milestone.index == stream.next_milestone_index,
-        ErrorCode::InvalidMilestoneOrder
-    );
 
-    // ================================
-    // verify previous milestone (only for safety audit trail)
-    // ================================
-    if milestone.index > 0 {
-        let prev_index = milestone.index - 1;
-
-        let (prev_pda, _) = Pubkey::find_program_address(
-            &[
-                b"milestone",
-                stream_key.as_ref(),
-                &[prev_index],
-            ],
-            ctx.program_id,
-        );
-
-        let prev_info = ctx
-            .remaining_accounts
-            .iter()
-            .find(|a| a.key() == prev_pda)
-            .ok_or(ErrorCode::PreviousMilestoneMissing)?;
-
-        let prev_data = prev_info.try_borrow_data()?;
-        let prev_milestone = MilestoneAccount::try_deserialize(&mut &prev_data[..])?;
-
-        require!(
-            prev_milestone.stream == stream_key,
-            ErrorCode::InvalidMilestonePda
-        );
-
-        require!(
-            prev_milestone.approved,
-            ErrorCode::PreviousMilestoneNotApproved
-        );
-    }
-
-    // ================================
-    // state update
-    // ================================
+    // Tandai milestone sebagai selesai
     milestone.approved = true;
     milestone.unlocked = true;
     milestone.unlock_ts = Clock::get()?.unix_timestamp;
 
-    stream.next_milestone_index = stream
-        .next_milestone_index
+    // Efek: Akumulasikan ke state utama aliran dana
+    stream.unlocked_milestone_amount = stream.unlocked_milestone_amount
+        .checked_add(milestone.amount)
+        .ok_or(ErrorCode::MathOverflow)?;
+
+    stream.next_milestone_index = stream.next_milestone_index
         .checked_add(1)
         .ok_or(ErrorCode::MathOverflow)?;
-    // ================================
-    // EVENT EMIT
-    // ================================
+
     emit!(MilestoneUnlocked {
         stream: stream.key(),
         milestone: milestone.key(),
@@ -539,13 +447,14 @@ pub fn unlock_milestone(ctx: Context<UnlockMilestone>) -> Result<()> {
         amount: milestone.amount,
         unlock_ts: milestone.unlock_ts,
     });
+
     Ok(())
 }
 pub fn edit_milestone(
     ctx: Context<EditMilestone>,
     new_amount: u64,
 ) -> Result<()> {
-    let stream = &ctx.accounts.stream;
+    let stream = &mut ctx.accounts.stream;
     let milestone = &mut ctx.accounts.milestone;
 
     require!(
@@ -569,8 +478,79 @@ pub fn edit_milestone(
     );
 
     let old_amount = milestone.amount;
-
     milestone.amount = new_amount;
+
+    if new_amount > old_amount {
+        // Kreator menaikkan alokasi milestone -> Ambil sisa token dari dompet kreator
+        let diff = new_amount
+            .checked_sub(old_amount)
+            .ok_or(ErrorCode::MathOverflow)?;
+
+        stream.total_amount = stream
+            .total_amount
+            .checked_add(diff)
+            .ok_or(ErrorCode::MathOverflow)?;
+
+        transfer_checked(
+            CpiContext::new(
+                ctx.accounts.token_program.to_account_info(),
+                TransferChecked {
+                    from: ctx.accounts.creator_token_account.to_account_info(),
+                    to: ctx.accounts.vault.to_account_info(),
+                    authority: ctx.accounts.creator.to_account_info(),
+                    mint: ctx.accounts.mint.to_account_info(),
+                },
+            ),
+            diff,
+            ctx.accounts.mint.decimals,
+        )?;
+    } else if new_amount < old_amount {
+        // Kreator menurunkan alokasi milestone -> Kembalikan kelebihan token ke kreator
+        let diff = old_amount
+            .checked_sub(new_amount)
+            .ok_or(ErrorCode::MathOverflow)?;
+
+        stream.total_amount = stream
+            .total_amount
+            .checked_sub(diff)
+            .ok_or(ErrorCode::MathOverflow)?;
+            
+        // Validasi agar total komitmen baru tidak turun di bawah batas aman dana yang sudah ditarik
+        require!(
+            stream.total_amount >= stream.withdrawn,
+            ErrorCode::InvalidAmount
+        );
+
+        let creator_key = stream.creator;
+        let recipient_key = stream.recipient;
+        let nonce_bytes = stream.nonce.to_le_bytes();
+        let bump_bytes = [stream.bump];
+
+        let signer_seeds: &[&[&[u8]]] = &[&[
+            b"stream",
+            creator_key.as_ref(),
+            recipient_key.as_ref(),
+            &nonce_bytes,
+            &bump_bytes,
+        ]];
+
+        transfer_checked(
+            CpiContext::new_with_signer(
+                ctx.accounts.token_program.to_account_info(),
+                TransferChecked {
+                    from: ctx.accounts.vault.to_account_info(),
+                    to: ctx.accounts.creator_token_account.to_account_info(),
+                    authority: stream.to_account_info(),
+                    mint: ctx.accounts.mint.to_account_info(),
+                },
+                signer_seeds,
+            ),
+            diff,
+            ctx.accounts.mint.decimals,
+        )?;
+    }
+
+    ctx.accounts.vault.reload()?;
 
     emit!(MilestoneEdited {
         stream: stream.key(),
@@ -583,52 +563,43 @@ pub fn edit_milestone(
 
     Ok(())
 }
-pub fn edit_cliff(
-    ctx: Context<EditCliff>,
-    new_cliff_ts: i64,
-) -> Result<()> {
-    let stream = &mut ctx.accounts.stream;
+pub fn edit_cliff(ctx: Context<EditCliff>, new_cliff_ts: i64) -> Result<()> {
+        let stream = &mut ctx.accounts.stream;
+        let now = Clock::get()?.unix_timestamp;
 
-    let now = Clock::get()?.unix_timestamp;
+        require!(
+            stream.status == STREAM_STATUS_ACTIVE,
+            ErrorCode::StreamNotActive
+        );
+        require!(
+            stream.withdrawn == 0,
+            ErrorCode::StreamAlreadyStarted
+        );
+        require!(
+            new_cliff_ts >= stream.start_ts,
+            ErrorCode::InvalidSchedule
+        );
+        require!(
+            new_cliff_ts <= stream.end_ts,
+            ErrorCode::InvalidSchedule
+        );
+        require!(
+            new_cliff_ts >= now,
+            ErrorCode::InvalidStartDate
+        );
 
-    require!(
-        stream.status == STREAM_STATUS_ACTIVE,
-        ErrorCode::StreamNotActive
-    );
+        let old_cliff = stream.cliff_ts;
+        stream.cliff_ts = new_cliff_ts;
 
-    require!(
-        stream.withdrawn == 0,
-        ErrorCode::StreamAlreadyStarted
-    );
+        emit!(CliffEdited {
+            stream: stream.key(),
+            old_cliff_ts: old_cliff,
+            new_cliff_ts,
+            timestamp: Clock::get()?.unix_timestamp,
+        });
 
-    require!(
-        new_cliff_ts >= stream.start_ts,
-        ErrorCode::InvalidSchedule
-    );
-
-    require!(
-        new_cliff_ts <= stream.end_ts,
-        ErrorCode::InvalidSchedule
-    );
-
-    require!(
-        new_cliff_ts >= now,
-        ErrorCode::InvalidStartDate
-    );
-
-    let old_cliff = stream.cliff_ts;
-
-    stream.cliff_ts = new_cliff_ts;
-
-    emit!(CliffEdited {
-        stream: stream.key(),
-        old_cliff_ts: old_cliff,
-        new_cliff_ts,
-        timestamp: Clock::get()?.unix_timestamp,
-    });
-
-    Ok(())
-}
+        Ok(())
+    }
 
 
     pub fn initialize_config(
@@ -843,6 +814,7 @@ pub struct Cancel<'info> {
 
     pub token_program: Interface<'info, TokenInterface>,
 }
+
 #[derive(Accounts)]
 pub struct EditMilestone<'info> {
     #[account(mut)]
@@ -850,15 +822,50 @@ pub struct EditMilestone<'info> {
 
     #[account(
         mut,
-        has_one = creator @ ErrorCode::Unauthorized
+        has_one = creator @ ErrorCode::Unauthorized,
+        has_one = mint @ ErrorCode::InvalidMint,
+        seeds = [
+            b"stream",
+            stream.creator.as_ref(),
+            stream.recipient.as_ref(),
+            &stream.nonce.to_le_bytes()
+        ],
+        bump = stream.bump, // Memastikan akun stream ini adalah PDA resmi sistem Anda
     )]
     pub stream: Account<'info, StreamAccount>,
 
     #[account(
         mut,
-        constraint = milestone.stream == stream.key()
+        seeds = [
+            b"milestone",
+            stream.key().as_ref(),
+            &[milestone.index] // Menghitung ulang alamat asli berdasarkan index milestone-nya
+        ],
+        bump = milestone.bump,
+        constraint = milestone.stream == stream.key() @ ErrorCode::InvalidMilestonePda
     )]
     pub milestone: Account<'info, MilestoneAccount>,
+
+    pub mint: InterfaceAccount<'info, Mint>,
+
+    #[account(
+        mut,
+        associated_token::mint = mint,
+        associated_token::authority = stream,
+        associated_token::token_program = token_program,
+    )]
+    pub vault: InterfaceAccount<'info, TokenAccount>,
+
+    #[account(
+        mut,
+        constraint = creator_token_account.owner == creator.key()
+            @ ErrorCode::InvalidTokenOwner,
+        constraint = creator_token_account.mint == mint.key()
+            @ ErrorCode::InvalidMint,
+    )]
+    pub creator_token_account: InterfaceAccount<'info, TokenAccount>,
+
+    pub token_program: Interface<'info, TokenInterface>,
 }
 #[derive(Accounts)]
 pub struct EditCliff<'info> {
@@ -867,7 +874,14 @@ pub struct EditCliff<'info> {
 
     #[account(
         mut,
-        has_one = creator @ ErrorCode::Unauthorized
+        seeds = [
+            b"stream",
+            stream.creator.as_ref(),
+            stream.recipient.as_ref(),
+            &stream.nonce.to_le_bytes()
+        ],
+        bump = stream.bump,
+        has_one = creator @ ErrorCode::Unauthorized,
     )]
     pub stream: Account<'info, StreamAccount>,
 }
@@ -895,13 +909,27 @@ pub struct UnlockMilestone<'info> {
 
     #[account(
         mut,
-        has_one = creator @ ErrorCode::Unauthorized
+        seeds = [
+            b"stream",
+            stream.creator.as_ref(),
+            stream.recipient.as_ref(),
+            &stream.nonce.to_le_bytes()
+        ],
+        bump = stream.bump,
+        has_one = creator @ ErrorCode::Unauthorized,
+        constraint = stream.vesting_type == VESTING_TYPE_MILESTONE @ ErrorCode::InvalidVestingType,
     )]
     pub stream: Account<'info, StreamAccount>,
 
     #[account(
         mut,
-        constraint = milestone.stream == stream.key()
+        seeds = [
+            b"milestone",
+            stream.key().as_ref(),
+            &[stream.next_milestone_index]
+        ],
+        bump = milestone.bump,
+        constraint = milestone.stream == stream.key() @ ErrorCode::InvalidMilestonePda
     )]
     pub milestone: Account<'info, MilestoneAccount>,
 
@@ -972,6 +1000,7 @@ pub struct StreamAccount {
 
     pub nonce: u64,
     pub bump: u8,
+    pub unlocked_milestone_amount: u64,
 }
 
 #[account]
