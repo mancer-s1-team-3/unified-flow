@@ -137,6 +137,7 @@ exports.Prisma.StreamScalarFieldEnum = {
   milestoneCount: 'milestoneCount',
   nonce: 'nonce',
   bump: 'bump',
+  isCsvCreated: 'isCsvCreated',
   createdAt: 'createdAt',
   updatedAt: 'updatedAt'
 };
