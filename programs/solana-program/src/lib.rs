@@ -203,7 +203,7 @@ pub fn create_stream<'info>(
     stream.cancelable = true;
 
     stream.milestone_count = milestone_count;
-
+    stream.next_milestone_index = 0;
     stream.cancelled = false;
 
     stream.nonce = nonce;
@@ -214,10 +214,6 @@ pub fn create_stream<'info>(
     // =========================
 
     if vesting_type == VESTING_TYPE_MILESTONE {
-        let creator_info = ctx.accounts.creator.to_account_info();
-
-        let system_program_info =
-            ctx.accounts.system_program.to_account_info();
 
         for i in 0..milestone_count {
             let milestone_info = ctx
@@ -465,7 +461,7 @@ pub fn create_stream<'info>(
    Ok(())
 }
 pub fn unlock_milestone(ctx: Context<UnlockMilestone>) -> Result<()> {
-    let stream = &ctx.accounts.stream;
+    let stream = &mut ctx.accounts.stream;
     let stream_key = stream.key();
     let milestone = &mut ctx.accounts.milestone;
 
@@ -478,9 +474,17 @@ pub fn unlock_milestone(ctx: Context<UnlockMilestone>) -> Result<()> {
         !milestone.approved,
         ErrorCode::MilestoneAlreadyUnlocked
     );
+    
+    // ================================
+    // enforce strict ordering (SOURCE OF TRUTH)
+    // ================================
+    require!(
+        milestone.index == stream.next_milestone_index,
+        ErrorCode::InvalidMilestoneOrder
+    );
 
     // ================================
-    // enforce sequential unlock
+    // verify previous milestone (only for safety audit trail)
     // ================================
     if milestone.index > 0 {
         let prev_index = milestone.index - 1;
@@ -493,34 +497,38 @@ pub fn unlock_milestone(ctx: Context<UnlockMilestone>) -> Result<()> {
             ],
             ctx.program_id,
         );
-       let prev_info = ctx
+
+        let prev_info = ctx
             .remaining_accounts
             .iter()
             .find(|a| a.key() == prev_pda)
             .ok_or(ErrorCode::PreviousMilestoneMissing)?;
-   
-        require!(
-            prev_info.key() == prev_pda,
-            ErrorCode::InvalidMilestonePda
-        );
 
         let prev_data = prev_info.try_borrow_data()?;
         let prev_milestone = MilestoneAccount::try_deserialize(&mut &prev_data[..])?;
 
         require!(
-            prev_milestone.approved,
-            ErrorCode::PreviousMilestoneNotApproved
+            prev_milestone.stream == stream_key,
+            ErrorCode::InvalidMilestonePda
         );
 
         require!(
-            prev_milestone.index + 1 == milestone.index,
-            ErrorCode::InvalidMilestoneOrder
+            prev_milestone.approved,
+            ErrorCode::PreviousMilestoneNotApproved
         );
     }
 
+    // ================================
+    // state update
+    // ================================
     milestone.approved = true;
     milestone.unlocked = true;
     milestone.unlock_ts = Clock::get()?.unix_timestamp;
+
+    stream.next_milestone_index = stream
+        .next_milestone_index
+        .checked_add(1)
+        .ok_or(ErrorCode::MathOverflow)?;
 
     Ok(())
 }
@@ -760,6 +768,7 @@ pub struct UnlockMilestone<'info> {
     pub creator: Signer<'info>,
 
     #[account(
+        mut,
         has_one = creator @ ErrorCode::Unauthorized
     )]
     pub stream: Account<'info, StreamAccount>,
@@ -830,6 +839,7 @@ pub struct StreamAccount {
 
     pub cancelable: bool,
     pub milestone_count: u8,
+    pub next_milestone_index: u8,
 
     pub cancelled: bool,
 
