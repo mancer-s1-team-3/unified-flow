@@ -428,20 +428,28 @@ pub fn unlock_milestone(ctx: Context<UnlockMilestone>) -> Result<()> {
     let milestone = &mut ctx.accounts.milestone;
 
     require!(
+        stream.status == STREAM_STATUS_ACTIVE,
+        ErrorCode::StreamNotActive
+    );
+    require!(
         stream.vesting_type == VESTING_TYPE_MILESTONE,
         ErrorCode::InvalidVestingType
     );
+
+    require!(
+        milestone.index == stream.next_milestone_index,
+        ErrorCode::InvalidMilestoneOrder
+    );
+
     require!(
         !milestone.approved,
         ErrorCode::MilestoneAlreadyUnlocked
     );
 
-    // Tandai milestone sebagai selesai
     milestone.approved = true;
     milestone.unlocked = true;
     milestone.unlock_ts = Clock::get()?.unix_timestamp;
 
-    // Efek: Akumulasikan ke state utama aliran dana
     stream.unlocked_milestone_amount = stream.unlocked_milestone_amount
         .checked_add(milestone.amount)
         .ok_or(ErrorCode::MathOverflow)?;
@@ -449,6 +457,11 @@ pub fn unlock_milestone(ctx: Context<UnlockMilestone>) -> Result<()> {
     stream.next_milestone_index = stream.next_milestone_index
         .checked_add(1)
         .ok_or(ErrorCode::MathOverflow)?;
+
+
+    if stream.next_milestone_index == stream.milestone_count {
+        stream.status = STREAM_STATUS_COMPLETED;
+    }
 
     emit!(MilestoneUnlocked {
         stream: stream.key(),
@@ -464,6 +477,7 @@ pub fn edit_milestone(
     ctx: Context<EditMilestone>,
     new_amount: u64,
 ) -> Result<()> {
+    let now = Clock::get()?.unix_timestamp;
     let stream = &mut ctx.accounts.stream;
     let milestone = &mut ctx.accounts.milestone;
 
@@ -568,7 +582,7 @@ pub fn edit_milestone(
         index: milestone.index,
         old_amount,
         new_amount,
-        timestamp: Clock::get()?.unix_timestamp,
+        timestamp: now,
     });
 
     Ok(())
@@ -576,7 +590,10 @@ pub fn edit_milestone(
 pub fn edit_cliff(ctx: Context<EditCliff>, new_cliff_ts: i64) -> Result<()> {
         let stream = &mut ctx.accounts.stream;
         let now = Clock::get()?.unix_timestamp;
-
+        require!(
+            stream.vesting_type == VESTING_TYPE_CLIFF,
+            ErrorCode::InvalidVestingType
+        );
         require!(
             stream.status == STREAM_STATUS_ACTIVE,
             ErrorCode::StreamNotActive
@@ -605,7 +622,7 @@ pub fn edit_cliff(ctx: Context<EditCliff>, new_cliff_ts: i64) -> Result<()> {
             stream: stream.key(),
             old_cliff_ts: old_cliff,
             new_cliff_ts,
-            timestamp: Clock::get()?.unix_timestamp,
+            timestamp: now,
         });
 
         Ok(())
