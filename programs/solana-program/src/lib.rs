@@ -529,7 +529,16 @@ pub fn unlock_milestone(ctx: Context<UnlockMilestone>) -> Result<()> {
         .next_milestone_index
         .checked_add(1)
         .ok_or(ErrorCode::MathOverflow)?;
-
+    // ================================
+    // EVENT EMIT
+    // ================================
+    emit!(MilestoneUnlocked {
+        stream: stream.key(),
+        milestone: milestone.key(),
+        index: milestone.index,
+        amount: milestone.amount,
+        unlock_ts: milestone.unlock_ts,
+    });
     Ok(())
 }
 
@@ -1034,4 +1043,12 @@ pub struct TokensClaimed {
 #[derive(AnchorSerialize, AnchorDeserialize, Clone)]
 pub struct MilestoneInput {
     pub amount: u64,
+}
+#[event]
+pub struct MilestoneUnlocked {
+    pub stream: Pubkey,
+    pub milestone: Pubkey,
+    pub index: u8,
+    pub amount: u64,
+    pub unlock_ts: i64,
 }
