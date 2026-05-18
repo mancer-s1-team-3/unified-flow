@@ -153,6 +153,15 @@ exports.Prisma.TransactionScalarFieldEnum = {
   createdAt: 'createdAt'
 };
 
+exports.Prisma.CsvUploadScalarFieldEnum = {
+  id: 'id',
+  version: 'version',
+  filename: 'filename',
+  content: 'content',
+  uploader: 'uploader',
+  createdAt: 'createdAt'
+};
+
 exports.Prisma.SortOrder = {
   asc: 'asc',
   desc: 'desc'
@@ -181,7 +190,8 @@ exports.Prisma.NullsOrder = {
 
 exports.Prisma.ModelName = {
   Stream: 'Stream',
-  Transaction: 'Transaction'
+  Transaction: 'Transaction',
+  CsvUpload: 'CsvUpload'
 };
 
 /**

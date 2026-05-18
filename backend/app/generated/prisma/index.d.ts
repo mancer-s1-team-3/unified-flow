@@ -23,6 +23,11 @@ export type Stream = $Result.DefaultSelection<Prisma.$StreamPayload>
  * 
  */
 export type Transaction = $Result.DefaultSelection<Prisma.$TransactionPayload>
+/**
+ * Model CsvUpload
+ * 
+ */
+export type CsvUpload = $Result.DefaultSelection<Prisma.$CsvUploadPayload>
 
 /**
  * ##  Prisma Client ʲˢ
@@ -164,6 +169,16 @@ export class PrismaClient<
     * ```
     */
   get transaction(): Prisma.TransactionDelegate<ExtArgs, ClientOptions>;
+
+  /**
+   * `prisma.csvUpload`: Exposes CRUD operations for the **CsvUpload** model.
+    * Example usage:
+    * ```ts
+    * // Fetch zero or more CsvUploads
+    * const csvUploads = await prisma.csvUpload.findMany()
+    * ```
+    */
+  get csvUpload(): Prisma.CsvUploadDelegate<ExtArgs, ClientOptions>;
 }
 
 export namespace Prisma {
@@ -599,7 +614,8 @@ export namespace Prisma {
 
   export const ModelName: {
     Stream: 'Stream',
-    Transaction: 'Transaction'
+    Transaction: 'Transaction',
+    CsvUpload: 'CsvUpload'
   };
 
   export type ModelName = (typeof ModelName)[keyof typeof ModelName]
@@ -615,7 +631,7 @@ export namespace Prisma {
       omit: GlobalOmitOptions
     }
     meta: {
-      modelProps: "stream" | "transaction"
+      modelProps: "stream" | "transaction" | "csvUpload"
       txIsolationLevel: Prisma.TransactionIsolationLevel
     }
     model: {
@@ -767,6 +783,80 @@ export namespace Prisma {
           }
         }
       }
+      CsvUpload: {
+        payload: Prisma.$CsvUploadPayload<ExtArgs>
+        fields: Prisma.CsvUploadFieldRefs
+        operations: {
+          findUnique: {
+            args: Prisma.CsvUploadFindUniqueArgs<ExtArgs>
+            result: $Utils.PayloadToResult<Prisma.$CsvUploadPayload> | null
+          }
+          findUniqueOrThrow: {
+            args: Prisma.CsvUploadFindUniqueOrThrowArgs<ExtArgs>
+            result: $Utils.PayloadToResult<Prisma.$CsvUploadPayload>
+          }
+          findFirst: {
+            args: Prisma.CsvUploadFindFirstArgs<ExtArgs>
+            result: $Utils.PayloadToResult<Prisma.$CsvUploadPayload> | null
+          }
+          findFirstOrThrow: {
+            args: Prisma.CsvUploadFindFirstOrThrowArgs<ExtArgs>
+            result: $Utils.PayloadToResult<Prisma.$CsvUploadPayload>
+          }
+          findMany: {
+            args: Prisma.CsvUploadFindManyArgs<ExtArgs>
+            result: $Utils.PayloadToResult<Prisma.$CsvUploadPayload>[]
+          }
+          create: {
+            args: Prisma.CsvUploadCreateArgs<ExtArgs>
+            result: $Utils.PayloadToResult<Prisma.$CsvUploadPayload>
+          }
+          createMany: {
+            args: Prisma.CsvUploadCreateManyArgs<ExtArgs>
+            result: BatchPayload
+          }
+          createManyAndReturn: {
+            args: Prisma.CsvUploadCreateManyAndReturnArgs<ExtArgs>
+            result: $Utils.PayloadToResult<Prisma.$CsvUploadPayload>[]
+          }
+          delete: {
+            args: Prisma.CsvUploadDeleteArgs<ExtArgs>
+            result: $Utils.PayloadToResult<Prisma.$CsvUploadPayload>
+          }
+          update: {
+            args: Prisma.CsvUploadUpdateArgs<ExtArgs>
+            result: $Utils.PayloadToResult<Prisma.$CsvUploadPayload>
+          }
+          deleteMany: {
+            args: Prisma.CsvUploadDeleteManyArgs<ExtArgs>
+            result: BatchPayload
+          }
+          updateMany: {
+            args: Prisma.CsvUploadUpdateManyArgs<ExtArgs>
+            result: BatchPayload
+          }
+          updateManyAndReturn: {
+            args: Prisma.CsvUploadUpdateManyAndReturnArgs<ExtArgs>
+            result: $Utils.PayloadToResult<Prisma.$CsvUploadPayload>[]
+          }
+          upsert: {
+            args: Prisma.CsvUploadUpsertArgs<ExtArgs>
+            result: $Utils.PayloadToResult<Prisma.$CsvUploadPayload>
+          }
+          aggregate: {
+            args: Prisma.CsvUploadAggregateArgs<ExtArgs>
+            result: $Utils.Optional<AggregateCsvUpload>
+          }
+          groupBy: {
+            args: Prisma.CsvUploadGroupByArgs<ExtArgs>
+            result: $Utils.Optional<CsvUploadGroupByOutputType>[]
+          }
+          count: {
+            args: Prisma.CsvUploadCountArgs<ExtArgs>
+            result: $Utils.Optional<CsvUploadCountAggregateOutputType> | number
+          }
+        }
+      }
     }
   } & {
     other: {
@@ -877,6 +967,7 @@ export namespace Prisma {
   export type GlobalOmitConfig = {
     stream?: StreamOmit
     transaction?: TransactionOmit
+    csvUpload?: CsvUploadOmit
   }
 
   /* Types for Logging */
@@ -3470,6 +3561,1053 @@ export namespace Prisma {
 
 
   /**
+   * Model CsvUpload
+   */
+
+  export type AggregateCsvUpload = {
+    _count: CsvUploadCountAggregateOutputType | null
+    _avg: CsvUploadAvgAggregateOutputType | null
+    _sum: CsvUploadSumAggregateOutputType | null
+    _min: CsvUploadMinAggregateOutputType | null
+    _max: CsvUploadMaxAggregateOutputType | null
+  }
+
+  export type CsvUploadAvgAggregateOutputType = {
+    version: number | null
+  }
+
+  export type CsvUploadSumAggregateOutputType = {
+    version: number | null
+  }
+
+  export type CsvUploadMinAggregateOutputType = {
+    id: string | null
+    version: number | null
+    filename: string | null
+    content: string | null
+    uploader: string | null
+    createdAt: Date | null
+  }
+
+  export type CsvUploadMaxAggregateOutputType = {
+    id: string | null
+    version: number | null
+    filename: string | null
+    content: string | null
+    uploader: string | null
+    createdAt: Date | null
+  }
+
+  export type CsvUploadCountAggregateOutputType = {
+    id: number
+    version: number
+    filename: number
+    content: number
+    uploader: number
+    createdAt: number
+    _all: number
+  }
+
+
+  export type CsvUploadAvgAggregateInputType = {
+    version?: true
+  }
+
+  export type CsvUploadSumAggregateInputType = {
+    version?: true
+  }
+
+  export type CsvUploadMinAggregateInputType = {
+    id?: true
+    version?: true
+    filename?: true
+    content?: true
+    uploader?: true
+    createdAt?: true
+  }
+
+  export type CsvUploadMaxAggregateInputType = {
+    id?: true
+    version?: true
+    filename?: true
+    content?: true
+    uploader?: true
+    createdAt?: true
+  }
+
+  export type CsvUploadCountAggregateInputType = {
+    id?: true
+    version?: true
+    filename?: true
+    content?: true
+    uploader?: true
+    createdAt?: true
+    _all?: true
+  }
+
+  export type CsvUploadAggregateArgs<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
+    /**
+     * Filter which CsvUpload to aggregate.
+     */
+    where?: CsvUploadWhereInput
+    /**
+     * {@link https://www.prisma.io/docs/concepts/components/prisma-client/sorting Sorting Docs}
+     * 
+     * Determine the order of CsvUploads to fetch.
+     */
+    orderBy?: CsvUploadOrderByWithRelationInput | CsvUploadOrderByWithRelationInput[]
+    /**
+     * {@link https://www.prisma.io/docs/concepts/components/prisma-client/pagination#cursor-based-pagination Cursor Docs}
+     * 
+     * Sets the start position
+     */
+    cursor?: CsvUploadWhereUniqueInput
+    /**
+     * {@link https://www.prisma.io/docs/concepts/components/prisma-client/pagination Pagination Docs}
+     * 
+     * Take `±n` CsvUploads from the position of the cursor.
+     */
+    take?: number
+    /**
+     * {@link https://www.prisma.io/docs/concepts/components/prisma-client/pagination Pagination Docs}
+     * 
+     * Skip the first `n` CsvUploads.
+     */
+    skip?: number
+    /**
+     * {@link https://www.prisma.io/docs/concepts/components/prisma-client/aggregations Aggregation Docs}
+     * 
+     * Count returned CsvUploads
+    **/
+    _count?: true | CsvUploadCountAggregateInputType
+    /**
+     * {@link https://www.prisma.io/docs/concepts/components/prisma-client/aggregations Aggregation Docs}
+     * 
+     * Select which fields to average
+    **/
+    _avg?: CsvUploadAvgAggregateInputType
+    /**
+     * {@link https://www.prisma.io/docs/concepts/components/prisma-client/aggregations Aggregation Docs}
+     * 
+     * Select which fields to sum
+    **/
+    _sum?: CsvUploadSumAggregateInputType
+    /**
+     * {@link https://www.prisma.io/docs/concepts/components/prisma-client/aggregations Aggregation Docs}
+     * 
+     * Select which fields to find the minimum value
+    **/
+    _min?: CsvUploadMinAggregateInputType
+    /**
+     * {@link https://www.prisma.io/docs/concepts/components/prisma-client/aggregations Aggregation Docs}
+     * 
+     * Select which fields to find the maximum value
+    **/
+    _max?: CsvUploadMaxAggregateInputType
+  }
+
+  export type GetCsvUploadAggregateType<T extends CsvUploadAggregateArgs> = {
+        [P in keyof T & keyof AggregateCsvUpload]: P extends '_count' | 'count'
+      ? T[P] extends true
+        ? number
+        : GetScalarType<T[P], AggregateCsvUpload[P]>
+      : GetScalarType<T[P], AggregateCsvUpload[P]>
+  }
+
+
+
+
+  export type CsvUploadGroupByArgs<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
+    where?: CsvUploadWhereInput
+    orderBy?: CsvUploadOrderByWithAggregationInput | CsvUploadOrderByWithAggregationInput[]
+    by: CsvUploadScalarFieldEnum[] | CsvUploadScalarFieldEnum
+    having?: CsvUploadScalarWhereWithAggregatesInput
+    take?: number
+    skip?: number
+    _count?: CsvUploadCountAggregateInputType | true
+    _avg?: CsvUploadAvgAggregateInputType
+    _sum?: CsvUploadSumAggregateInputType
+    _min?: CsvUploadMinAggregateInputType
+    _max?: CsvUploadMaxAggregateInputType
+  }
+
+  export type CsvUploadGroupByOutputType = {
+    id: string
+    version: number
+    filename: string
+    content: string
+    uploader: string
+    createdAt: Date
+    _count: CsvUploadCountAggregateOutputType | null
+    _avg: CsvUploadAvgAggregateOutputType | null
+    _sum: CsvUploadSumAggregateOutputType | null
+    _min: CsvUploadMinAggregateOutputType | null
+    _max: CsvUploadMaxAggregateOutputType | null
+  }
+
+  type GetCsvUploadGroupByPayload<T extends CsvUploadGroupByArgs> = Prisma.PrismaPromise<
+    Array<
+      PickEnumerable<CsvUploadGroupByOutputType, T['by']> &
+        {
+          [P in ((keyof T) & (keyof CsvUploadGroupByOutputType))]: P extends '_count'
+            ? T[P] extends boolean
+              ? number
+              : GetScalarType<T[P], CsvUploadGroupByOutputType[P]>
+            : GetScalarType<T[P], CsvUploadGroupByOutputType[P]>
+        }
+      >
+    >
+
+
+  export type CsvUploadSelect<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = $Extensions.GetSelect<{
+    id?: boolean
+    version?: boolean
+    filename?: boolean
+    content?: boolean
+    uploader?: boolean
+    createdAt?: boolean
+  }, ExtArgs["result"]["csvUpload"]>
+
+  export type CsvUploadSelectCreateManyAndReturn<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = $Extensions.GetSelect<{
+    id?: boolean
+    version?: boolean
+    filename?: boolean
+    content?: boolean
+    uploader?: boolean
+    createdAt?: boolean
+  }, ExtArgs["result"]["csvUpload"]>
+
+  export type CsvUploadSelectUpdateManyAndReturn<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = $Extensions.GetSelect<{
+    id?: boolean
+    version?: boolean
+    filename?: boolean
+    content?: boolean
+    uploader?: boolean
+    createdAt?: boolean
+  }, ExtArgs["result"]["csvUpload"]>
+
+  export type CsvUploadSelectScalar = {
+    id?: boolean
+    version?: boolean
+    filename?: boolean
+    content?: boolean
+    uploader?: boolean
+    createdAt?: boolean
+  }
+
+  export type CsvUploadOmit<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = $Extensions.GetOmit<"id" | "version" | "filename" | "content" | "uploader" | "createdAt", ExtArgs["result"]["csvUpload"]>
+
+  export type $CsvUploadPayload<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
+    name: "CsvUpload"
+    objects: {}
+    scalars: $Extensions.GetPayloadResult<{
+      id: string
+      version: number
+      filename: string
+      content: string
+      uploader: string
+      createdAt: Date
+    }, ExtArgs["result"]["csvUpload"]>
+    composites: {}
+  }
+
+  type CsvUploadGetPayload<S extends boolean | null | undefined | CsvUploadDefaultArgs> = $Result.GetResult<Prisma.$CsvUploadPayload, S>
+
+  type CsvUploadCountArgs<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> =
+    Omit<CsvUploadFindManyArgs, 'select' | 'include' | 'distinct' | 'omit'> & {
+      select?: CsvUploadCountAggregateInputType | true
+    }
+
+  export interface CsvUploadDelegate<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs, GlobalOmitOptions = {}> {
+    [K: symbol]: { types: Prisma.TypeMap<ExtArgs>['model']['CsvUpload'], meta: { name: 'CsvUpload' } }
+    /**
+     * Find zero or one CsvUpload that matches the filter.
+     * @param {CsvUploadFindUniqueArgs} args - Arguments to find a CsvUpload
+     * @example
+     * // Get one CsvUpload
+     * const csvUpload = await prisma.csvUpload.findUnique({
+     *   where: {
+     *     // ... provide filter here
+     *   }
+     * })
+     */
+    findUnique<T extends CsvUploadFindUniqueArgs>(args: SelectSubset<T, CsvUploadFindUniqueArgs<ExtArgs>>): Prisma__CsvUploadClient<$Result.GetResult<Prisma.$CsvUploadPayload<ExtArgs>, T, "findUnique", GlobalOmitOptions> | null, null, ExtArgs, GlobalOmitOptions>
+
+    /**
+     * Find one CsvUpload that matches the filter or throw an error with `error.code='P2025'`
+     * if no matches were found.
+     * @param {CsvUploadFindUniqueOrThrowArgs} args - Arguments to find a CsvUpload
+     * @example
+     * // Get one CsvUpload
+     * const csvUpload = await prisma.csvUpload.findUniqueOrThrow({
+     *   where: {
+     *     // ... provide filter here
+     *   }
+     * })
+     */
+    findUniqueOrThrow<T extends CsvUploadFindUniqueOrThrowArgs>(args: SelectSubset<T, CsvUploadFindUniqueOrThrowArgs<ExtArgs>>): Prisma__CsvUploadClient<$Result.GetResult<Prisma.$CsvUploadPayload<ExtArgs>, T, "findUniqueOrThrow", GlobalOmitOptions>, never, ExtArgs, GlobalOmitOptions>
+
+    /**
+     * Find the first CsvUpload that matches the filter.
+     * Note, that providing `undefined` is treated as the value not being there.
+     * Read more here: https://pris.ly/d/null-undefined
+     * @param {CsvUploadFindFirstArgs} args - Arguments to find a CsvUpload
+     * @example
+     * // Get one CsvUpload
+     * const csvUpload = await prisma.csvUpload.findFirst({
+     *   where: {
+     *     // ... provide filter here
+     *   }
+     * })
+     */
+    findFirst<T extends CsvUploadFindFirstArgs>(args?: SelectSubset<T, CsvUploadFindFirstArgs<ExtArgs>>): Prisma__CsvUploadClient<$Result.GetResult<Prisma.$CsvUploadPayload<ExtArgs>, T, "findFirst", GlobalOmitOptions> | null, null, ExtArgs, GlobalOmitOptions>
+
+    /**
+     * Find the first CsvUpload that matches the filter or
+     * throw `PrismaKnownClientError` with `P2025` code if no matches were found.
+     * Note, that providing `undefined` is treated as the value not being there.
+     * Read more here: https://pris.ly/d/null-undefined
+     * @param {CsvUploadFindFirstOrThrowArgs} args - Arguments to find a CsvUpload
+     * @example
+     * // Get one CsvUpload
+     * const csvUpload = await prisma.csvUpload.findFirstOrThrow({
+     *   where: {
+     *     // ... provide filter here
+     *   }
+     * })
+     */
+    findFirstOrThrow<T extends CsvUploadFindFirstOrThrowArgs>(args?: SelectSubset<T, CsvUploadFindFirstOrThrowArgs<ExtArgs>>): Prisma__CsvUploadClient<$Result.GetResult<Prisma.$CsvUploadPayload<ExtArgs>, T, "findFirstOrThrow", GlobalOmitOptions>, never, ExtArgs, GlobalOmitOptions>
+
+    /**
+     * Find zero or more CsvUploads that matches the filter.
+     * Note, that providing `undefined` is treated as the value not being there.
+     * Read more here: https://pris.ly/d/null-undefined
+     * @param {CsvUploadFindManyArgs} args - Arguments to filter and select certain fields only.
+     * @example
+     * // Get all CsvUploads
+     * const csvUploads = await prisma.csvUpload.findMany()
+     * 
+     * // Get first 10 CsvUploads
+     * const csvUploads = await prisma.csvUpload.findMany({ take: 10 })
+     * 
+     * // Only select the `id`
+     * const csvUploadWithIdOnly = await prisma.csvUpload.findMany({ select: { id: true } })
+     * 
+     */
+    findMany<T extends CsvUploadFindManyArgs>(args?: SelectSubset<T, CsvUploadFindManyArgs<ExtArgs>>): Prisma.PrismaPromise<$Result.GetResult<Prisma.$CsvUploadPayload<ExtArgs>, T, "findMany", GlobalOmitOptions>>
+
+    /**
+     * Create a CsvUpload.
+     * @param {CsvUploadCreateArgs} args - Arguments to create a CsvUpload.
+     * @example
+     * // Create one CsvUpload
+     * const CsvUpload = await prisma.csvUpload.create({
+     *   data: {
+     *     // ... data to create a CsvUpload
+     *   }
+     * })
+     * 
+     */
+    create<T extends CsvUploadCreateArgs>(args: SelectSubset<T, CsvUploadCreateArgs<ExtArgs>>): Prisma__CsvUploadClient<$Result.GetResult<Prisma.$CsvUploadPayload<ExtArgs>, T, "create", GlobalOmitOptions>, never, ExtArgs, GlobalOmitOptions>
+
+    /**
+     * Create many CsvUploads.
+     * @param {CsvUploadCreateManyArgs} args - Arguments to create many CsvUploads.
+     * @example
+     * // Create many CsvUploads
+     * const csvUpload = await prisma.csvUpload.createMany({
+     *   data: [
+     *     // ... provide data here
+     *   ]
+     * })
+     *     
+     */
+    createMany<T extends CsvUploadCreateManyArgs>(args?: SelectSubset<T, CsvUploadCreateManyArgs<ExtArgs>>): Prisma.PrismaPromise<BatchPayload>
+
+    /**
+     * Create many CsvUploads and returns the data saved in the database.
+     * @param {CsvUploadCreateManyAndReturnArgs} args - Arguments to create many CsvUploads.
+     * @example
+     * // Create many CsvUploads
+     * const csvUpload = await prisma.csvUpload.createManyAndReturn({
+     *   data: [
+     *     // ... provide data here
+     *   ]
+     * })
+     * 
+     * // Create many CsvUploads and only return the `id`
+     * const csvUploadWithIdOnly = await prisma.csvUpload.createManyAndReturn({
+     *   select: { id: true },
+     *   data: [
+     *     // ... provide data here
+     *   ]
+     * })
+     * Note, that providing `undefined` is treated as the value not being there.
+     * Read more here: https://pris.ly/d/null-undefined
+     * 
+     */
+    createManyAndReturn<T extends CsvUploadCreateManyAndReturnArgs>(args?: SelectSubset<T, CsvUploadCreateManyAndReturnArgs<ExtArgs>>): Prisma.PrismaPromise<$Result.GetResult<Prisma.$CsvUploadPayload<ExtArgs>, T, "createManyAndReturn", GlobalOmitOptions>>
+
+    /**
+     * Delete a CsvUpload.
+     * @param {CsvUploadDeleteArgs} args - Arguments to delete one CsvUpload.
+     * @example
+     * // Delete one CsvUpload
+     * const CsvUpload = await prisma.csvUpload.delete({
+     *   where: {
+     *     // ... filter to delete one CsvUpload
+     *   }
+     * })
+     * 
+     */
+    delete<T extends CsvUploadDeleteArgs>(args: SelectSubset<T, CsvUploadDeleteArgs<ExtArgs>>): Prisma__CsvUploadClient<$Result.GetResult<Prisma.$CsvUploadPayload<ExtArgs>, T, "delete", GlobalOmitOptions>, never, ExtArgs, GlobalOmitOptions>
+
+    /**
+     * Update one CsvUpload.
+     * @param {CsvUploadUpdateArgs} args - Arguments to update one CsvUpload.
+     * @example
+     * // Update one CsvUpload
+     * const csvUpload = await prisma.csvUpload.update({
+     *   where: {
+     *     // ... provide filter here
+     *   },
+     *   data: {
+     *     // ... provide data here
+     *   }
+     * })
+     * 
+     */
+    update<T extends CsvUploadUpdateArgs>(args: SelectSubset<T, CsvUploadUpdateArgs<ExtArgs>>): Prisma__CsvUploadClient<$Result.GetResult<Prisma.$CsvUploadPayload<ExtArgs>, T, "update", GlobalOmitOptions>, never, ExtArgs, GlobalOmitOptions>
+
+    /**
+     * Delete zero or more CsvUploads.
+     * @param {CsvUploadDeleteManyArgs} args - Arguments to filter CsvUploads to delete.
+     * @example
+     * // Delete a few CsvUploads
+     * const { count } = await prisma.csvUpload.deleteMany({
+     *   where: {
+     *     // ... provide filter here
+     *   }
+     * })
+     * 
+     */
+    deleteMany<T extends CsvUploadDeleteManyArgs>(args?: SelectSubset<T, CsvUploadDeleteManyArgs<ExtArgs>>): Prisma.PrismaPromise<BatchPayload>
+
+    /**
+     * Update zero or more CsvUploads.
+     * Note, that providing `undefined` is treated as the value not being there.
+     * Read more here: https://pris.ly/d/null-undefined
+     * @param {CsvUploadUpdateManyArgs} args - Arguments to update one or more rows.
+     * @example
+     * // Update many CsvUploads
+     * const csvUpload = await prisma.csvUpload.updateMany({
+     *   where: {
+     *     // ... provide filter here
+     *   },
+     *   data: {
+     *     // ... provide data here
+     *   }
+     * })
+     * 
+     */
+    updateMany<T extends CsvUploadUpdateManyArgs>(args: SelectSubset<T, CsvUploadUpdateManyArgs<ExtArgs>>): Prisma.PrismaPromise<BatchPayload>
+
+    /**
+     * Update zero or more CsvUploads and returns the data updated in the database.
+     * @param {CsvUploadUpdateManyAndReturnArgs} args - Arguments to update many CsvUploads.
+     * @example
+     * // Update many CsvUploads
+     * const csvUpload = await prisma.csvUpload.updateManyAndReturn({
+     *   where: {
+     *     // ... provide filter here
+     *   },
+     *   data: [
+     *     // ... provide data here
+     *   ]
+     * })
+     * 
+     * // Update zero or more CsvUploads and only return the `id`
+     * const csvUploadWithIdOnly = await prisma.csvUpload.updateManyAndReturn({
+     *   select: { id: true },
+     *   where: {
+     *     // ... provide filter here
+     *   },
+     *   data: [
+     *     // ... provide data here
+     *   ]
+     * })
+     * Note, that providing `undefined` is treated as the value not being there.
+     * Read more here: https://pris.ly/d/null-undefined
+     * 
+     */
+    updateManyAndReturn<T extends CsvUploadUpdateManyAndReturnArgs>(args: SelectSubset<T, CsvUploadUpdateManyAndReturnArgs<ExtArgs>>): Prisma.PrismaPromise<$Result.GetResult<Prisma.$CsvUploadPayload<ExtArgs>, T, "updateManyAndReturn", GlobalOmitOptions>>
+
+    /**
+     * Create or update one CsvUpload.
+     * @param {CsvUploadUpsertArgs} args - Arguments to update or create a CsvUpload.
+     * @example
+     * // Update or create a CsvUpload
+     * const csvUpload = await prisma.csvUpload.upsert({
+     *   create: {
+     *     // ... data to create a CsvUpload
+     *   },
+     *   update: {
+     *     // ... in case it already exists, update
+     *   },
+     *   where: {
+     *     // ... the filter for the CsvUpload we want to update
+     *   }
+     * })
+     */
+    upsert<T extends CsvUploadUpsertArgs>(args: SelectSubset<T, CsvUploadUpsertArgs<ExtArgs>>): Prisma__CsvUploadClient<$Result.GetResult<Prisma.$CsvUploadPayload<ExtArgs>, T, "upsert", GlobalOmitOptions>, never, ExtArgs, GlobalOmitOptions>
+
+
+    /**
+     * Count the number of CsvUploads.
+     * Note, that providing `undefined` is treated as the value not being there.
+     * Read more here: https://pris.ly/d/null-undefined
+     * @param {CsvUploadCountArgs} args - Arguments to filter CsvUploads to count.
+     * @example
+     * // Count the number of CsvUploads
+     * const count = await prisma.csvUpload.count({
+     *   where: {
+     *     // ... the filter for the CsvUploads we want to count
+     *   }
+     * })
+    **/
+    count<T extends CsvUploadCountArgs>(
+      args?: Subset<T, CsvUploadCountArgs>,
+    ): Prisma.PrismaPromise<
+      T extends $Utils.Record<'select', any>
+        ? T['select'] extends true
+          ? number
+          : GetScalarType<T['select'], CsvUploadCountAggregateOutputType>
+        : number
+    >
+
+    /**
+     * Allows you to perform aggregations operations on a CsvUpload.
+     * Note, that providing `undefined` is treated as the value not being there.
+     * Read more here: https://pris.ly/d/null-undefined
+     * @param {CsvUploadAggregateArgs} args - Select which aggregations you would like to apply and on what fields.
+     * @example
+     * // Ordered by age ascending
+     * // Where email contains prisma.io
+     * // Limited to the 10 users
+     * const aggregations = await prisma.user.aggregate({
+     *   _avg: {
+     *     age: true,
+     *   },
+     *   where: {
+     *     email: {
+     *       contains: "prisma.io",
+     *     },
+     *   },
+     *   orderBy: {
+     *     age: "asc",
+     *   },
+     *   take: 10,
+     * })
+    **/
+    aggregate<T extends CsvUploadAggregateArgs>(args: Subset<T, CsvUploadAggregateArgs>): Prisma.PrismaPromise<GetCsvUploadAggregateType<T>>
+
+    /**
+     * Group by CsvUpload.
+     * Note, that providing `undefined` is treated as the value not being there.
+     * Read more here: https://pris.ly/d/null-undefined
+     * @param {CsvUploadGroupByArgs} args - Group by arguments.
+     * @example
+     * // Group by city, order by createdAt, get count
+     * const result = await prisma.user.groupBy({
+     *   by: ['city', 'createdAt'],
+     *   orderBy: {
+     *     createdAt: true
+     *   },
+     *   _count: {
+     *     _all: true
+     *   },
+     * })
+     * 
+    **/
+    groupBy<
+      T extends CsvUploadGroupByArgs,
+      HasSelectOrTake extends Or<
+        Extends<'skip', Keys<T>>,
+        Extends<'take', Keys<T>>
+      >,
+      OrderByArg extends True extends HasSelectOrTake
+        ? { orderBy: CsvUploadGroupByArgs['orderBy'] }
+        : { orderBy?: CsvUploadGroupByArgs['orderBy'] },
+      OrderFields extends ExcludeUnderscoreKeys<Keys<MaybeTupleToUnion<T['orderBy']>>>,
+      ByFields extends MaybeTupleToUnion<T['by']>,
+      ByValid extends Has<ByFields, OrderFields>,
+      HavingFields extends GetHavingFields<T['having']>,
+      HavingValid extends Has<ByFields, HavingFields>,
+      ByEmpty extends T['by'] extends never[] ? True : False,
+      InputErrors extends ByEmpty extends True
+      ? `Error: "by" must not be empty.`
+      : HavingValid extends False
+      ? {
+          [P in HavingFields]: P extends ByFields
+            ? never
+            : P extends string
+            ? `Error: Field "${P}" used in "having" needs to be provided in "by".`
+            : [
+                Error,
+                'Field ',
+                P,
+                ` in "having" needs to be provided in "by"`,
+              ]
+        }[HavingFields]
+      : 'take' extends Keys<T>
+      ? 'orderBy' extends Keys<T>
+        ? ByValid extends True
+          ? {}
+          : {
+              [P in OrderFields]: P extends ByFields
+                ? never
+                : `Error: Field "${P}" in "orderBy" needs to be provided in "by"`
+            }[OrderFields]
+        : 'Error: If you provide "take", you also need to provide "orderBy"'
+      : 'skip' extends Keys<T>
+      ? 'orderBy' extends Keys<T>
+        ? ByValid extends True
+          ? {}
+          : {
+              [P in OrderFields]: P extends ByFields
+                ? never
+                : `Error: Field "${P}" in "orderBy" needs to be provided in "by"`
+            }[OrderFields]
+        : 'Error: If you provide "skip", you also need to provide "orderBy"'
+      : ByValid extends True
+      ? {}
+      : {
+          [P in OrderFields]: P extends ByFields
+            ? never
+            : `Error: Field "${P}" in "orderBy" needs to be provided in "by"`
+        }[OrderFields]
+    >(args: SubsetIntersection<T, CsvUploadGroupByArgs, OrderByArg> & InputErrors): {} extends InputErrors ? GetCsvUploadGroupByPayload<T> : Prisma.PrismaPromise<InputErrors>
+  /**
+   * Fields of the CsvUpload model
+   */
+  readonly fields: CsvUploadFieldRefs;
+  }
+
+  /**
+   * The delegate class that acts as a "Promise-like" for CsvUpload.
+   * Why is this prefixed with `Prisma__`?
+   * Because we want to prevent naming conflicts as mentioned in
+   * https://github.com/prisma/prisma-client-js/issues/707
+   */
+  export interface Prisma__CsvUploadClient<T, Null = never, ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs, GlobalOmitOptions = {}> extends Prisma.PrismaPromise<T> {
+    readonly [Symbol.toStringTag]: "PrismaPromise"
+    /**
+     * Attaches callbacks for the resolution and/or rejection of the Promise.
+     * @param onfulfilled The callback to execute when the Promise is resolved.
+     * @param onrejected The callback to execute when the Promise is rejected.
+     * @returns A Promise for the completion of which ever callback is executed.
+     */
+    then<TResult1 = T, TResult2 = never>(onfulfilled?: ((value: T) => TResult1 | PromiseLike<TResult1>) | undefined | null, onrejected?: ((reason: any) => TResult2 | PromiseLike<TResult2>) | undefined | null): $Utils.JsPromise<TResult1 | TResult2>
+    /**
+     * Attaches a callback for only the rejection of the Promise.
+     * @param onrejected The callback to execute when the Promise is rejected.
+     * @returns A Promise for the completion of the callback.
+     */
+    catch<TResult = never>(onrejected?: ((reason: any) => TResult | PromiseLike<TResult>) | undefined | null): $Utils.JsPromise<T | TResult>
+    /**
+     * Attaches a callback that is invoked when the Promise is settled (fulfilled or rejected). The
+     * resolved value cannot be modified from the callback.
+     * @param onfinally The callback to execute when the Promise is settled (fulfilled or rejected).
+     * @returns A Promise for the completion of the callback.
+     */
+    finally(onfinally?: (() => void) | undefined | null): $Utils.JsPromise<T>
+  }
+
+
+
+
+  /**
+   * Fields of the CsvUpload model
+   */
+  interface CsvUploadFieldRefs {
+    readonly id: FieldRef<"CsvUpload", 'String'>
+    readonly version: FieldRef<"CsvUpload", 'Int'>
+    readonly filename: FieldRef<"CsvUpload", 'String'>
+    readonly content: FieldRef<"CsvUpload", 'String'>
+    readonly uploader: FieldRef<"CsvUpload", 'String'>
+    readonly createdAt: FieldRef<"CsvUpload", 'DateTime'>
+  }
+    
+
+  // Custom InputTypes
+  /**
+   * CsvUpload findUnique
+   */
+  export type CsvUploadFindUniqueArgs<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
+    /**
+     * Select specific fields to fetch from the CsvUpload
+     */
+    select?: CsvUploadSelect<ExtArgs> | null
+    /**
+     * Omit specific fields from the CsvUpload
+     */
+    omit?: CsvUploadOmit<ExtArgs> | null
+    /**
+     * Filter, which CsvUpload to fetch.
+     */
+    where: CsvUploadWhereUniqueInput
+  }
+
+  /**
+   * CsvUpload findUniqueOrThrow
+   */
+  export type CsvUploadFindUniqueOrThrowArgs<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
+    /**
+     * Select specific fields to fetch from the CsvUpload
+     */
+    select?: CsvUploadSelect<ExtArgs> | null
+    /**
+     * Omit specific fields from the CsvUpload
+     */
+    omit?: CsvUploadOmit<ExtArgs> | null
+    /**
+     * Filter, which CsvUpload to fetch.
+     */
+    where: CsvUploadWhereUniqueInput
+  }
+
+  /**
+   * CsvUpload findFirst
+   */
+  export type CsvUploadFindFirstArgs<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
+    /**
+     * Select specific fields to fetch from the CsvUpload
+     */
+    select?: CsvUploadSelect<ExtArgs> | null
+    /**
+     * Omit specific fields from the CsvUpload
+     */
+    omit?: CsvUploadOmit<ExtArgs> | null
+    /**
+     * Filter, which CsvUpload to fetch.
+     */
+    where?: CsvUploadWhereInput
+    /**
+     * {@link https://www.prisma.io/docs/concepts/components/prisma-client/sorting Sorting Docs}
+     * 
+     * Determine the order of CsvUploads to fetch.
+     */
+    orderBy?: CsvUploadOrderByWithRelationInput | CsvUploadOrderByWithRelationInput[]
+    /**
+     * {@link https://www.prisma.io/docs/concepts/components/prisma-client/pagination#cursor-based-pagination Cursor Docs}
+     * 
+     * Sets the position for searching for CsvUploads.
+     */
+    cursor?: CsvUploadWhereUniqueInput
+    /**
+     * {@link https://www.prisma.io/docs/concepts/components/prisma-client/pagination Pagination Docs}
+     * 
+     * Take `±n` CsvUploads from the position of the cursor.
+     */
+    take?: number
+    /**
+     * {@link https://www.prisma.io/docs/concepts/components/prisma-client/pagination Pagination Docs}
+     * 
+     * Skip the first `n` CsvUploads.
+     */
+    skip?: number
+    /**
+     * {@link https://www.prisma.io/docs/concepts/components/prisma-client/distinct Distinct Docs}
+     * 
+     * Filter by unique combinations of CsvUploads.
+     */
+    distinct?: CsvUploadScalarFieldEnum | CsvUploadScalarFieldEnum[]
+  }
+
+  /**
+   * CsvUpload findFirstOrThrow
+   */
+  export type CsvUploadFindFirstOrThrowArgs<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
+    /**
+     * Select specific fields to fetch from the CsvUpload
+     */
+    select?: CsvUploadSelect<ExtArgs> | null
+    /**
+     * Omit specific fields from the CsvUpload
+     */
+    omit?: CsvUploadOmit<ExtArgs> | null
+    /**
+     * Filter, which CsvUpload to fetch.
+     */
+    where?: CsvUploadWhereInput
+    /**
+     * {@link https://www.prisma.io/docs/concepts/components/prisma-client/sorting Sorting Docs}
+     * 
+     * Determine the order of CsvUploads to fetch.
+     */
+    orderBy?: CsvUploadOrderByWithRelationInput | CsvUploadOrderByWithRelationInput[]
+    /**
+     * {@link https://www.prisma.io/docs/concepts/components/prisma-client/pagination#cursor-based-pagination Cursor Docs}
+     * 
+     * Sets the position for searching for CsvUploads.
+     */
+    cursor?: CsvUploadWhereUniqueInput
+    /**
+     * {@link https://www.prisma.io/docs/concepts/components/prisma-client/pagination Pagination Docs}
+     * 
+     * Take `±n` CsvUploads from the position of the cursor.
+     */
+    take?: number
+    /**
+     * {@link https://www.prisma.io/docs/concepts/components/prisma-client/pagination Pagination Docs}
+     * 
+     * Skip the first `n` CsvUploads.
+     */
+    skip?: number
+    /**
+     * {@link https://www.prisma.io/docs/concepts/components/prisma-client/distinct Distinct Docs}
+     * 
+     * Filter by unique combinations of CsvUploads.
+     */
+    distinct?: CsvUploadScalarFieldEnum | CsvUploadScalarFieldEnum[]
+  }
+
+  /**
+   * CsvUpload findMany
+   */
+  export type CsvUploadFindManyArgs<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
+    /**
+     * Select specific fields to fetch from the CsvUpload
+     */
+    select?: CsvUploadSelect<ExtArgs> | null
+    /**
+     * Omit specific fields from the CsvUpload
+     */
+    omit?: CsvUploadOmit<ExtArgs> | null
+    /**
+     * Filter, which CsvUploads to fetch.
+     */
+    where?: CsvUploadWhereInput
+    /**
+     * {@link https://www.prisma.io/docs/concepts/components/prisma-client/sorting Sorting Docs}
+     * 
+     * Determine the order of CsvUploads to fetch.
+     */
+    orderBy?: CsvUploadOrderByWithRelationInput | CsvUploadOrderByWithRelationInput[]
+    /**
+     * {@link https://www.prisma.io/docs/concepts/components/prisma-client/pagination#cursor-based-pagination Cursor Docs}
+     * 
+     * Sets the position for listing CsvUploads.
+     */
+    cursor?: CsvUploadWhereUniqueInput
+    /**
+     * {@link https://www.prisma.io/docs/concepts/components/prisma-client/pagination Pagination Docs}
+     * 
+     * Take `±n` CsvUploads from the position of the cursor.
+     */
+    take?: number
+    /**
+     * {@link https://www.prisma.io/docs/concepts/components/prisma-client/pagination Pagination Docs}
+     * 
+     * Skip the first `n` CsvUploads.
+     */
+    skip?: number
+    /**
+     * {@link https://www.prisma.io/docs/concepts/components/prisma-client/distinct Distinct Docs}
+     * 
+     * Filter by unique combinations of CsvUploads.
+     */
+    distinct?: CsvUploadScalarFieldEnum | CsvUploadScalarFieldEnum[]
+  }
+
+  /**
+   * CsvUpload create
+   */
+  export type CsvUploadCreateArgs<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
+    /**
+     * Select specific fields to fetch from the CsvUpload
+     */
+    select?: CsvUploadSelect<ExtArgs> | null
+    /**
+     * Omit specific fields from the CsvUpload
+     */
+    omit?: CsvUploadOmit<ExtArgs> | null
+    /**
+     * The data needed to create a CsvUpload.
+     */
+    data: XOR<CsvUploadCreateInput, CsvUploadUncheckedCreateInput>
+  }
+
+  /**
+   * CsvUpload createMany
+   */
+  export type CsvUploadCreateManyArgs<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
+    /**
+     * The data used to create many CsvUploads.
+     */
+    data: CsvUploadCreateManyInput | CsvUploadCreateManyInput[]
+    skipDuplicates?: boolean
+  }
+
+  /**
+   * CsvUpload createManyAndReturn
+   */
+  export type CsvUploadCreateManyAndReturnArgs<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
+    /**
+     * Select specific fields to fetch from the CsvUpload
+     */
+    select?: CsvUploadSelectCreateManyAndReturn<ExtArgs> | null
+    /**
+     * Omit specific fields from the CsvUpload
+     */
+    omit?: CsvUploadOmit<ExtArgs> | null
+    /**
+     * The data used to create many CsvUploads.
+     */
+    data: CsvUploadCreateManyInput | CsvUploadCreateManyInput[]
+    skipDuplicates?: boolean
+  }
+
+  /**
+   * CsvUpload update
+   */
+  export type CsvUploadUpdateArgs<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
+    /**
+     * Select specific fields to fetch from the CsvUpload
+     */
+    select?: CsvUploadSelect<ExtArgs> | null
+    /**
+     * Omit specific fields from the CsvUpload
+     */
+    omit?: CsvUploadOmit<ExtArgs> | null
+    /**
+     * The data needed to update a CsvUpload.
+     */
+    data: XOR<CsvUploadUpdateInput, CsvUploadUncheckedUpdateInput>
+    /**
+     * Choose, which CsvUpload to update.
+     */
+    where: CsvUploadWhereUniqueInput
+  }
+
+  /**
+   * CsvUpload updateMany
+   */
+  export type CsvUploadUpdateManyArgs<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
+    /**
+     * The data used to update CsvUploads.
+     */
+    data: XOR<CsvUploadUpdateManyMutationInput, CsvUploadUncheckedUpdateManyInput>
+    /**
+     * Filter which CsvUploads to update
+     */
+    where?: CsvUploadWhereInput
+    /**
+     * Limit how many CsvUploads to update.
+     */
+    limit?: number
+  }
+
+  /**
+   * CsvUpload updateManyAndReturn
+   */
+  export type CsvUploadUpdateManyAndReturnArgs<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
+    /**
+     * Select specific fields to fetch from the CsvUpload
+     */
+    select?: CsvUploadSelectUpdateManyAndReturn<ExtArgs> | null
+    /**
+     * Omit specific fields from the CsvUpload
+     */
+    omit?: CsvUploadOmit<ExtArgs> | null
+    /**
+     * The data used to update CsvUploads.
+     */
+    data: XOR<CsvUploadUpdateManyMutationInput, CsvUploadUncheckedUpdateManyInput>
+    /**
+     * Filter which CsvUploads to update
+     */
+    where?: CsvUploadWhereInput
+    /**
+     * Limit how many CsvUploads to update.
+     */
+    limit?: number
+  }
+
+  /**
+   * CsvUpload upsert
+   */
+  export type CsvUploadUpsertArgs<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
+    /**
+     * Select specific fields to fetch from the CsvUpload
+     */
+    select?: CsvUploadSelect<ExtArgs> | null
+    /**
+     * Omit specific fields from the CsvUpload
+     */
+    omit?: CsvUploadOmit<ExtArgs> | null
+    /**
+     * The filter to search for the CsvUpload to update in case it exists.
+     */
+    where: CsvUploadWhereUniqueInput
+    /**
+     * In case the CsvUpload found by the `where` argument doesn't exist, create a new CsvUpload with this data.
+     */
+    create: XOR<CsvUploadCreateInput, CsvUploadUncheckedCreateInput>
+    /**
+     * In case the CsvUpload was found with the provided `where` argument, update it with this data.
+     */
+    update: XOR<CsvUploadUpdateInput, CsvUploadUncheckedUpdateInput>
+  }
+
+  /**
+   * CsvUpload delete
+   */
+  export type CsvUploadDeleteArgs<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
+    /**
+     * Select specific fields to fetch from the CsvUpload
+     */
+    select?: CsvUploadSelect<ExtArgs> | null
+    /**
+     * Omit specific fields from the CsvUpload
+     */
+    omit?: CsvUploadOmit<ExtArgs> | null
+    /**
+     * Filter which CsvUpload to delete.
+     */
+    where: CsvUploadWhereUniqueInput
+  }
+
+  /**
+   * CsvUpload deleteMany
+   */
+  export type CsvUploadDeleteManyArgs<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
+    /**
+     * Filter which CsvUploads to delete
+     */
+    where?: CsvUploadWhereInput
+    /**
+     * Limit how many CsvUploads to delete.
+     */
+    limit?: number
+  }
+
+  /**
+   * CsvUpload without action
+   */
+  export type CsvUploadDefaultArgs<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
+    /**
+     * Select specific fields to fetch from the CsvUpload
+     */
+    select?: CsvUploadSelect<ExtArgs> | null
+    /**
+     * Omit specific fields from the CsvUpload
+     */
+    omit?: CsvUploadOmit<ExtArgs> | null
+  }
+
+
+  /**
    * Enums
    */
 
@@ -3520,6 +4658,18 @@ export namespace Prisma {
   };
 
   export type TransactionScalarFieldEnum = (typeof TransactionScalarFieldEnum)[keyof typeof TransactionScalarFieldEnum]
+
+
+  export const CsvUploadScalarFieldEnum: {
+    id: 'id',
+    version: 'version',
+    filename: 'filename',
+    content: 'content',
+    uploader: 'uploader',
+    createdAt: 'createdAt'
+  };
+
+  export type CsvUploadScalarFieldEnum = (typeof CsvUploadScalarFieldEnum)[keyof typeof CsvUploadScalarFieldEnum]
 
 
   export const SortOrder: {
@@ -3860,6 +5010,65 @@ export namespace Prisma {
     createdAt?: DateTimeWithAggregatesFilter<"Transaction"> | Date | string
   }
 
+  export type CsvUploadWhereInput = {
+    AND?: CsvUploadWhereInput | CsvUploadWhereInput[]
+    OR?: CsvUploadWhereInput[]
+    NOT?: CsvUploadWhereInput | CsvUploadWhereInput[]
+    id?: StringFilter<"CsvUpload"> | string
+    version?: IntFilter<"CsvUpload"> | number
+    filename?: StringFilter<"CsvUpload"> | string
+    content?: StringFilter<"CsvUpload"> | string
+    uploader?: StringFilter<"CsvUpload"> | string
+    createdAt?: DateTimeFilter<"CsvUpload"> | Date | string
+  }
+
+  export type CsvUploadOrderByWithRelationInput = {
+    id?: SortOrder
+    version?: SortOrder
+    filename?: SortOrder
+    content?: SortOrder
+    uploader?: SortOrder
+    createdAt?: SortOrder
+  }
+
+  export type CsvUploadWhereUniqueInput = Prisma.AtLeast<{
+    id?: string
+    AND?: CsvUploadWhereInput | CsvUploadWhereInput[]
+    OR?: CsvUploadWhereInput[]
+    NOT?: CsvUploadWhereInput | CsvUploadWhereInput[]
+    version?: IntFilter<"CsvUpload"> | number
+    filename?: StringFilter<"CsvUpload"> | string
+    content?: StringFilter<"CsvUpload"> | string
+    uploader?: StringFilter<"CsvUpload"> | string
+    createdAt?: DateTimeFilter<"CsvUpload"> | Date | string
+  }, "id">
+
+  export type CsvUploadOrderByWithAggregationInput = {
+    id?: SortOrder
+    version?: SortOrder
+    filename?: SortOrder
+    content?: SortOrder
+    uploader?: SortOrder
+    createdAt?: SortOrder
+    _count?: CsvUploadCountOrderByAggregateInput
+    _avg?: CsvUploadAvgOrderByAggregateInput
+    _max?: CsvUploadMaxOrderByAggregateInput
+    _min?: CsvUploadMinOrderByAggregateInput
+    _sum?: CsvUploadSumOrderByAggregateInput
+  }
+
+  export type CsvUploadScalarWhereWithAggregatesInput = {
+    AND?: CsvUploadScalarWhereWithAggregatesInput | CsvUploadScalarWhereWithAggregatesInput[]
+    OR?: CsvUploadScalarWhereWithAggregatesInput[]
+    NOT?: CsvUploadScalarWhereWithAggregatesInput | CsvUploadScalarWhereWithAggregatesInput[]
+    id?: StringWithAggregatesFilter<"CsvUpload"> | string
+    version?: IntWithAggregatesFilter<"CsvUpload"> | number
+    filename?: StringWithAggregatesFilter<"CsvUpload"> | string
+    content?: StringWithAggregatesFilter<"CsvUpload"> | string
+    uploader?: StringWithAggregatesFilter<"CsvUpload"> | string
+    createdAt?: DateTimeWithAggregatesFilter<"CsvUpload"> | Date | string
+  }
+
   export type StreamCreateInput = {
     id: string
     creator: string
@@ -4091,6 +5300,69 @@ export namespace Prisma {
     streamId?: NullableStringFieldUpdateOperationsInput | string | null
     type?: StringFieldUpdateOperationsInput | string
     raw?: JsonNullValueInput | InputJsonValue
+    createdAt?: DateTimeFieldUpdateOperationsInput | Date | string
+  }
+
+  export type CsvUploadCreateInput = {
+    id?: string
+    version: number
+    filename: string
+    content: string
+    uploader: string
+    createdAt?: Date | string
+  }
+
+  export type CsvUploadUncheckedCreateInput = {
+    id?: string
+    version: number
+    filename: string
+    content: string
+    uploader: string
+    createdAt?: Date | string
+  }
+
+  export type CsvUploadUpdateInput = {
+    id?: StringFieldUpdateOperationsInput | string
+    version?: IntFieldUpdateOperationsInput | number
+    filename?: StringFieldUpdateOperationsInput | string
+    content?: StringFieldUpdateOperationsInput | string
+    uploader?: StringFieldUpdateOperationsInput | string
+    createdAt?: DateTimeFieldUpdateOperationsInput | Date | string
+  }
+
+  export type CsvUploadUncheckedUpdateInput = {
+    id?: StringFieldUpdateOperationsInput | string
+    version?: IntFieldUpdateOperationsInput | number
+    filename?: StringFieldUpdateOperationsInput | string
+    content?: StringFieldUpdateOperationsInput | string
+    uploader?: StringFieldUpdateOperationsInput | string
+    createdAt?: DateTimeFieldUpdateOperationsInput | Date | string
+  }
+
+  export type CsvUploadCreateManyInput = {
+    id?: string
+    version: number
+    filename: string
+    content: string
+    uploader: string
+    createdAt?: Date | string
+  }
+
+  export type CsvUploadUpdateManyMutationInput = {
+    id?: StringFieldUpdateOperationsInput | string
+    version?: IntFieldUpdateOperationsInput | number
+    filename?: StringFieldUpdateOperationsInput | string
+    content?: StringFieldUpdateOperationsInput | string
+    uploader?: StringFieldUpdateOperationsInput | string
+    createdAt?: DateTimeFieldUpdateOperationsInput | Date | string
+  }
+
+  export type CsvUploadUncheckedUpdateManyInput = {
+    id?: StringFieldUpdateOperationsInput | string
+    version?: IntFieldUpdateOperationsInput | number
+    filename?: StringFieldUpdateOperationsInput | string
+    content?: StringFieldUpdateOperationsInput | string
+    uploader?: StringFieldUpdateOperationsInput | string
     createdAt?: DateTimeFieldUpdateOperationsInput | Date | string
   }
 
@@ -4452,6 +5724,41 @@ export namespace Prisma {
     _count?: NestedIntFilter<$PrismaModel>
     _min?: NestedJsonFilter<$PrismaModel>
     _max?: NestedJsonFilter<$PrismaModel>
+  }
+
+  export type CsvUploadCountOrderByAggregateInput = {
+    id?: SortOrder
+    version?: SortOrder
+    filename?: SortOrder
+    content?: SortOrder
+    uploader?: SortOrder
+    createdAt?: SortOrder
+  }
+
+  export type CsvUploadAvgOrderByAggregateInput = {
+    version?: SortOrder
+  }
+
+  export type CsvUploadMaxOrderByAggregateInput = {
+    id?: SortOrder
+    version?: SortOrder
+    filename?: SortOrder
+    content?: SortOrder
+    uploader?: SortOrder
+    createdAt?: SortOrder
+  }
+
+  export type CsvUploadMinOrderByAggregateInput = {
+    id?: SortOrder
+    version?: SortOrder
+    filename?: SortOrder
+    content?: SortOrder
+    uploader?: SortOrder
+    createdAt?: SortOrder
+  }
+
+  export type CsvUploadSumOrderByAggregateInput = {
+    version?: SortOrder
   }
 
   export type TransactionCreateNestedManyWithoutStreamInput = {
