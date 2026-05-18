@@ -222,7 +222,7 @@ pub fn create_stream<'info>(
             let rent = Rent::get()?;
             let required_lamports = rent.minimum_balance(space);
             
-            // PERBAIKAN BUG 1: Cek saldo saat ini, jika kurang baru top-up (Anti-DoS)
+            //Cek saldo saat ini, jika kurang baru top-up (Anti-DoS)
             let current_lamports = milestone_info.lamports();
             if current_lamports < required_lamports {
                 let diff = required_lamports.checked_sub(current_lamports).unwrap();
