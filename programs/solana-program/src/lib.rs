@@ -239,7 +239,7 @@ pub mod solana_program {
                 ctx.accounts.system_program.to_account_info(),
                 anchor_lang::system_program::Transfer {
                     from: ctx.accounts.recipient.to_account_info(),
-                    to: ctx.accounts.fee_receiver.to_account_info(),
+                    to: ctx.accounts.fee_vault.to_account_info(),
                 },
             ),
             fee_lamports,
@@ -424,10 +424,10 @@ pub struct Withdraw<'info> {
     /// Recipient fee SOL
     #[account(
         mut,
-        constraint = fee_receiver.key() == config.fee_authority
-            @ ErrorCode::InvalidFeeReceiver,
+        seeds = [b"fee_vault"],
+        bump,
     )]
-    pub fee_receiver: SystemAccount<'info>,
+    pub fee_vault: SystemAccount<'info>,
 
     /// CHECK: Address and owner validated via constraints; data read in read_chainlink_round()
     #[account(
