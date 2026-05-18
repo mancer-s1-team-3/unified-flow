@@ -948,6 +948,9 @@ export default function Home() {
                           const isCompleted = withdrawn >= total;
                           const isNotStarted = now < start;
                           const isEnded = stream.vestingType === 1 ? (unlocked >= total) : (now >= end);
+                          const isCliffLocked = stream.vestingType === 2 && now < cliff;
+                          const isMilestone = stream.vestingType === 1;
+                          const unlockedCount = isMilestone ? Math.round((Number(stream.unlockedAmount || 0) / Number(stream.totalAmount)) * stream.milestoneCount) : 0;
 
                           return (
                             <div 
@@ -974,12 +977,26 @@ export default function Home() {
                                   isCompleted 
                                     ? "bg-emerald-500/10 text-emerald-400 border border-emerald-500/25"
                                     : isEnded
-                                    ? "bg-amber-500/10 text-amber-400 border border-amber-500/25"
+                                    ? "bg-zinc-500/10 text-zinc-400 border border-zinc-500/25"
                                     : isNotStarted
                                     ? "bg-indigo-500/10 text-indigo-400 border border-indigo-500/25"
+                                    : isCliffLocked
+                                    ? "bg-amber-500/10 text-amber-400 border border-amber-500/25"
+                                    : isMilestone
+                                    ? "bg-purple-500/10 text-purple-400 border border-purple-500/25"
                                     : "bg-blue-500/10 text-blue-400 border border-blue-500/25"
                                 }`}>
-                                  {isCompleted ? "Completed" : isEnded ? "Ended" : isNotStarted ? "Scheduled" : "Streaming"}
+                                  {isCompleted 
+                                    ? "Completed" 
+                                    : isEnded 
+                                    ? "Ended" 
+                                    : isNotStarted 
+                                    ? "Scheduled" 
+                                    : isCliffLocked 
+                                    ? "Cliff Lock" 
+                                    : isMilestone 
+                                    ? `Milestone Index ${unlockedCount}` 
+                                    : "Streaming"}
                                 </span>
                               </div>
 
