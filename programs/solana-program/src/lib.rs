@@ -556,12 +556,6 @@ pub struct ConfigAccount {
 }
 
 #[account]
-pub struct FeeVaultAccount {
-    pub mint: Pubkey,
-    pub balance: u64,
-}
-
-#[account]
 #[derive(InitSpace)]
 pub struct StreamAccount {
     pub creator: Pubkey,
