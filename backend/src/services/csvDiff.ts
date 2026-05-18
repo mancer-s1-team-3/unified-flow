@@ -7,6 +7,7 @@ export interface CsvRow {
   mint?: string;
   type?: number;
   duration?: number;
+  cliffDuration?: number;
   cancelable?: boolean;
 }
 
@@ -26,6 +27,7 @@ export interface DiffItem {
     type?: number;
     amount?: number;
     duration?: number;
+    cliffDuration?: number;
     cancelable?: boolean;
   };
 }
@@ -61,6 +63,8 @@ export function parseCsvText(csvText: string): CsvRow[] {
 
       if (header === "amount" || header === "type" || header === "duration") {
         row[header] = Number(val);
+      } else if (header === "cliffduration" || header === "cliff_duration") {
+        row["cliffDuration"] = Number(val);
       } else if (header === "cancelable") {
         row[header] = val.toLowerCase() === "true" || val === "1";
       } else {
@@ -124,6 +128,7 @@ export function computeCsvDiff(
         mint: row.mint || "EHHDgoeiRa4FCNgwCtjuL69wX2Hre3q3bSddh1LZB3pr",
         type: row.type !== undefined ? row.type : 0,
         duration: row.duration || 3600,
+        cliffDuration: row.cliffDuration || 600,
         cancelable: row.cancelable !== undefined ? row.cancelable : true,
         isNew: true
       });
@@ -160,6 +165,17 @@ export function computeCsvDiff(
         }
       }
 
+      if (row.cliffDuration !== undefined) {
+        const currentCliffDuration = Number(matchedStream.cliffTs) - Number(matchedStream.startTs);
+        if (currentCliffDuration !== row.cliffDuration) {
+          changes.push({
+            field: "cliffDuration",
+            oldVal: currentCliffDuration,
+            newVal: row.cliffDuration
+          });
+        }
+      }
+
       // Check type / mint ONLY in create mode if they are supplied and different
       if (mode === "create") {
         if (row.type !== undefined && Number(matchedStream.vestingType) !== row.type) {
@@ -189,6 +205,7 @@ export function computeCsvDiff(
             type: row.type !== undefined ? row.type : matchedStream.vestingType,
             amount: row.amount !== undefined ? row.amount : Number(matchedStream.totalAmount),
             duration: row.duration !== undefined ? row.duration : (Number(matchedStream.endTs) - Number(matchedStream.startTs)),
+            cliffDuration: row.cliffDuration !== undefined ? row.cliffDuration : (Number(matchedStream.cliffTs) - Number(matchedStream.startTs)),
             cancelable: row.cancelable !== undefined ? row.cancelable : matchedStream.cancelable
           }
         });
@@ -198,6 +215,7 @@ export function computeCsvDiff(
           recipient: matchedStream.recipient,
           amount: Number(matchedStream.totalAmount),
           duration: Number(matchedStream.endTs) - Number(matchedStream.startTs),
+          cliffDuration: Number(matchedStream.cliffTs) - Number(matchedStream.startTs),
           cancelable: matchedStream.cancelable,
           type: matchedStream.vestingType
         });
@@ -213,6 +231,7 @@ export function computeCsvDiff(
         recipient: stream.recipient,
         amount: Number(stream.totalAmount),
         duration: Number(stream.endTs) - Number(stream.startTs),
+        cliffDuration: Number(stream.cliffTs) - Number(stream.startTs),
         cancelable: stream.cancelable,
         type: stream.vestingType
       });

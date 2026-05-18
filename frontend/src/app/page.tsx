@@ -41,10 +41,10 @@ export default function Home() {
   // CSV States
   const [createMode, setCreateMode] = useState<"manual" | "csv">("manual");
   const [csvCreateText, setCsvCreateText] = useState(
-    "recipient,amount,mint,type,duration,cancelable\nAoFGFuBasrNZ7bs9XddzyvMvYhZPGJHpWKGLG2CU62EY,1500,EHHDgoeiRa4FCNgwCtjuL69wX2Hre3q3bSddh1LZB3pr,0,7200,true\nAoFGFuBasrNZ7bs9XddzyvMvYhZPGJHpWKGLG2CU62EY,2500,EHHDgoeiRa4FCNgwCtjuL69wX2Hre3q3bSddh1LZB3pr,1,9000,false"
+    "recipient,amount,mint,type,duration,cliff_duration,cancelable\nAoFGFuBasrNZ7bs9XddzyvMvYhZPGJHpWKGLG2CU62EY,1500,EHHDgoeiRa4FCNgwCtjuL69wX2Hre3q3bSddh1LZB3pr,0,7200,0,true\nAoFGFuBasrNZ7bs9XddzyvMvYhZPGJHpWKGLG2CU62EY,2500,EHHDgoeiRa4FCNgwCtjuL69wX2Hre3q3bSddh1LZB3pr,1,9000,0,false\nAoFGFuBasrNZ7bs9XddzyvMvYhZPGJHpWKGLG2CU62EY,3000,EHHDgoeiRa4FCNgwCtjuL69wX2Hre3q3bSddh1LZB3pr,2,15000,3600,true"
   );
   const [csvEditText, setCsvEditText] = useState(
-    "id,amount,duration,cancelable\nStreamCSV-XXXXX,1800,10800,false"
+    "id,amount,duration,cliff_duration,cancelable\nStreamCSV-XXXXX,1800,10800,0,false"
   );
 
   // Search & Filter States
@@ -417,8 +417,8 @@ export default function Home() {
   // Download template utility
   const downloadTemplate = (mode: "create" | "edit") => {
     const headers = mode === "create"
-      ? "recipient,amount,mint,type,duration,cancelable\nAoFGFuBasrNZ7bs9XddzyvMvYhZPGJHpWKGLG2CU62EY,1500,EHHDgoeiRa4FCNgwCtjuL69wX2Hre3q3bSddh1LZB3pr,0,7200,true\nAoFGFuBasrNZ7bs9XddzyvMvYhZPGJHpWKGLG2CU62EY,2500,EHHDgoeiRa4FCNgwCtjuL69wX2Hre3q3bSddh1LZB3pr,1,9000,false"
-      : "id,amount,duration,cancelable\nStreamCSV-XXXXX,1800,10800,false";
+      ? "recipient,amount,mint,type,duration,cliff_duration,cancelable\nAoFGFuBasrNZ7bs9XddzyvMvYhZPGJHpWKGLG2CU62EY,1500,EHHDgoeiRa4FCNgwCtjuL69wX2Hre3q3bSddh1LZB3pr,0,7200,0,true\nAoFGFuBasrNZ7bs9XddzyvMvYhZPGJHpWKGLG2CU62EY,2500,EHHDgoeiRa4FCNgwCtjuL69wX2Hre3q3bSddh1LZB3pr,1,9000,0,false\nAoFGFuBasrNZ7bs9XddzyvMvYhZPGJHpWKGLG2CU62EY,3000,EHHDgoeiRa4FCNgwCtjuL69wX2Hre3q3bSddh1LZB3pr,2,15000,3600,true"
+      : "id,amount,duration,cliff_duration,cancelable\nStreamCSV-XXXXX,1800,10800,0,false";
 
     const blob = new Blob([headers], { type: "text/csv;charset=utf-8;" });
     const url = URL.createObjectURL(blob);
@@ -945,7 +945,7 @@ export default function Home() {
 
                           const isCompleted = withdrawn >= total;
                           const isNotStarted = now < start;
-                          const isEnded = now >= end;
+                          const isEnded = stream.vestingType === 1 ? (unlocked >= total) : (now >= end);
 
                           return (
                             <div 
