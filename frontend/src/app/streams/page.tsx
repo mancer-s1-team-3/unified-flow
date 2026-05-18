@@ -248,13 +248,15 @@ export default function StreamsPage() {
                     vested = unlocked;
                     progress = Math.min((unlocked / total) * 100, 100);
                   } else if (stream.vestingType === 2) {
-                    // Cliff-based: 0 before cliff timestamp, 100% after
+                    // Cliff-based: 0 before cliff timestamp, linear scale after
                     if (now < cliff) {
                       vested = 0;
                       progress = 0;
                     } else {
-                      vested = total;
-                      progress = 100;
+                      const duration = end - start || 1;
+                      const elapsed = Math.min(Math.max(now - start, 0), duration);
+                      vested = Math.floor((total * elapsed) / duration);
+                      progress = Math.min((elapsed / duration) * 100, 100);
                     }
                   } else {
                     // Linear-based
@@ -268,7 +270,7 @@ export default function StreamsPage() {
 
                   const isCompleted = withdrawn >= total;
                   const isNotStarted = now < start;
-                  const isEnded = now >= end;
+                  const isEnded = stream.vestingType === 1 ? (unlocked >= total) : (now >= end);
 
                   return (
                     <div 
@@ -340,11 +342,19 @@ export default function StreamsPage() {
                       </div>
 
                       {/* Footer link trigger */}
-                      <div className="mt-4 flex justify-between items-center text-[10px] text-zinc-500 font-mono">
-                        <span>Start: {formatDate(stream.startTs)}</span>
-                        <span className="text-indigo-400 flex items-center gap-0.5 font-bold group-hover:translate-x-0.5 transition-transform">
-                          View Detailed Timeline <ChevronRight className="w-3.5 h-3.5" />
-                        </span>
+                      <div className="mt-4 flex flex-col gap-1 border-t border-zinc-900/50 pt-2 text-[10px] text-zinc-500 font-mono">
+                        <div className="flex justify-between items-center">
+                          <span>Start: {formatDate(stream.startTs)}</span>
+                          <span className="text-indigo-400 flex items-center gap-0.5 font-bold group-hover:translate-x-0.5 transition-transform">
+                            View Detailed Timeline <ChevronRight className="w-3.5 h-3.5" />
+                          </span>
+                        </div>
+                        {stream.vestingType === 2 && (
+                          <div className="flex justify-between items-center text-amber-500 font-bold mt-0.5">
+                            <span>Cliff Unlock: {formatDate(stream.cliffTs)}</span>
+                            <span>({Number(stream.cliffTs) - Number(stream.startTs)}s duration)</span>
+                          </div>
+                        )}
                       </div>
                     </div>
                   );
@@ -551,6 +561,9 @@ export default function StreamsPage() {
                     <div className="border-t border-zinc-900/60 pt-3 grid grid-cols-2 gap-2 text-[10px] text-zinc-500 font-mono">
                       <span className="flex items-center gap-1"><Calendar className="w-3 h-3" /> Start: {formatDate(selectedStream.startTs)}</span>
                       <span className="flex items-center gap-1"><Calendar className="w-3 h-3" /> End: {formatDate(selectedStream.endTs)}</span>
+                      {selectedStream.vestingType === 2 && (
+                        <span className="col-span-2 flex items-center gap-1 text-amber-500 font-bold border-t border-zinc-900/40 pt-1.5 mt-1"><Calendar className="w-3 h-3" /> Cliff Unlock: {formatDate(selectedStream.cliffTs)} ({Number(selectedStream.cliffTs) - Number(selectedStream.startTs)}s duration)</span>
+                      )}
                     </div>
 
                   </div>
