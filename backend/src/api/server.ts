@@ -104,7 +104,7 @@ app.post("/streams/bulk", async (req, res) => {
                     totalAmount: BigInt(item.amount || 1000),
                     withdrawn: BigInt(0),
                     startTs: BigInt(Math.floor(Date.now() / 1000)),
-                    cliffTs: BigInt(item.type === "2" ? Math.floor(Date.now() / 1000) + Number(item.cliffDuration || 600) : 0),
+                    cliffTs: BigInt(Number(item.type) === 2 ? Math.floor(Date.now() / 1000) + Number(item.cliffDuration || 600) : 0),
                     endTs: BigInt(Math.floor(Date.now() / 1000) + Number(item.duration || 3600)),
                     vestingType: Number(item.type || 0),
                     status: 1,
