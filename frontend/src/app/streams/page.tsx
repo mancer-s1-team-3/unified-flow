@@ -243,11 +243,11 @@ export default function StreamsPage() {
                   let vested = 0;
                   let progress = 0;
 
-                  if (stream.vestingType === 1) {
+                  if (stream.vestingType === 2) {
                     // Milestone-based: progress is discrete based on unlocked amount
                     vested = unlocked;
                     progress = Math.min((unlocked / total) * 100, 100);
-                  } else if (stream.vestingType === 2) {
+                  } else if (stream.vestingType === 1) {
                     // Cliff-based: 0 before cliff timestamp, linear scale after
                     if (now < cliff) {
                       vested = 0;
@@ -270,9 +270,9 @@ export default function StreamsPage() {
 
                   const isCompleted = withdrawn >= total;
                   const isNotStarted = now < start;
-                  const isEnded = stream.vestingType === 1 ? (unlocked >= total) : (now >= end);
-                  const isCliffLocked = stream.vestingType === 2 && now < cliff;
-                  const isMilestone = stream.vestingType === 1;
+                  const isEnded = stream.vestingType === 2 ? (unlocked >= total) : (now >= end);
+                  const isCliffLocked = stream.vestingType === 1 && now < cliff;
+                  const isMilestone = stream.vestingType === 2;
                   const unlockedCount = isMilestone ? Math.round((Number(stream.unlockedAmount || 0) / Number(stream.totalAmount)) * stream.milestoneCount) : 0;
 
                   return (
@@ -353,7 +353,7 @@ export default function StreamsPage() {
                         <div>
                           <div className="text-zinc-500 font-medium">Type</div>
                           <div className="font-semibold text-zinc-300 uppercase tracking-wider text-[10px]">
-                            {stream.vestingType === 0 ? "Linear" : stream.vestingType === 1 ? "Milestone" : "Cliff"}
+                            {stream.vestingType === 0 ? "Linear" : stream.vestingType === 1 ? "Cliff" : "Milestone"}
                           </div>
                         </div>
                       </div>
@@ -366,7 +366,7 @@ export default function StreamsPage() {
                             View Detailed Timeline <ChevronRight className="w-3.5 h-3.5" />
                           </span>
                         </div>
-                        {stream.vestingType === 2 && (
+                        {stream.vestingType === 1 && (
                           <div className="flex justify-between items-center text-amber-500 font-bold mt-0.5">
                             <span>Cliff Unlock: {formatDate(stream.cliffTs)}</span>
                             <span>({Number(stream.cliffTs) - Number(stream.startTs)}s duration)</span>
@@ -462,7 +462,7 @@ export default function StreamsPage() {
                   {/* Interactive Progress Metric */}
                   <div className="bg-zinc-900/40 border border-zinc-900 rounded-2xl p-4 mb-5">
                     <div className="text-[10px] text-zinc-500 font-bold uppercase tracking-widest mb-1.5">
-                      {selectedStream.vestingType === 1 ? "Milestone Unlock Progress" : "Claim Completeness Index"}
+                      {selectedStream.vestingType === 2 ? "Milestone Unlock Progress" : "Claim Completeness Index"}
                     </div>
                     <div className="flex justify-between items-end mb-2">
                       <span className="text-xl font-black font-mono bg-gradient-to-r from-indigo-400 to-purple-400 bg-clip-text text-transparent">
@@ -470,12 +470,12 @@ export default function StreamsPage() {
                           const total = Number(selectedStream.totalAmount);
                           const withdrawn = Number(selectedStream.withdrawn);
                           const unlocked = Number(selectedStream.unlockedAmount || 0);
-                          const value = selectedStream.vestingType === 1 ? unlocked : withdrawn;
+                          const value = selectedStream.vestingType === 2 ? unlocked : withdrawn;
                           return ((value / total) * 100).toFixed(1);
                         })()}%
                       </span>
                       <span className="text-[10px] text-zinc-400 font-mono">
-                        {selectedStream.vestingType === 1 ? (
+                        {selectedStream.vestingType === 2 ? (
                           `${Number(selectedStream.unlockedAmount || 0).toLocaleString()} / ${Number(selectedStream.totalAmount).toLocaleString()} Unlocked`
                         ) : (
                           `${Number(selectedStream.withdrawn).toLocaleString()} / ${Number(selectedStream.totalAmount).toLocaleString()} Claimed`
@@ -490,7 +490,7 @@ export default function StreamsPage() {
                             const total = Number(selectedStream.totalAmount);
                             const withdrawn = Number(selectedStream.withdrawn);
                             const unlocked = Number(selectedStream.unlockedAmount || 0);
-                            return selectedStream.vestingType === 1 ? unlocked : withdrawn;
+                            return selectedStream.vestingType === 2 ? unlocked : withdrawn;
                           })() / Number(selectedStream.totalAmount)) * 100, 100)}%` 
                         }}
                       />
@@ -517,7 +517,7 @@ export default function StreamsPage() {
                       <div>
                         <span className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest block mb-0.5">Vesting Mode</span>
                         <span className="font-semibold text-zinc-300">
-                          {selectedStream.vestingType === 0 ? "Linear Stream" : selectedStream.vestingType === 1 ? "Milestone-Based" : "Cliff Lockup"}
+                          {selectedStream.vestingType === 0 ? "Linear Stream" : selectedStream.vestingType === 1 ? "Cliff Lockup" : "Milestone-Based"}
                         </span>
                       </div>
                       <div>
@@ -543,7 +543,7 @@ export default function StreamsPage() {
                       </div>
                     </div>
 
-                    {selectedStream.vestingType === 1 && (
+                    {selectedStream.vestingType === 2 && (
                       <div className="grid grid-cols-2 gap-4 border-t border-zinc-900/60 pt-3">
                         <div>
                           <span className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest block mb-0.5">Unlocked Amount</span>
@@ -578,7 +578,7 @@ export default function StreamsPage() {
                     <div className="border-t border-zinc-900/60 pt-3 grid grid-cols-2 gap-2 text-[10px] text-zinc-500 font-mono">
                       <span className="flex items-center gap-1"><Calendar className="w-3 h-3" /> Start: {formatDate(selectedStream.startTs)}</span>
                       <span className="flex items-center gap-1"><Calendar className="w-3 h-3" /> End: {formatDate(selectedStream.endTs)}</span>
-                      {selectedStream.vestingType === 2 && (
+                      {selectedStream.vestingType === 1 && (
                         <span className="col-span-2 flex items-center gap-1 text-amber-500 font-bold border-t border-zinc-900/40 pt-1.5 mt-1"><Calendar className="w-3 h-3" /> Cliff Unlock: {formatDate(selectedStream.cliffTs)} ({Number(selectedStream.cliffTs) - Number(selectedStream.startTs)}s duration)</span>
                       )}
                     </div>
@@ -655,7 +655,7 @@ export default function StreamsPage() {
                     </Link>
                   )}
 
-                  {selectedStream.vestingType === 1 && (
+                  {selectedStream.vestingType === 2 && (
                     <Link
                       href={`/?tab=unlock_milestone&streamId=${selectedStream.id}`}
                       className="col-span-2 flex items-center justify-center gap-1.5 bg-zinc-900 hover:bg-zinc-800 text-indigo-400 hover:text-indigo-300 border border-zinc-800 hover:border-zinc-700 py-2.5 rounded-xl transition-all"
@@ -666,7 +666,7 @@ export default function StreamsPage() {
                   )}
 
                   <Link
-                    href={`/?tab=${selectedStream.vestingType === 0 ? "edit_linear" : selectedStream.vestingType === 1 ? "edit_milestone" : "edit_cliff"}&streamId=${selectedStream.id}`}
+                    href={`/?tab=${selectedStream.vestingType === 0 ? "edit_linear" : selectedStream.vestingType === 1 ? "edit_cliff" : "edit_milestone"}&streamId=${selectedStream.id}`}
                     className="col-span-2 flex items-center justify-center gap-1.5 bg-zinc-900 hover:bg-zinc-800 text-zinc-400 hover:text-zinc-200 border border-zinc-855 hover:border-zinc-750 py-2.5 rounded-xl transition-all"
                   >
                     <Settings className="w-3.5 h-3.5" />
