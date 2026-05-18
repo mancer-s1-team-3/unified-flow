@@ -41,10 +41,10 @@ export default function Home() {
   // CSV States
   const [createMode, setCreateMode] = useState<"manual" | "csv">("manual");
   const [csvCreateText, setCsvCreateText] = useState(
-    "recipient,amount,mint,type,duration,cliff_duration,cancelable\nAoFGFuBasrNZ7bs9XddzyvMvYhZPGJHpWKGLG2CU62EY,1500,EHHDgoeiRa4FCNgwCtjuL69wX2Hre3q3bSddh1LZB3pr,0,7200,0,true\nAoFGFuBasrNZ7bs9XddzyvMvYhZPGJHpWKGLG2CU62EY,2500,EHHDgoeiRa4FCNgwCtjuL69wX2Hre3q3bSddh1LZB3pr,1,9000,0,false\nAoFGFuBasrNZ7bs9XddzyvMvYhZPGJHpWKGLG2CU62EY,3000,EHHDgoeiRa4FCNgwCtjuL69wX2Hre3q3bSddh1LZB3pr,2,15000,3600,true"
+    "recipient,amount,mint,type,duration,cliff_duration,cancelable,milestones\nAoFGFuBasrNZ7bs9XddzyvMvYhZPGJHpWKGLG2CU62EY,1500,EHHDgoeiRa4FCNgwCtjuL69wX2Hre3q3bSddh1LZB3pr,0,7200,0,true,\nAoFGFuBasrNZ7bs9XddzyvMvYhZPGJHpWKGLG2CU62EY,3000,EHHDgoeiRa4FCNgwCtjuL69wX2Hre3q3bSddh1LZB3pr,1,15000,3600,true,\nAoFGFuBasrNZ7bs9XddzyvMvYhZPGJHpWKGLG2CU62EY,2000,EHHDgoeiRa4FCNgwCtjuL69wX2Hre3q3bSddh1LZB3pr,2,9000,0,false,500;500;500;500"
   );
   const [csvEditText, setCsvEditText] = useState(
-    "id,amount,duration,cliff_duration,cancelable\nStreamCSV-XXXXX,1800,10800,0,false"
+    "id,amount,duration,cliff_duration,cancelable,milestones\nStreamCSV-XXXXX,1800,10800,0,false,"
   );
 
   // Search & Filter States
@@ -68,12 +68,31 @@ export default function Home() {
     recipient: "",
     amount: "1000",
     mint: "EHHDgoeiRa4FCNgwCtjuL69wX2Hre3q3bSddh1LZB3pr",
-    type: "0", // 0: Linear, 1: Milestone, 2: Cliff
+    type: "0", // 0: Linear, 1: Cliff, 2: Milestone
     duration: "3600",
     cancelable: true,
     cliffDuration: "600",
     milestoneCount: "4",
   });
+
+  const [milestoneAmounts, setMilestoneAmounts] = useState<string[]>(["250", "250", "250", "250"]);
+
+  useEffect(() => {
+    const count = parseInt(createForm.milestoneCount, 10);
+    if (!isNaN(count) && count > 0) {
+      setMilestoneAmounts(prev => {
+        const next = [...prev];
+        if (next.length < count) {
+          while (next.length < count) {
+            next.push("0");
+          }
+        } else if (next.length > count) {
+          next.splice(count);
+        }
+        return next;
+      });
+    }
+  }, [createForm.milestoneCount]);
 
   const [withdrawForm, setWithdrawForm] = useState({ streamId: "", amount: "" });
   const [cancelForm, setCancelForm] = useState({ streamId: "" });
@@ -227,13 +246,19 @@ export default function Home() {
                     <div>
                       <span className="block text-[9px] text-zinc-500 font-black uppercase">Type</span>
                       <span className="block text-xs font-bold text-zinc-350">
-                        {item.type === 0 ? "Linear" : item.type === 1 ? "Milestone" : "Cliff"}
+                        {item.type === 0 ? "Linear" : item.type === 1 ? "Cliff" : "Milestone"}
                       </span>
                     </div>
                     <div>
                       <span className="block text-[9px] text-zinc-500 font-black uppercase">Duration</span>
                       <span className="block text-xs font-bold text-zinc-350">{item.duration}s</span>
                     </div>
+                    {Number(item.type) === 2 && (
+                      <div className="col-span-2">
+                        <span className="block text-[9px] text-zinc-500 font-black uppercase">Milestones</span>
+                        <span className="block text-xs font-bold text-indigo-400 truncate">{item.milestones || "4 Equal Milestones"}</span>
+                      </div>
+                    )}
                   </div>
                 </div>
               ))}
@@ -266,11 +291,11 @@ export default function Home() {
                         <span className="text-[10px] text-zinc-500 uppercase font-black">{ch.field}</span>
                         <div className="flex items-center gap-2 font-semibold">
                           <span className="text-zinc-500 line-through">
-                            {ch.field === "amount" ? `${ch.oldVal.toLocaleString()} Tokens` : String(ch.oldVal)}
+                            {ch.field === "amount" ? `${ch.oldVal.toLocaleString()} Tokens` : ch.field === "type" ? (Number(ch.oldVal) === 0 ? "Linear" : Number(ch.oldVal) === 1 ? "Cliff" : "Milestone") : String(ch.oldVal || "None")}
                           </span>
                           <span className="text-zinc-500">→</span>
                           <span className="text-amber-400 font-bold">
-                            {ch.field === "amount" ? `${ch.newVal.toLocaleString()} Tokens` : String(ch.newVal)}
+                            {ch.field === "amount" ? `${ch.newVal.toLocaleString()} Tokens` : ch.field === "type" ? (Number(ch.newVal) === 0 ? "Linear" : Number(ch.newVal) === 1 ? "Cliff" : "Milestone") : String(ch.newVal || "None")}
                           </span>
                         </div>
                       </div>
@@ -308,9 +333,15 @@ export default function Home() {
                     <div>
                       <span className="block text-[9px] text-zinc-650 font-black uppercase">Original Type</span>
                       <span className="block text-xs font-bold text-zinc-500">
-                        {item.type === 0 ? "Linear" : item.type === 1 ? "Milestone" : "Cliff"}
+                        {item.type === 0 ? "Linear" : item.type === 1 ? "Cliff" : "Milestone"}
                       </span>
                     </div>
+                    {Number(item.type) === 2 && (
+                      <div className="col-span-2">
+                        <span className="block text-[9px] text-zinc-650 font-black uppercase">Original Milestones</span>
+                        <span className="block text-xs font-bold text-rose-450/90 truncate">{item.milestones || "None"}</span>
+                      </div>
+                    )}
                   </div>
                 </div>
               ))}
@@ -383,7 +414,7 @@ export default function Home() {
     const lines = csvText.trim().split("\n");
     if (lines.length < 2) return [];
     const headers = lines[0].split(",").map(h => h.trim());
-    return lines.slice(1).map(line => {
+    return lines.slice(1).map((line, lineIdx) => {
       const values = line.split(",").map(v => v.trim());
       const obj: any = {};
       headers.forEach((header, index) => {
@@ -391,6 +422,24 @@ export default function Home() {
           obj[header] = values[index] === "true" ? true : values[index] === "false" ? false : values[index];
         }
       });
+
+      // Handle Milestone-Based Vesting type 2 allocations
+      if (Number(obj.type) === 2) {
+        if (obj.milestones) {
+          const parts = String(obj.milestones).split(";").map(Number).filter(n => !isNaN(n));
+          obj.milestoneCount = parts.length;
+          const sum = parts.reduce((a, b) => a + b, 0);
+          if (sum !== Number(obj.amount)) {
+            showNotification("error", `CSV Row #${lineIdx + 1}: Milestone sum (${sum.toLocaleString()}) does not match total amount (${Number(obj.amount).toLocaleString()})!`);
+          }
+        } else {
+          // Auto-distribute into 4 equal milestones if none provided
+          obj.milestoneCount = 4;
+          const amt = Number(obj.amount || 0);
+          const part = Math.floor(amt / 4);
+          obj.milestones = Array(4).fill(part).join(";");
+        }
+      }
       return obj;
     });
   };
@@ -417,8 +466,8 @@ export default function Home() {
   // Download template utility
   const downloadTemplate = (mode: "create" | "edit") => {
     const headers = mode === "create"
-      ? "recipient,amount,mint,type,duration,cliff_duration,cancelable\nAoFGFuBasrNZ7bs9XddzyvMvYhZPGJHpWKGLG2CU62EY,1500,EHHDgoeiRa4FCNgwCtjuL69wX2Hre3q3bSddh1LZB3pr,0,7200,0,true\nAoFGFuBasrNZ7bs9XddzyvMvYhZPGJHpWKGLG2CU62EY,2500,EHHDgoeiRa4FCNgwCtjuL69wX2Hre3q3bSddh1LZB3pr,1,9000,0,false\nAoFGFuBasrNZ7bs9XddzyvMvYhZPGJHpWKGLG2CU62EY,3000,EHHDgoeiRa4FCNgwCtjuL69wX2Hre3q3bSddh1LZB3pr,2,15000,3600,true"
-      : "id,amount,duration,cliff_duration,cancelable\nStreamCSV-XXXXX,1800,10800,0,false";
+      ? "recipient,amount,mint,type,duration,cliff_duration,cancelable,milestones\nAoFGFuBasrNZ7bs9XddzyvMvYhZPGJHpWKGLG2CU62EY,1500,EHHDgoeiRa4FCNgwCtjuL69wX2Hre3q3bSddh1LZB3pr,0,7200,0,true,\nAoFGFuBasrNZ7bs9XddzyvMvYhZPGJHpWKGLG2CU62EY,3000,EHHDgoeiRa4FCNgwCtjuL69wX2Hre3q3bSddh1LZB3pr,1,15000,3600,true,\nAoFGFuBasrNZ7bs9XddzyvMvYhZPGJHpWKGLG2CU62EY,2000,EHHDgoeiRa4FCNgwCtjuL69wX2Hre3q3bSddh1LZB3pr,2,9000,0,false,500;500;500;500"
+      : "id,amount,duration,cliff_duration,cancelable,milestones\nStreamCSV-XXXXX,1800,10800,0,false,";
 
     const blob = new Blob([headers], { type: "text/csv;charset=utf-8;" });
     const url = URL.createObjectURL(blob);
@@ -439,9 +488,9 @@ export default function Home() {
       return;
     }
 
-    const headers = "id,creator,recipient,mint,totalAmount,withdrawn,startTs,endTs,vestingType,status,cancelable,isCsvCreated\n";
+    const headers = "id,creator,recipient,mint,totalAmount,withdrawn,startTs,endTs,vestingType,status,cancelable,isCsvCreated,milestones\n";
     const rows = streams.map(s => 
-      `"${s.id}","${s.creator}","${s.recipient}","${s.mint}",${s.totalAmount},${s.withdrawn},${s.startTs},${s.endTs},${s.vestingType},${s.status},${s.cancelable},${s.isCsvCreated}`
+      `"${s.id}","${s.creator}","${s.recipient}","${s.mint}",${s.totalAmount},${s.withdrawn},${s.startTs},${s.endTs},${s.vestingType},${s.status},${s.cancelable},${s.isCsvCreated},"${s.milestones || ""}"`
     ).join("\n");
 
     const blob = new Blob([headers + rows], { type: "text/csv;charset=utf-8;" });
@@ -505,7 +554,19 @@ export default function Home() {
     // Direct Manual Deploy
     if (actionName === "create_stream") {
       try {
-        await api.post("/streams", data);
+        let payload = { ...data };
+        if (data.type === "2") {
+          const sum = milestoneAmounts.reduce((acc, curr) => acc + Number(curr || 0), 0);
+          if (sum !== Number(data.amount)) {
+            showNotification("error", `Total milestone sum (${sum}) must exactly equal total amount (${data.amount})!`);
+            return;
+          }
+          payload = {
+            ...payload,
+            milestones: milestoneAmounts.map(amt => ({ amount: amt }))
+          };
+        }
+        await api.post("/streams", payload);
         showNotification("success", `Vesting stream deployed and indexed successfully!`);
         fetchStreams();
         setActiveTab("streams");
@@ -1176,8 +1237,8 @@ export default function Home() {
                         className="w-full bg-zinc-950 border border-zinc-800 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:border-indigo-500 font-medium"
                       >
                         <option value="0">Linear Vesting</option>
-                        <option value="1">Milestone-Based Vesting</option>
-                        <option value="2">Cliff Vesting</option>
+                        <option value="1">Cliff Vesting</option>
+                        <option value="2">Milestone-Based Vesting</option>
                       </select>
                     </div>
 
@@ -1193,18 +1254,6 @@ export default function Home() {
 
                     {createForm.type === "1" && (
                       <div>
-                        <label className="block text-xs font-semibold text-zinc-400 uppercase tracking-wider mb-1.5">Milestone Count</label>
-                        <input 
-                          type="number" 
-                          value={createForm.milestoneCount}
-                          onChange={(e) => setCreateForm({...createForm, milestoneCount: e.target.value})}
-                          className="w-full bg-zinc-950 border border-zinc-800 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:border-indigo-500 font-mono"
-                        />
-                      </div>
-                    )}
-
-                    {createForm.type === "2" && (
-                      <div>
                         <label className="block text-xs font-semibold text-zinc-400 uppercase tracking-wider mb-1.5">Cliff Duration (Seconds)</label>
                         <input 
                           type="number" 
@@ -1212,6 +1261,57 @@ export default function Home() {
                           onChange={(e) => setCreateForm({...createForm, cliffDuration: e.target.value})}
                           className="w-full bg-zinc-950 border border-zinc-800 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:border-indigo-500 font-mono"
                         />
+                      </div>
+                    )}
+
+                    {createForm.type === "2" && (
+                      <div className="col-span-2 grid gap-4 bg-zinc-900/30 border border-zinc-900 p-4 rounded-xl">
+                        <div>
+                          <label className="block text-xs font-semibold text-zinc-400 uppercase tracking-wider mb-1.5">Milestone Count</label>
+                          <input 
+                            type="number" 
+                            value={createForm.milestoneCount}
+                            onChange={(e) => setCreateForm({...createForm, milestoneCount: e.target.value})}
+                            className="w-full bg-zinc-950 border border-zinc-800 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:border-indigo-500 font-mono"
+                          />
+                        </div>
+                        
+                        <div className="border-t border-zinc-900/60 pt-3">
+                          <label className="block text-[10px] font-bold text-zinc-500 uppercase tracking-widest mb-2">Milestone Amount Allocations</label>
+                          <div className="grid grid-cols-2 gap-3">
+                            {milestoneAmounts.map((amt, idx) => (
+                              <div key={idx} className="flex flex-col gap-1">
+                                <span className="text-[10px] text-zinc-400 font-mono font-bold">Milestone #{idx} Amount</span>
+                                <input
+                                  type="number"
+                                  value={amt}
+                                  onChange={(e) => {
+                                    const next = [...milestoneAmounts];
+                                    next[idx] = e.target.value;
+                                    setMilestoneAmounts(next);
+                                  }}
+                                  className="w-full bg-zinc-950 border border-zinc-800 rounded-xl px-3 py-1.5 text-xs focus:outline-none focus:border-indigo-500 font-mono"
+                                  placeholder="0"
+                                />
+                              </div>
+                            ))}
+                          </div>
+                          
+                          {(() => {
+                            const sum = milestoneAmounts.reduce((acc, curr) => acc + Number(curr || 0), 0);
+                            const total = Number(createForm.amount || 0);
+                            const isMatched = sum === total;
+                            return (
+                              <div className={`mt-3 text-[10px] font-semibold font-mono ${isMatched ? "text-emerald-500" : "text-amber-500"}`}>
+                                {isMatched ? (
+                                  <span>✔ Allocations sum ({sum.toLocaleString()}) matches total amount ({total.toLocaleString()})!</span>
+                                ) : (
+                                  <span>⚠ Sum ({sum.toLocaleString()}) does not match total amount ({total.toLocaleString()}). Diff: {(total - sum).toLocaleString()}</span>
+                                )}
+                              </div>
+                            );
+                          })()}
+                        </div>
                       </div>
                     )}
 
@@ -1890,20 +1990,63 @@ export default function Home() {
                         </div>
 
                         {selectedStream.vestingType === 2 && (
-                          <div className="grid grid-cols-2 gap-4 border-t border-zinc-900/60 pt-3">
-                            <div>
-                              <span className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest block mb-0.5">Unlocked Amount</span>
-                              <span className="font-semibold text-emerald-400 font-mono">
-                                {Number(selectedStream.unlockedAmount || 0).toLocaleString()} tokens
-                              </span>
+                          <>
+                            <div className="grid grid-cols-2 gap-4 border-t border-zinc-900/60 pt-3">
+                              <div>
+                                <span className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest block mb-0.5">Unlocked Amount</span>
+                                <span className="font-semibold text-emerald-400 font-mono">
+                                  {Number(selectedStream.unlockedAmount || 0).toLocaleString()} tokens
+                                </span>
+                              </div>
+                              <div>
+                                <span className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest block mb-0.5">Claimable Remaining</span>
+                                <span className="font-semibold text-indigo-400 font-mono">
+                                  {Math.max(Number(selectedStream.unlockedAmount || 0) - Number(selectedStream.withdrawn), 0).toLocaleString()} tokens
+                                </span>
+                              </div>
                             </div>
-                            <div>
-                              <span className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest block mb-0.5">Claimable Remaining</span>
-                              <span className="font-semibold text-indigo-400 font-mono">
-                                {Math.max(Number(selectedStream.unlockedAmount || 0) - Number(selectedStream.withdrawn), 0).toLocaleString()} tokens
-                              </span>
+
+                            <div className="border-t border-zinc-900/60 pt-3">
+                              <span className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest block mb-2">Milestones Allocation per Index</span>
+                              <div className="grid gap-2">
+                                {(() => {
+                                  const list = selectedStream.milestones
+                                    ? selectedStream.milestones.split(";").map(Number)
+                                    : Array(selectedStream.milestoneCount).fill(Math.floor(Number(selectedStream.totalAmount) / (selectedStream.milestoneCount || 1)));
+                                  
+                                  let cumulativeSum = 0;
+                                  const unlocked = Number(selectedStream.unlockedAmount || 0);
+
+                                  return list.map((amt: number, idx: number) => {
+                                    cumulativeSum += amt;
+                                    const isUnlocked = cumulativeSum <= unlocked;
+
+                                    return (
+                                      <div 
+                                        key={idx}
+                                        className="flex items-center justify-between font-mono bg-zinc-950 border border-zinc-900/70 rounded-xl px-3 py-2 text-zinc-300 text-[11px]"
+                                      >
+                                        <div className="flex items-center gap-2">
+                                          <span className={`w-1.5 h-1.5 rounded-full ${isUnlocked ? 'bg-emerald-450 shadow-[0_0_6px_rgba(16,185,129,0.5)]' : 'bg-zinc-800'}`} />
+                                          <span className="font-extrabold">Milestone #{idx}</span>
+                                        </div>
+                                        <div className="flex items-center gap-3">
+                                          <span className="text-zinc-400 font-bold">{amt.toLocaleString()} tokens</span>
+                                          <span className={`text-[9px] px-2 py-0.5 rounded font-black uppercase ${
+                                            isUnlocked 
+                                              ? "bg-emerald-500/10 text-emerald-400 border border-emerald-500/20" 
+                                              : "bg-zinc-900 text-zinc-600 border border-zinc-850"
+                                          }`}>
+                                            {isUnlocked ? "Unlocked" : "Locked"}
+                                          </span>
+                                        </div>
+                                      </div>
+                                    );
+                                  });
+                                })()}
+                              </div>
                             </div>
-                          </div>
+                          </>
                         )}
 
                         <div className="border-t border-zinc-900/60 pt-3">

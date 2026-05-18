@@ -544,20 +544,63 @@ export default function StreamsPage() {
                     </div>
 
                     {selectedStream.vestingType === 2 && (
-                      <div className="grid grid-cols-2 gap-4 border-t border-zinc-900/60 pt-3">
-                        <div>
-                          <span className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest block mb-0.5">Unlocked Amount</span>
-                          <span className="font-semibold text-emerald-400 font-mono">
-                            {Number(selectedStream.unlockedAmount || 0).toLocaleString()} tokens
-                          </span>
+                      <>
+                        <div className="grid grid-cols-2 gap-4 border-t border-zinc-900/60 pt-3">
+                          <div>
+                            <span className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest block mb-0.5">Unlocked Amount</span>
+                            <span className="font-semibold text-emerald-400 font-mono">
+                              {Number(selectedStream.unlockedAmount || 0).toLocaleString()} tokens
+                            </span>
+                          </div>
+                          <div>
+                            <span className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest block mb-0.5">Claimable Remaining</span>
+                            <span className="font-semibold text-indigo-400 font-mono">
+                              {Math.max(Number(selectedStream.unlockedAmount || 0) - Number(selectedStream.withdrawn), 0).toLocaleString()} tokens
+                            </span>
+                          </div>
                         </div>
-                        <div>
-                          <span className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest block mb-0.5">Claimable Remaining</span>
-                          <span className="font-semibold text-indigo-400 font-mono">
-                            {Math.max(Number(selectedStream.unlockedAmount || 0) - Number(selectedStream.withdrawn), 0).toLocaleString()} tokens
-                          </span>
+
+                        <div className="border-t border-zinc-900/60 pt-3">
+                          <span className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest block mb-2">Milestones Allocation per Index</span>
+                          <div className="grid gap-2">
+                            {(() => {
+                              const list = selectedStream.milestones
+                                ? selectedStream.milestones.split(";").map(Number)
+                                : Array(selectedStream.milestoneCount).fill(Math.floor(Number(selectedStream.totalAmount) / (selectedStream.milestoneCount || 1)));
+                              
+                              let cumulativeSum = 0;
+                              const unlocked = Number(selectedStream.unlockedAmount || 0);
+
+                              return list.map((amt: number, idx: number) => {
+                                cumulativeSum += amt;
+                                const isUnlocked = cumulativeSum <= unlocked;
+
+                                return (
+                                  <div 
+                                    key={idx}
+                                    className="flex items-center justify-between font-mono bg-zinc-950 border border-zinc-900/70 rounded-xl px-3 py-2 text-zinc-300 text-[11px]"
+                                  >
+                                    <div className="flex items-center gap-2">
+                                      <span className={`w-1.5 h-1.5 rounded-full ${isUnlocked ? 'bg-emerald-450 shadow-[0_0_6px_rgba(16,185,129,0.5)]' : 'bg-zinc-800'}`} />
+                                      <span className="font-extrabold">Milestone #{idx}</span>
+                                    </div>
+                                    <div className="flex items-center gap-3">
+                                      <span className="text-zinc-400 font-bold">{amt.toLocaleString()} tokens</span>
+                                      <span className={`text-[9px] px-2 py-0.5 rounded font-black uppercase ${
+                                        isUnlocked 
+                                          ? "bg-emerald-500/10 text-emerald-400 border border-emerald-500/20" 
+                                          : "bg-zinc-900 text-zinc-660 border border-zinc-850"
+                                      }`}>
+                                        {isUnlocked ? "Unlocked" : "Locked"}
+                                      </span>
+                                    </div>
+                                  </div>
+                                );
+                              });
+                            })()}
+                          </div>
                         </div>
-                      </div>
+                      </>
                     )}
 
                     <div className="border-t border-zinc-900/60 pt-3">
