@@ -98,7 +98,7 @@ export default function Home() {
   const [cancelForm, setCancelForm] = useState({ streamId: "" });
   const [unlockForm, setUnlockForm] = useState({ streamId: "", milestoneIndex: "0" });
   const [editMilestoneForm, setEditMilestoneForm] = useState({ streamId: "", index: "0", newAmount: "250" });
-  const [editLinearForm, setEditLinearForm] = useState({ streamId: "", newEndTs: "" });
+  const [editLinearForm, setEditLinearForm] = useState({ streamId: "", newEndTs: "", topupAmount: "" });
   const [editCliffForm, setEditCliffForm] = useState({ streamId: "", newCliffTs: "" });
 
   // Notifications
@@ -638,6 +638,22 @@ export default function Home() {
       return;
     }
 
+    if (actionName === "edit_linear") {
+      try {
+        await api.post("/streams/edit-linear", {
+          streamId: data.streamId,
+          newEndTs: data.newEndTs || undefined,
+          topupAmount: data.topupAmount || undefined
+        });
+        showNotification("success", `Linear stream timeline extended and topped up successfully!`);
+        fetchStreams();
+        setActiveTab("streams");
+      } catch (err: any) {
+        showNotification("error", err.response?.data?.error || "Failed to update linear stream.");
+      }
+      return;
+    }
+
     if (!wallet.connected) {
       showNotification("info", `Wallet simulated. In real devnet, approve instruction: ${actionName}`);
       return;
@@ -653,7 +669,7 @@ export default function Home() {
     if (tab === "cancel") setCancelForm({ streamId });
     if (tab === "unlock_milestone") setUnlockForm({ streamId, milestoneIndex: "0" });
     if (tab === "edit_milestone") setEditMilestoneForm({ streamId, index: "0", newAmount: "250" });
-    if (tab === "edit_linear") setEditLinearForm({ streamId, newEndTs: "" });
+    if (tab === "edit_linear") setEditLinearForm({ streamId, newEndTs: "", topupAmount: "" });
     if (tab === "edit_cliff") setEditCliffForm({ streamId, newCliffTs: "" });
     
     // Close Drawer
@@ -1733,6 +1749,17 @@ export default function Home() {
                         className="w-full bg-zinc-950 border border-zinc-800 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:border-indigo-500 font-mono"
                       />
                     </div>
+
+                    <div>
+                      <label className="block text-xs font-semibold text-zinc-400 uppercase tracking-wider mb-1.5">Top-up Amount (Tokens to Add)</label>
+                      <input 
+                        type="number" 
+                        value={editLinearForm.topupAmount}
+                        onChange={(e) => setEditLinearForm({...editLinearForm, topupAmount: e.target.value})}
+                        placeholder="e.g. 500"
+                        className="w-full bg-zinc-950 border border-zinc-800 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:border-indigo-500 font-mono"
+                      />
+                    </div>
                   </div>
                 )}
 
@@ -1745,7 +1772,7 @@ export default function Home() {
                       : "bg-indigo-600 hover:bg-indigo-700 hover:shadow-indigo-500/20"
                   }`}
                 >
-                  Update End Timeline
+                  Update End Timeline & Top-up Stream
                 </button>
               </div>
             )}
@@ -1861,7 +1888,7 @@ export default function Home() {
               )}
               {activeTab === "edit_linear" && (
                 <span>
-                  $ mancer-flow edit-linear --stream {editLinearForm.streamId || "<stream_pda>"} --end-ts {editLinearForm.newEndTs || "<timestamp>"}
+                  $ mancer-flow edit-linear --stream {editLinearForm.streamId || "<stream_pda>"} {editLinearForm.newEndTs ? `--end-ts ${editLinearForm.newEndTs}` : ""} {editLinearForm.topupAmount ? `--topup ${editLinearForm.topupAmount}` : ""}
                 </span>
               )}
               {activeTab === "edit_cliff" && (

@@ -245,6 +245,45 @@ app.post("/csv/diff", async (req, res) => {
     }
 });
 
+app.post("/streams/edit-linear", async (req, res) => {
+    const { streamId, newEndTs, topupAmount } = req.body;
+    if (!streamId) {
+        return res.status(400).send({ error: "streamId is required." });
+    }
+
+    try {
+        const existing = await prisma.stream.findUnique({
+            where: { id: streamId }
+        });
+        if (!existing) {
+            return res.status(404).send({ error: "Stream not found." });
+        }
+
+        let updatedEndTs = existing.endTs;
+        let updatedTotalAmount = existing.totalAmount;
+
+        if (newEndTs) {
+            updatedEndTs = BigInt(newEndTs);
+        }
+
+        if (topupAmount) {
+            updatedTotalAmount = existing.totalAmount + BigInt(topupAmount);
+        }
+
+        const updated = await prisma.stream.update({
+            where: { id: streamId },
+            data: {
+                endTs: updatedEndTs,
+                totalAmount: updatedTotalAmount
+            }
+        });
+
+        res.send(JSON.stringify({ success: true, stream: updated }, bigintReplacer));
+    } catch (err: any) {
+        res.status(400).send({ error: err.message });
+    }
+});
+
 app.listen(3000, () => {
     console.log("API running on 3000");
 });
