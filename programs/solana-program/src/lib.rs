@@ -1164,6 +1164,9 @@ fn vested_amount(stream: &StreamAccount, now: i64) -> Result<u64> {
     if now < stream.start_ts {
         return Ok(0);
     }
+    if stream.vesting_type == VESTING_TYPE_CLIFF && now < stream.cliff_ts {
+        return Ok(0);
+    }
     if now >= stream.end_ts {
         return Ok(stream.total_amount);
     }
