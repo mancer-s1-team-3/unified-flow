@@ -53,3 +53,12 @@ model Transaction {
 
   createdAt   DateTime @default (now())
 }
+
+model CsvUpload {
+  id        String   @id @default(uuid())
+  version   Int
+  filename  String
+  content   String   // Stores raw CSV text
+  uploader  String   // Wallet address of the uploader
+  createdAt DateTime @default(now())
+}

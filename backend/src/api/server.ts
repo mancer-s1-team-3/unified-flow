@@ -2,6 +2,7 @@ import express from "express";
 import cors from "cors";
 
 import prisma from "../db/prisma";
+import { parseCsvText, computeCsvDiff, mapCsvRowsToStreams } from "../services/csvDiff";
 
 const app = express();
 
@@ -151,6 +152,90 @@ app.post("/streams/edit-csv", async (req, res) => {
             updated.push(stream);
         }
         res.send(JSON.stringify({ success: true, count: updated.length, streams: updated }, bigintReplacer));
+    } catch (err: any) {
+        res.status(400).send({ error: err.message });
+    }
+});
+
+// 1. Get all CSV upload versions
+app.get("/csv/versions", async (_, res) => {
+    try {
+        const versions = await prisma.csvUpload.findMany({
+            orderBy: {
+                version: "desc"
+            }
+        });
+        res.send(JSON.stringify(versions));
+    } catch (err: any) {
+        res.status(500).send({ error: err.message });
+    }
+});
+
+// 2. Upload/Save a new CSV upload version
+app.post("/csv/upload", async (req, res) => {
+    const { content, filename, uploader } = req.body;
+    if (!content) {
+        return res.status(400).send({ error: "CSV content is required." });
+    }
+
+    try {
+        // Find highest version number
+        const lastUpload = await prisma.csvUpload.findFirst({
+            orderBy: {
+                version: "desc"
+            }
+        });
+        const newVersion = (lastUpload?.version || 0) + 1;
+
+        const upload = await prisma.csvUpload.create({
+            data: {
+                version: newVersion,
+                filename: filename || `upload_v${newVersion}.csv`,
+                content,
+                uploader: uploader || "Anonymous"
+            }
+        });
+
+        res.send(JSON.stringify({ success: true, version: newVersion, upload }));
+    } catch (err: any) {
+        res.status(400).send({ error: err.message });
+    }
+});
+
+// 3. Diff Engine Endpoint
+app.post("/csv/diff", async (req, res) => {
+    const { csvText, mode, compareVersion } = req.body;
+    if (!csvText) {
+        return res.status(400).send({ error: "csvText is required." });
+    }
+    if (mode !== "create" && mode !== "edit") {
+        return res.status(400).send({ error: "mode must be either 'create' or 'edit'." });
+    }
+
+    try {
+        let refStreams: any[] = [];
+
+        if (compareVersion) {
+            // Compare against a specific historical version
+            const targetUpload = await prisma.csvUpload.findFirst({
+                where: { version: Number(compareVersion) }
+            });
+            if (!targetUpload) {
+                return res.status(404).send({ error: `CSV version ${compareVersion} not found.` });
+            }
+            const parsedRefRows = parseCsvText(targetUpload.content);
+            refStreams = mapCsvRowsToStreams(parsedRefRows);
+        } else {
+            // Compare against current live database streams that were created via CSV
+            refStreams = await prisma.stream.findMany({
+                where: { isCsvCreated: true }
+            });
+        }
+
+        const newRows = parseCsvText(csvText);
+        const diffResult = computeCsvDiff(newRows, refStreams, mode);
+
+        res.send(JSON.stringify(diffResult, bigintReplacer));
     } catch (err: any) {
         res.status(400).send({ error: err.message });
     }
