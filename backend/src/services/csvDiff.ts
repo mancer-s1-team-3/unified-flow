@@ -9,6 +9,7 @@ export interface CsvRow {
   duration?: number;
   cliffDuration?: number;
   cancelable?: boolean;
+  milestones?: string;
 }
 
 export interface DiffChange {
@@ -29,6 +30,7 @@ export interface DiffItem {
     duration?: number;
     cliffDuration?: number;
     cancelable?: boolean;
+    milestones?: string;
   };
 }
 
@@ -194,6 +196,14 @@ export function computeCsvDiff(
         }
       }
 
+      if (row.milestones !== undefined && matchedStream.milestones !== row.milestones) {
+        changes.push({
+          field: "milestones",
+          oldVal: matchedStream.milestones,
+          newVal: row.milestones
+        });
+      }
+
       if (changes.length > 0) {
         modified.push({
           id: matchedStream.id,
@@ -206,7 +216,8 @@ export function computeCsvDiff(
             amount: row.amount !== undefined ? row.amount : Number(matchedStream.totalAmount),
             duration: row.duration !== undefined ? row.duration : (Number(matchedStream.endTs) - Number(matchedStream.startTs)),
             cliffDuration: row.cliffDuration !== undefined ? row.cliffDuration : (Number(matchedStream.cliffTs) - Number(matchedStream.startTs)),
-            cancelable: row.cancelable !== undefined ? row.cancelable : matchedStream.cancelable
+            cancelable: row.cancelable !== undefined ? row.cancelable : matchedStream.cancelable,
+            milestones: row.milestones !== undefined ? row.milestones : matchedStream.milestones
           }
         });
       } else {
@@ -217,7 +228,8 @@ export function computeCsvDiff(
           duration: Number(matchedStream.endTs) - Number(matchedStream.startTs),
           cliffDuration: Number(matchedStream.cliffTs) - Number(matchedStream.startTs),
           cancelable: matchedStream.cancelable,
-          type: matchedStream.vestingType
+          type: matchedStream.vestingType,
+          milestones: matchedStream.milestones
         });
       }
     }
@@ -233,7 +245,8 @@ export function computeCsvDiff(
         duration: Number(stream.endTs) - Number(stream.startTs),
         cliffDuration: Number(stream.cliffTs) - Number(stream.startTs),
         cancelable: stream.cancelable,
-        type: stream.vestingType
+        type: stream.vestingType,
+        milestones: stream.milestones
       });
     }
   });

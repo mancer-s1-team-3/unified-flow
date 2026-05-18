@@ -1133,6 +1133,7 @@ export namespace Prisma {
     status: number | null
     cancelable: boolean | null
     milestoneCount: number | null
+    milestones: string | null
     unlockedAmount: bigint | null
     nonce: bigint | null
     bump: number | null
@@ -1156,6 +1157,7 @@ export namespace Prisma {
     status: number | null
     cancelable: boolean | null
     milestoneCount: number | null
+    milestones: string | null
     unlockedAmount: bigint | null
     nonce: bigint | null
     bump: number | null
@@ -1179,6 +1181,7 @@ export namespace Prisma {
     status: number
     cancelable: number
     milestoneCount: number
+    milestones: number
     unlockedAmount: number
     nonce: number
     bump: number
@@ -1232,6 +1235,7 @@ export namespace Prisma {
     status?: true
     cancelable?: true
     milestoneCount?: true
+    milestones?: true
     unlockedAmount?: true
     nonce?: true
     bump?: true
@@ -1255,6 +1259,7 @@ export namespace Prisma {
     status?: true
     cancelable?: true
     milestoneCount?: true
+    milestones?: true
     unlockedAmount?: true
     nonce?: true
     bump?: true
@@ -1278,6 +1283,7 @@ export namespace Prisma {
     status?: true
     cancelable?: true
     milestoneCount?: true
+    milestones?: true
     unlockedAmount?: true
     nonce?: true
     bump?: true
@@ -1388,6 +1394,7 @@ export namespace Prisma {
     status: number
     cancelable: boolean
     milestoneCount: number
+    milestones: string
     unlockedAmount: bigint
     nonce: bigint
     bump: number
@@ -1430,6 +1437,7 @@ export namespace Prisma {
     status?: boolean
     cancelable?: boolean
     milestoneCount?: boolean
+    milestones?: boolean
     unlockedAmount?: boolean
     nonce?: boolean
     bump?: boolean
@@ -1455,6 +1463,7 @@ export namespace Prisma {
     status?: boolean
     cancelable?: boolean
     milestoneCount?: boolean
+    milestones?: boolean
     unlockedAmount?: boolean
     nonce?: boolean
     bump?: boolean
@@ -1478,6 +1487,7 @@ export namespace Prisma {
     status?: boolean
     cancelable?: boolean
     milestoneCount?: boolean
+    milestones?: boolean
     unlockedAmount?: boolean
     nonce?: boolean
     bump?: boolean
@@ -1501,6 +1511,7 @@ export namespace Prisma {
     status?: boolean
     cancelable?: boolean
     milestoneCount?: boolean
+    milestones?: boolean
     unlockedAmount?: boolean
     nonce?: boolean
     bump?: boolean
@@ -1509,7 +1520,7 @@ export namespace Prisma {
     updatedAt?: boolean
   }
 
-  export type StreamOmit<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = $Extensions.GetOmit<"id" | "creator" | "recipient" | "mint" | "vault" | "totalAmount" | "withdrawn" | "startTs" | "cliffTs" | "endTs" | "vestingType" | "status" | "cancelable" | "milestoneCount" | "unlockedAmount" | "nonce" | "bump" | "isCsvCreated" | "createdAt" | "updatedAt", ExtArgs["result"]["stream"]>
+  export type StreamOmit<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = $Extensions.GetOmit<"id" | "creator" | "recipient" | "mint" | "vault" | "totalAmount" | "withdrawn" | "startTs" | "cliffTs" | "endTs" | "vestingType" | "status" | "cancelable" | "milestoneCount" | "milestones" | "unlockedAmount" | "nonce" | "bump" | "isCsvCreated" | "createdAt" | "updatedAt", ExtArgs["result"]["stream"]>
   export type StreamInclude<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
     transactions?: boolean | Stream$transactionsArgs<ExtArgs>
     _count?: boolean | StreamCountOutputTypeDefaultArgs<ExtArgs>
@@ -1537,6 +1548,7 @@ export namespace Prisma {
       status: number
       cancelable: boolean
       milestoneCount: number
+      milestones: string
       unlockedAmount: bigint
       nonce: bigint
       bump: number
@@ -1981,6 +1993,7 @@ export namespace Prisma {
     readonly status: FieldRef<"Stream", 'Int'>
     readonly cancelable: FieldRef<"Stream", 'Boolean'>
     readonly milestoneCount: FieldRef<"Stream", 'Int'>
+    readonly milestones: FieldRef<"Stream", 'String'>
     readonly unlockedAmount: FieldRef<"Stream", 'BigInt'>
     readonly nonce: FieldRef<"Stream", 'BigInt'>
     readonly bump: FieldRef<"Stream", 'Int'>
@@ -4636,6 +4649,7 @@ export namespace Prisma {
     status: 'status',
     cancelable: 'cancelable',
     milestoneCount: 'milestoneCount',
+    milestones: 'milestones',
     unlockedAmount: 'unlockedAmount',
     nonce: 'nonce',
     bump: 'bump',
@@ -4829,6 +4843,7 @@ export namespace Prisma {
     status?: IntFilter<"Stream"> | number
     cancelable?: BoolFilter<"Stream"> | boolean
     milestoneCount?: IntFilter<"Stream"> | number
+    milestones?: StringFilter<"Stream"> | string
     unlockedAmount?: BigIntFilter<"Stream"> | bigint | number
     nonce?: BigIntFilter<"Stream"> | bigint | number
     bump?: IntFilter<"Stream"> | number
@@ -4853,6 +4868,7 @@ export namespace Prisma {
     status?: SortOrder
     cancelable?: SortOrder
     milestoneCount?: SortOrder
+    milestones?: SortOrder
     unlockedAmount?: SortOrder
     nonce?: SortOrder
     bump?: SortOrder
@@ -4880,6 +4896,7 @@ export namespace Prisma {
     status?: IntFilter<"Stream"> | number
     cancelable?: BoolFilter<"Stream"> | boolean
     milestoneCount?: IntFilter<"Stream"> | number
+    milestones?: StringFilter<"Stream"> | string
     unlockedAmount?: BigIntFilter<"Stream"> | bigint | number
     nonce?: BigIntFilter<"Stream"> | bigint | number
     bump?: IntFilter<"Stream"> | number
@@ -4904,6 +4921,7 @@ export namespace Prisma {
     status?: SortOrder
     cancelable?: SortOrder
     milestoneCount?: SortOrder
+    milestones?: SortOrder
     unlockedAmount?: SortOrder
     nonce?: SortOrder
     bump?: SortOrder
@@ -4935,6 +4953,7 @@ export namespace Prisma {
     status?: IntWithAggregatesFilter<"Stream"> | number
     cancelable?: BoolWithAggregatesFilter<"Stream"> | boolean
     milestoneCount?: IntWithAggregatesFilter<"Stream"> | number
+    milestones?: StringWithAggregatesFilter<"Stream"> | string
     unlockedAmount?: BigIntWithAggregatesFilter<"Stream"> | bigint | number
     nonce?: BigIntWithAggregatesFilter<"Stream"> | bigint | number
     bump?: IntWithAggregatesFilter<"Stream"> | number
@@ -5084,6 +5103,7 @@ export namespace Prisma {
     status: number
     cancelable: boolean
     milestoneCount: number
+    milestones?: string
     unlockedAmount?: bigint | number
     nonce: bigint | number
     bump: number
@@ -5108,6 +5128,7 @@ export namespace Prisma {
     status: number
     cancelable: boolean
     milestoneCount: number
+    milestones?: string
     unlockedAmount?: bigint | number
     nonce: bigint | number
     bump: number
@@ -5132,6 +5153,7 @@ export namespace Prisma {
     status?: IntFieldUpdateOperationsInput | number
     cancelable?: BoolFieldUpdateOperationsInput | boolean
     milestoneCount?: IntFieldUpdateOperationsInput | number
+    milestones?: StringFieldUpdateOperationsInput | string
     unlockedAmount?: BigIntFieldUpdateOperationsInput | bigint | number
     nonce?: BigIntFieldUpdateOperationsInput | bigint | number
     bump?: IntFieldUpdateOperationsInput | number
@@ -5156,6 +5178,7 @@ export namespace Prisma {
     status?: IntFieldUpdateOperationsInput | number
     cancelable?: BoolFieldUpdateOperationsInput | boolean
     milestoneCount?: IntFieldUpdateOperationsInput | number
+    milestones?: StringFieldUpdateOperationsInput | string
     unlockedAmount?: BigIntFieldUpdateOperationsInput | bigint | number
     nonce?: BigIntFieldUpdateOperationsInput | bigint | number
     bump?: IntFieldUpdateOperationsInput | number
@@ -5180,6 +5203,7 @@ export namespace Prisma {
     status: number
     cancelable: boolean
     milestoneCount: number
+    milestones?: string
     unlockedAmount?: bigint | number
     nonce: bigint | number
     bump: number
@@ -5203,6 +5227,7 @@ export namespace Prisma {
     status?: IntFieldUpdateOperationsInput | number
     cancelable?: BoolFieldUpdateOperationsInput | boolean
     milestoneCount?: IntFieldUpdateOperationsInput | number
+    milestones?: StringFieldUpdateOperationsInput | string
     unlockedAmount?: BigIntFieldUpdateOperationsInput | bigint | number
     nonce?: BigIntFieldUpdateOperationsInput | bigint | number
     bump?: IntFieldUpdateOperationsInput | number
@@ -5226,6 +5251,7 @@ export namespace Prisma {
     status?: IntFieldUpdateOperationsInput | number
     cancelable?: BoolFieldUpdateOperationsInput | boolean
     milestoneCount?: IntFieldUpdateOperationsInput | number
+    milestones?: StringFieldUpdateOperationsInput | string
     unlockedAmount?: BigIntFieldUpdateOperationsInput | bigint | number
     nonce?: BigIntFieldUpdateOperationsInput | bigint | number
     bump?: IntFieldUpdateOperationsInput | number
@@ -5444,6 +5470,7 @@ export namespace Prisma {
     status?: SortOrder
     cancelable?: SortOrder
     milestoneCount?: SortOrder
+    milestones?: SortOrder
     unlockedAmount?: SortOrder
     nonce?: SortOrder
     bump?: SortOrder
@@ -5481,6 +5508,7 @@ export namespace Prisma {
     status?: SortOrder
     cancelable?: SortOrder
     milestoneCount?: SortOrder
+    milestones?: SortOrder
     unlockedAmount?: SortOrder
     nonce?: SortOrder
     bump?: SortOrder
@@ -5504,6 +5532,7 @@ export namespace Prisma {
     status?: SortOrder
     cancelable?: SortOrder
     milestoneCount?: SortOrder
+    milestones?: SortOrder
     unlockedAmount?: SortOrder
     nonce?: SortOrder
     bump?: SortOrder
@@ -6122,6 +6151,7 @@ export namespace Prisma {
     status: number
     cancelable: boolean
     milestoneCount: number
+    milestones?: string
     unlockedAmount?: bigint | number
     nonce: bigint | number
     bump: number
@@ -6145,6 +6175,7 @@ export namespace Prisma {
     status: number
     cancelable: boolean
     milestoneCount: number
+    milestones?: string
     unlockedAmount?: bigint | number
     nonce: bigint | number
     bump: number
@@ -6184,6 +6215,7 @@ export namespace Prisma {
     status?: IntFieldUpdateOperationsInput | number
     cancelable?: BoolFieldUpdateOperationsInput | boolean
     milestoneCount?: IntFieldUpdateOperationsInput | number
+    milestones?: StringFieldUpdateOperationsInput | string
     unlockedAmount?: BigIntFieldUpdateOperationsInput | bigint | number
     nonce?: BigIntFieldUpdateOperationsInput | bigint | number
     bump?: IntFieldUpdateOperationsInput | number
@@ -6207,6 +6239,7 @@ export namespace Prisma {
     status?: IntFieldUpdateOperationsInput | number
     cancelable?: BoolFieldUpdateOperationsInput | boolean
     milestoneCount?: IntFieldUpdateOperationsInput | number
+    milestones?: StringFieldUpdateOperationsInput | string
     unlockedAmount?: BigIntFieldUpdateOperationsInput | bigint | number
     nonce?: BigIntFieldUpdateOperationsInput | bigint | number
     bump?: IntFieldUpdateOperationsInput | number

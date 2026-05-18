@@ -26,6 +26,7 @@ model Stream {
 
   cancelable     Boolean
   milestoneCount Int
+  milestones     String  @default("")
   unlockedAmount BigInt  @default(0)
 
   nonce        BigInt

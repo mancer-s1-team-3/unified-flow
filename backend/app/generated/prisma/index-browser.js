@@ -135,6 +135,7 @@ exports.Prisma.StreamScalarFieldEnum = {
   status: 'status',
   cancelable: 'cancelable',
   milestoneCount: 'milestoneCount',
+  milestones: 'milestones',
   unlockedAmount: 'unlockedAmount',
   nonce: 'nonce',
   bump: 'bump',

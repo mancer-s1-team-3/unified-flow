@@ -75,6 +75,7 @@ app.post("/streams", async (req, res) => {
                 vestingType: Number(data.type || 0),
                 status: 1,
                 cancelable: Boolean(data.cancelable !== undefined ? data.cancelable : true),
+                milestones: data.milestones ? data.milestones.map((m: any) => m.amount).join(";") : "",
                 milestoneCount: Number(data.milestoneCount || 0),
                 nonce: BigInt(1),
                 bump: 254,
@@ -109,6 +110,7 @@ app.post("/streams/bulk", async (req, res) => {
                     vestingType: Number(item.type || 0),
                     status: 1,
                     cancelable: Boolean(item.cancelable !== undefined ? item.cancelable : true),
+                    milestones: String(item.milestones || ""),
                     milestoneCount: Number(item.milestoneCount || 0),
                     nonce: BigInt(1),
                     bump: 254,
@@ -147,6 +149,8 @@ app.post("/streams/edit-csv", async (req, res) => {
                     totalAmount: item.amount ? BigInt(item.amount) : undefined,
                     endTs: item.duration ? BigInt(Math.floor(Number(existing.startTs) + Number(item.duration))) : undefined,
                     cancelable: item.cancelable !== undefined ? Boolean(item.cancelable) : undefined,
+                    milestones: item.milestones !== undefined ? String(item.milestones) : undefined,
+                    milestoneCount: item.milestones !== undefined ? item.milestones.split(";").filter(Boolean).length : undefined,
                 }
             });
             updated.push(stream);
