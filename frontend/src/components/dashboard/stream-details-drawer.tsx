@@ -1,9 +1,10 @@
 "use client";
 
+import { memo } from "react";
 import { ArrowDownRight, ArrowUpRight, Calendar, Check, Copy, FileText, History, Settings, Unlock, XCircle } from "lucide-react";
 import { formatDate, shorten } from "./utils";
 
-export function StreamDetailsDrawer({
+export const StreamDetailsDrawer = memo(function StreamDetailsDrawer({
   selectedStream,
   loadingDetails,
   copiedId,
@@ -25,8 +26,8 @@ export function StreamDetailsDrawer({
   if (!selectedStream) return null;
 
   return (
-    <div className="absolute inset-0 bg-black/60 backdrop-blur-md rounded-3xl z-40 flex justify-end animate-in fade-in duration-200">
-      <div className="w-full max-w-md bg-zinc-950 border-l border-zinc-800 h-full rounded-r-3xl flex flex-col justify-between p-6 shadow-2xl relative animate-in slide-in-from-right duration-350">
+    <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-md flex justify-end animate-in fade-in duration-200">
+      <div className="w-full max-w-md bg-zinc-950 border-l border-zinc-800 h-[100dvh] sm:h-full rounded-none sm:rounded-r-3xl flex flex-col justify-between p-5 sm:p-6 shadow-2xl relative animate-in slide-in-from-right duration-350">
         <div className="overflow-y-auto max-h-[85%] pr-1">
           <div className="flex items-center justify-between border-b border-zinc-900 pb-4 mb-5">
             <div className="flex items-center gap-2">
@@ -279,5 +280,4 @@ export function StreamDetailsDrawer({
       </div>
     </div>
   );
-}
-
+});

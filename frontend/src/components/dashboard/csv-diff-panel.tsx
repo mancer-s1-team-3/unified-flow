@@ -1,9 +1,10 @@
 "use client";
 
+import { memo } from "react";
 import { Layers, X } from "lucide-react";
 import { shorten } from "./utils";
 
-export function CsvDiffPanel({
+export const CsvDiffPanel = memo(function CsvDiffPanel({
   csvDiffResult,
   compareVersionSelected,
   onClose,
@@ -173,5 +174,4 @@ export function CsvDiffPanel({
       </div>
     </div>
   );
-}
-
+});

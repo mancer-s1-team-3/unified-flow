@@ -1,10 +1,5 @@
 import "./globals.css";
 
-import {
-  Providers,
-} from "@/components/wallet/provider";
-import { PwaRegister } from "@/components/pwa/pwa-register";
-
 const siteName = "Unified Flow";
 const siteDescription =
   "Unified Flow is a Solana token vesting and distribution protocol for linear, cliff, and milestone-based streams with an indexer, dashboard, CLI, and MCP tools.";
@@ -25,6 +20,26 @@ export default function RootLayout({
       }}
     >
       <head>
+        <script
+          dangerouslySetInnerHTML={{
+            __html: `
+              if ('serviceWorker' in navigator) {
+                navigator.serviceWorker.getRegistrations().then(function (registrations) {
+                  return Promise.all(registrations.map(function (registration) {
+                    return registration.unregister();
+                  }));
+                }).catch(function () {});
+              }
+              if ('caches' in window) {
+                caches.keys().then(function (keys) {
+                  return Promise.all(keys.map(function (key) {
+                    return caches.delete(key);
+                  }));
+                }).catch(function () {});
+              }
+            `,
+          }}
+        />
         <title>{siteName}</title>
         <meta name="description" content={siteDescription} />
         <meta name="keywords" content="solana vesting, token distribution, cliff vesting, milestone vesting, linear vesting, anchor, mcp, cli" />
@@ -46,10 +61,7 @@ export default function RootLayout({
         <link rel="apple-touch-icon" href="/icon-192.svg" />
       </head>
       <body>
-        <Providers>
-          <PwaRegister />
-          {children}
-        </Providers>
+        {children}
       </body>
     </html>
   );

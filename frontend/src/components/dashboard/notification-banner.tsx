@@ -1,8 +1,9 @@
 "use client";
 
+import { memo } from "react";
 import { AlertCircle, CheckCircle2, Shield } from "lucide-react";
 
-export function NotificationBanner({
+export const NotificationBanner = memo(function NotificationBanner({
   notification,
 }: {
   notification: {
@@ -30,5 +31,4 @@ export function NotificationBanner({
       </div>
     </div>
   );
-}
-
+});

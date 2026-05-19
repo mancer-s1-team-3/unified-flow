@@ -1,16 +1,19 @@
 "use client";
 
-import { ChevronRight, Layers } from "lucide-react";
+import { memo } from "react";
+import { ChevronRight } from "lucide-react";
 import { formatDate, shorten } from "./utils";
 
-export function StreamCard({
+export const StreamCard = memo(function StreamCard({
   stream,
   onOpen,
+  currentTimeTs,
 }: {
   stream: any;
   onOpen: (id: string) => void;
+  currentTimeTs: number;
 }) {
-  const now = Math.floor(Date.now() / 1000);
+  const now = currentTimeTs;
   const start = Number(stream.startTs);
   const end = Number(stream.endTs);
   const cliff = Number(stream.cliffTs);
@@ -53,9 +56,9 @@ export function StreamCard({
     <div
       key={stream.id}
       onClick={() => onOpen(stream.id)}
-      className="bg-zinc-950/65 border border-zinc-900 hover:border-indigo-500/50 hover:bg-zinc-950/90 rounded-2xl p-5 transition-all shadow-md group relative overflow-hidden cursor-pointer"
+      className="bg-zinc-950/65 border border-zinc-900 hover:border-indigo-500/50 hover:bg-zinc-950/90 rounded-2xl p-4 sm:p-5 transition-all shadow-md group relative overflow-hidden cursor-pointer"
     >
-      <div className="absolute top-0 right-0 w-24 h-24 bg-indigo-500/5 rounded-full blur-2xl group-hover:bg-indigo-500/10 transition-colors pointer-events-none" />
+      <div className="hidden sm:block absolute top-0 right-0 w-24 h-24 bg-indigo-500/5 rounded-full blur-2xl group-hover:bg-indigo-500/10 transition-colors pointer-events-none" />
 
       <div className="flex items-center justify-between mb-4">
         <div className="flex items-center gap-2">
@@ -117,14 +120,21 @@ export function StreamCard({
       </div>
 
       <div className="mt-4 flex flex-col gap-1 border-t border-zinc-900/50 pt-2 text-[10px] text-zinc-500 font-mono">
-        <div className="flex justify-between items-center">
+        <div className="flex justify-between items-center gap-2">
           <span>Start: {formatDate(stream.startTs)}</span>
-          <span className="text-indigo-400 flex items-center gap-0.5 font-bold group-hover:translate-x-0.5 transition-transform">
+          <button
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation();
+              onOpen(stream.id);
+            }}
+            className="text-indigo-400 flex items-center gap-0.5 font-bold group-hover:translate-x-0.5 transition-transform hover:text-indigo-300"
+          >
             View Detailed Timeline <ChevronRight className="w-3.5 h-3.5" />
-          </span>
+          </button>
         </div>
         {stream.vestingType === 1 && (
-          <div className="flex justify-between items-center text-amber-500 font-bold mt-0.5">
+          <div className="flex justify-between items-center gap-2 text-amber-500 font-bold mt-0.5">
             <span>Cliff Unlock: {formatDate(stream.cliffTs)}</span>
             <span>({Number(stream.cliffTs) - Number(stream.startTs)}s duration)</span>
           </div>
@@ -132,5 +142,4 @@ export function StreamCard({
       </div>
     </div>
   );
-}
-
+});
