@@ -69,7 +69,7 @@ pub fn create_stream<'info>(
         ErrorCode::InvalidVestingType
     );
 
-    let milestone_count = milestones.len() as u8;
+    let milestone_count = validate_milestone_count(milestones.len())?;
 
     // ==========================================
     // Milestone & Time Validation (Sudah Diperbaiki)
@@ -113,6 +113,7 @@ pub fn create_stream<'info>(
         require!(start_ts >= now, ErrorCode::InvalidStartDate);
         require!(end_ts > now, ErrorCode::InvalidEndDate);
         require!(cliff_ts >= start_ts, ErrorCode::InvalidSchedule);
+        require!(cliff_ts <= end_ts, ErrorCode::InvalidSchedule);
         require!(end_ts > start_ts, ErrorCode::InvalidSchedule);
 
         let duration = end_ts
@@ -1187,6 +1188,11 @@ fn vested_amount(stream: &StreamAccount, now: i64) -> Result<u64> {
         .ok_or(ErrorCode::MathOverflow)? as u64;
 
     Ok(vested)
+}
+
+fn validate_milestone_count(count: usize) -> Result<u8> {
+    require!(count <= u8::MAX as usize, ErrorCode::InvalidMilestoneCount);
+    Ok(count as u8)
 }
 
 #[error_code]
