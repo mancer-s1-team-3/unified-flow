@@ -1,5 +1,7 @@
 import express from "express";
 import cors from "cors";
+import fs from "node:fs/promises";
+import path from "node:path";
 
 import prisma from "../db/prisma";
 import { parseCsvText, computeCsvDiff, mapCsvRowsToStreams } from "../services/csvDiff";
@@ -8,6 +10,16 @@ const app = express();
 
 app.use(cors());
 app.use(express.json());
+
+async function readSkillMarkdown() {
+    const skillPath = path.resolve(__dirname, "../../skill.md");
+    const content = await fs.readFile(skillPath, "utf8");
+
+    return {
+        content,
+        source: "backend/skill.md",
+    };
+}
 
 function bigintReplacer(
     _: string,
@@ -53,6 +65,15 @@ app.get("/streams/:id", async (req, res) => {
             bigintReplacer
         )
     );
+});
+
+app.get("/skills", async (_, res) => {
+    try {
+        const skill = await readSkillMarkdown();
+        res.json(skill);
+    } catch (err: any) {
+        res.status(500).json({ error: err.message || "Failed to load skills documentation." });
+    }
 });
 
 // Create Manual Stream
