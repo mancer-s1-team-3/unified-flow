@@ -3,8 +3,9 @@
 import { useState, useEffect } from "react";
 import { api } from "@/lib/api";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useWallet } from "@solana/wallet-adapter-react";
-import { WalletMultiButton } from "@solana/wallet-adapter-react-ui";
+import { WalletPickerButton } from "@/components/wallet/wallet-picker-button";
 import { 
   Sparkles, Layers, ChevronRight, Copy, Check, X, Info, 
   History, Calendar, RefreshCw, ArrowDownRight, XCircle, 
@@ -13,6 +14,7 @@ import {
 
 export default function StreamsPage() {
   const wallet = useWallet();
+  const router = useRouter();
   const [streams, setStreams] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
   const [copiedId, setCopiedId] = useState<string | null>(null);
@@ -125,9 +127,14 @@ export default function StreamsPage() {
       {/* Header */}
       <header className="max-w-7xl mx-auto w-full px-6 py-5 border-b border-zinc-900/80 flex justify-between items-center relative z-20 backdrop-blur-md bg-zinc-950/40">
         <div className="flex items-center gap-3">
-          <Link href="/" className="w-10 h-10 rounded-xl bg-zinc-900 hover:bg-zinc-800 border border-zinc-800 flex items-center justify-center transition-all">
+          <button
+            type="button"
+            onClick={() => router.push("/")}
+            className="w-10 h-10 rounded-xl bg-zinc-900 hover:bg-zinc-800 border border-zinc-800 flex items-center justify-center transition-all"
+            aria-label="Back to dashboard"
+          >
             <ArrowLeft className="w-5 h-5 text-zinc-400" />
-          </Link>
+          </button>
           <div>
             <span className="font-extrabold text-xl tracking-wider bg-gradient-to-r from-zinc-50 via-zinc-200 to-zinc-400 bg-clip-text text-transparent">
               Unified Flow
@@ -144,7 +151,7 @@ export default function StreamsPage() {
             <BookOpen className="w-3.5 h-3.5" />
             Developer Docs
           </Link>
-          <WalletMultiButton className="!bg-zinc-900 hover:!bg-zinc-800 !text-xs !font-semibold !rounded-xl !h-auto !py-2 !px-3.5 !border !border-zinc-800 !transition-all text-white font-sans" />
+          <WalletPickerButton className="shrink-0" />
         </div>
       </header>
 
@@ -400,7 +407,7 @@ export default function StreamsPage() {
                       disabled={currentPage === 1}
                       className="px-3 py-1.5 bg-zinc-950 border border-zinc-850 hover:border-zinc-750 text-zinc-350 hover:text-zinc-50 rounded-xl transition-all disabled:opacity-40 disabled:hover:text-zinc-350 disabled:cursor-not-allowed font-semibold"
                     >
-                      Previous
+                      Prev page
                     </button>
                     
                     <div className="bg-zinc-950 border border-zinc-850 px-3 py-1.5 rounded-xl font-mono font-bold text-zinc-350 text-[10px]">
@@ -415,7 +422,7 @@ export default function StreamsPage() {
                       disabled={currentPage === totalPages}
                       className="px-3 py-1.5 bg-zinc-950 border border-zinc-850 hover:border-zinc-750 text-zinc-350 hover:text-zinc-50 rounded-xl transition-all disabled:opacity-40 disabled:hover:text-zinc-350 disabled:cursor-not-allowed font-semibold"
                     >
-                      Next
+                      Next page
                     </button>
                   </div>
                 </div>

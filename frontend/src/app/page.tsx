@@ -1,31 +1,33 @@
 "use client";
 
 import { useState, useEffect, useRef } from "react";
+import { useRouter } from "next/navigation";
 import { useWallet } from "@solana/wallet-adapter-react";
-import { WalletMultiButton } from "@solana/wallet-adapter-react-ui";
 import { api } from "@/lib/api";
-import Link from "next/link";
-import { 
-  Sparkles, PlusCircle, Layers, ArrowDownRight, XCircle, 
-  Settings, RefreshCw, BookOpen, Clock, Unlock, ChevronRight, 
-  Terminal, Shield, CheckCircle2, AlertCircle, Copy, Check, X,
-  ArrowUpRight, Info, History, Calendar, FileText, Lock,
-  Download, Upload, FileOutput, Search, Users
+import {
+  Layers,
+  RefreshCw,
+  Shield,
+  FileOutput,
+  Search,
+  Users,
+  Download,
+  Upload,
+  Lock,
+  Terminal,
 } from "lucide-react";
-
-type TabId = 
-  | "create_streams" 
-  | "streams" 
-  | "withdraw" 
-  | "cancel" 
-  | "edit_milestone" 
-  | "edit_linear" 
-  | "edit_cliff" 
-  | "unlock_milestone"
-  | "edit_csv";
+import { DashboardHeader } from "@/components/dashboard/dashboard-header";
+import { DashboardSidebar } from "@/components/dashboard/dashboard-sidebar";
+import { DashboardFooter } from "@/components/dashboard/dashboard-footer";
+import { NotificationBanner } from "@/components/dashboard/notification-banner";
+import { CsvDiffPanel } from "@/components/dashboard/csv-diff-panel";
+import { StreamCard } from "@/components/dashboard/stream-card";
+import { StreamDetailsDrawer } from "@/components/dashboard/stream-details-drawer";
+import type { TabId } from "@/components/dashboard/types";
 
 export default function Home() {
   const wallet = useWallet();
+  const router = useRouter();
   const [activeTab, setActiveTab] = useState<TabId>("streams");
   const [streams, setStreams] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
@@ -174,184 +176,6 @@ export default function Home() {
     }
   };
 
-  const renderCsvDiffPanel = (mode: "create" | "edit") => {
-    if (!csvDiffResult) return null;
-    return (
-      <div className="mt-8 bg-zinc-950 border border-zinc-900 rounded-3xl p-6 relative overflow-hidden animate-in fade-in duration-300">
-        <div className="absolute top-0 right-0 p-4">
-          <button 
-            onClick={() => setCsvDiffResult(null)}
-            className="w-7 h-7 rounded-lg bg-zinc-900 hover:bg-zinc-800 flex items-center justify-center border border-zinc-850 text-zinc-400 hover:text-zinc-50 transition-colors"
-          >
-            <X className="w-4 h-4" />
-          </button>
-        </div>
-
-        <div className="flex items-center gap-3 border-b border-zinc-900 pb-4 mb-5">
-          <Layers className="w-6 h-6 text-indigo-500 animate-pulse" />
-          <div>
-            <h3 className="text-sm font-black text-zinc-100 uppercase tracking-widest">CSV Revision Diff Engine</h3>
-            <p className="text-[10px] text-zinc-500 font-semibold mt-0.5">
-              Comparing uploaded payload with {compareVersionSelected === "0" ? "Current Database Streams" : `Historical CSV Version ${compareVersionSelected}`}
-            </p>
-          </div>
-        </div>
-
-        {/* Counters HUD */}
-        <div className="grid grid-cols-4 gap-3 mb-6">
-          <div className="bg-emerald-950/20 border border-emerald-900/40 rounded-xl p-3 text-center">
-            <span className="block text-[9px] text-emerald-400 font-black uppercase tracking-wider">Added</span>
-            <span className="block text-lg font-extrabold text-emerald-300 mt-1">{csvDiffResult.added.length}</span>
-          </div>
-          <div className="bg-amber-950/20 border border-amber-900/40 rounded-xl p-3 text-center">
-            <span className="block text-[9px] text-amber-400 font-black uppercase tracking-wider">Modified</span>
-            <span className="block text-lg font-extrabold text-amber-300 mt-1">{csvDiffResult.modified.length}</span>
-          </div>
-          <div className="bg-rose-950/20 border border-rose-900/40 rounded-xl p-3 text-center">
-            <span className="block text-[9px] text-rose-400 font-black uppercase tracking-wider">Removed</span>
-            <span className="block text-lg font-extrabold text-rose-300 mt-1">{csvDiffResult.deleted.length}</span>
-          </div>
-          <div className="bg-zinc-900/40 border border-zinc-850 rounded-xl p-3 text-center">
-            <span className="block text-[9px] text-zinc-400 font-black uppercase tracking-wider">Unchanged</span>
-            <span className="block text-lg font-extrabold text-zinc-350 mt-1">{csvDiffResult.unchanged.length}</span>
-          </div>
-        </div>
-
-        {/* Diff items list */}
-        <div className="space-y-4 max-h-[350px] overflow-y-auto pr-1">
-          {/* ADDED ITEMS */}
-          {csvDiffResult.added.length > 0 && (
-            <div className="space-y-3">
-              <div className="text-[10px] text-zinc-500 font-bold uppercase tracking-widest mb-1.5 flex items-center gap-1.5">
-                <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
-                Newly Added Streams ({csvDiffResult.added.length})
-              </div>
-              {csvDiffResult.added.map((item: any, idx: number) => (
-                <div key={`add-${idx}`} className="bg-emerald-950/5 border border-emerald-900/30 rounded-2xl p-4 flex flex-col gap-2 animate-in slide-in-from-bottom-2 duration-200">
-                  <div className="flex justify-between items-center">
-                    <span className="text-[9px] bg-emerald-950/40 text-emerald-400 border border-emerald-900/60 font-black px-2 py-0.5 rounded-md uppercase tracking-wider">
-                      + Added Stream
-                    </span>
-                    <span className="text-[10px] font-mono text-zinc-500 font-semibold">{shorten(item.recipient)}</span>
-                  </div>
-                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mt-1">
-                    <div>
-                      <span className="block text-[9px] text-zinc-500 font-black uppercase">Recipient</span>
-                      <span className="block text-xs font-mono font-medium text-zinc-300 select-all truncate">{item.recipient}</span>
-                    </div>
-                    <div>
-                      <span className="block text-[9px] text-zinc-500 font-black uppercase">Amount</span>
-                      <span className="block text-xs font-bold text-emerald-400">{item.amount.toLocaleString()} Tokens</span>
-                    </div>
-                    <div>
-                      <span className="block text-[9px] text-zinc-500 font-black uppercase">Type</span>
-                      <span className="block text-xs font-bold text-zinc-350">
-                        {item.type === 0 ? "Linear" : item.type === 1 ? "Cliff" : "Milestone"}
-                      </span>
-                    </div>
-                    <div>
-                      <span className="block text-[9px] text-zinc-500 font-black uppercase">Duration</span>
-                      <span className="block text-xs font-bold text-zinc-350">{item.duration}s</span>
-                    </div>
-                    {Number(item.type) === 2 && (
-                      <div className="col-span-2">
-                        <span className="block text-[9px] text-zinc-500 font-black uppercase">Milestones</span>
-                        <span className="block text-xs font-bold text-indigo-400 truncate">{item.milestones || "4 Equal Milestones"}</span>
-                      </div>
-                    )}
-                  </div>
-                </div>
-              ))}
-            </div>
-          )}
-
-          {/* MODIFIED ITEMS */}
-          {csvDiffResult.modified.length > 0 && (
-            <div className="space-y-3">
-              <div className="text-[10px] text-zinc-500 font-bold uppercase tracking-widest mb-1.5 flex items-center gap-1.5">
-                <span className="w-1.5 h-1.5 rounded-full bg-amber-500" />
-                Modified Streams ({csvDiffResult.modified.length})
-              </div>
-              {csvDiffResult.modified.map((item: any, idx: number) => (
-                <div key={`mod-${idx}`} className="bg-amber-950/5 border border-amber-900/30 rounded-2xl p-4 flex flex-col gap-2 animate-in slide-in-from-bottom-2 duration-200">
-                  <div className="flex justify-between items-center">
-                    <span className="text-[9px] bg-amber-950/40 text-amber-400 border border-amber-900/60 font-black px-2 py-0.5 rounded-md uppercase tracking-wider">
-                      ~ Modified Stream
-                    </span>
-                    <span className="text-[10px] font-mono text-zinc-500 font-bold">{shorten(item.id)}</span>
-                  </div>
-                  
-                  <div className="text-[10px] text-zinc-400 font-mono mt-0.5">
-                    Recipient: <span className="text-zinc-200 font-bold select-all">{item.recipient}</span>
-                  </div>
-
-                  <div className="grid gap-2 mt-2 border-t border-zinc-900/50 pt-2">
-                    {item.changes.map((ch: any, cIdx: number) => (
-                      <div key={cIdx} className="flex justify-between items-center text-xs">
-                        <span className="text-[10px] text-zinc-500 uppercase font-black">{ch.field}</span>
-                        <div className="flex items-center gap-2 font-semibold">
-                          <span className="text-zinc-500 line-through">
-                            {ch.field === "amount" ? `${ch.oldVal.toLocaleString()} Tokens` : ch.field === "type" ? (Number(ch.oldVal) === 0 ? "Linear" : Number(ch.oldVal) === 1 ? "Cliff" : "Milestone") : String(ch.oldVal || "None")}
-                          </span>
-                          <span className="text-zinc-500">→</span>
-                          <span className="text-amber-400 font-bold">
-                            {ch.field === "amount" ? `${ch.newVal.toLocaleString()} Tokens` : ch.field === "type" ? (Number(ch.newVal) === 0 ? "Linear" : Number(ch.newVal) === 1 ? "Cliff" : "Milestone") : String(ch.newVal || "None")}
-                          </span>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              ))}
-            </div>
-          )}
-
-          {/* DELETED ITEMS */}
-          {csvDiffResult.deleted.length > 0 && (
-            <div className="space-y-3">
-              <div className="text-[10px] text-zinc-500 font-bold uppercase tracking-widest mb-1.5 flex items-center gap-1.5">
-                <span className="w-1.5 h-1.5 rounded-full bg-rose-500" />
-                Streams Removed in this CSV ({csvDiffResult.deleted.length})
-              </div>
-              {csvDiffResult.deleted.map((item: any, idx: number) => (
-                <div key={`del-${idx}`} className="bg-rose-950/5 border border-rose-900/30 rounded-2xl p-4 flex flex-col gap-2 opacity-75 animate-in slide-in-from-bottom-2 duration-200">
-                  <div className="flex justify-between items-center">
-                    <span className="text-[9px] bg-rose-950/40 text-rose-400 border border-rose-900/60 font-black px-2 py-0.5 rounded-md uppercase tracking-wider">
-                      - Removed Stream
-                    </span>
-                    <span className="text-[10px] font-mono text-zinc-650 font-semibold">{shorten(item.id)}</span>
-                  </div>
-                  <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 mt-1">
-                    <div>
-                      <span className="block text-[9px] text-zinc-650 font-black uppercase">Recipient</span>
-                      <span className="block text-xs font-mono font-medium text-zinc-500 select-all truncate">{item.recipient}</span>
-                    </div>
-                    <div>
-                      <span className="block text-[9px] text-zinc-650 font-black uppercase">Original Amount</span>
-                      <span className="block text-xs font-bold text-rose-400/90">{item.amount.toLocaleString()} Tokens</span>
-                    </div>
-                    <div>
-                      <span className="block text-[9px] text-zinc-650 font-black uppercase">Original Type</span>
-                      <span className="block text-xs font-bold text-zinc-500">
-                        {item.type === 0 ? "Linear" : item.type === 1 ? "Cliff" : "Milestone"}
-                      </span>
-                    </div>
-                    {Number(item.type) === 2 && (
-                      <div className="col-span-2">
-                        <span className="block text-[9px] text-zinc-650 font-black uppercase">Original Milestones</span>
-                        <span className="block text-xs font-bold text-rose-450/90 truncate">{item.milestones || "None"}</span>
-                      </div>
-                    )}
-                  </div>
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
-      </div>
-    );
-  };
-
   // Fetch Single Stream Details (to load transactions)
   const fetchStreamDetails = async (id: string) => {
     setLoadingDetails(true);
@@ -396,6 +220,31 @@ export default function Home() {
     }
 
     return () => clearInterval(interval);
+  }, []);
+
+  useEffect(() => {
+    const reloadData = () => {
+      fetchStreams();
+      fetchCsvVersions();
+    };
+
+    const handlePageShow = () => reloadData();
+    const handleFocus = () => reloadData();
+    const handleVisible = () => {
+      if (document.visibilityState === "visible") {
+        reloadData();
+      }
+    };
+
+    window.addEventListener("pageshow", handlePageShow);
+    window.addEventListener("focus", handleFocus);
+    document.addEventListener("visibilitychange", handleVisible);
+
+    return () => {
+      window.removeEventListener("pageshow", handlePageShow);
+      window.removeEventListener("focus", handleFocus);
+      document.removeEventListener("visibilitychange", handleVisible);
+    };
   }, []);
 
   const handleSquadsAddressChange = (val: string) => {
@@ -546,7 +395,7 @@ export default function Home() {
     if (useMultisig) {
       showNotification("success", `Squads Multisig proposal created successfully! Redirecting you to Streams page...`);
       setTimeout(() => {
-        window.location.href = "/streams";
+        router.push("/streams");
       }, 2000);
       return;
     }
@@ -683,172 +532,13 @@ export default function Home() {
       <div className="absolute top-0 left-1/4 w-[500px] h-[500px] bg-indigo-950/20 rounded-full blur-[140px] pointer-events-none" />
       <div className="absolute bottom-0 right-1/4 w-[600px] h-[600px] bg-purple-950/15 rounded-full blur-[160px] pointer-events-none" />
 
-      {/* Header */}
-      <header className="max-w-7xl mx-auto w-full px-6 py-5 border-b border-zinc-900/80 flex justify-between items-center relative z-20 backdrop-blur-md bg-zinc-950/40">
-        <div className="flex items-center gap-3">
-          <div className="w-10 h-10 rounded-xl bg-gradient-to-tr from-indigo-600 to-purple-600 flex items-center justify-center shadow-lg shadow-indigo-500/20">
-            <Sparkles className="w-5.5 h-5.5 text-zinc-50" />
-          </div>
-          <div>
-            <span className="font-extrabold text-xl tracking-wider bg-gradient-to-r from-zinc-50 via-zinc-200 to-zinc-400 bg-clip-text text-transparent">
-              Unified Flow
-            </span>
-            <div className="text-[10px] text-zinc-500 font-semibold tracking-widest uppercase">Protocol Dashboard</div>
-          </div>
-        </div>
-        
-        <div className="flex items-center gap-4">
-          <Link
-            href="/docs"
-            className="hidden md:flex items-center gap-1.5 text-xs text-zinc-400 hover:text-indigo-400 font-medium transition-colors border border-zinc-800 hover:border-zinc-700 bg-zinc-900/50 px-3.5 py-2 rounded-xl"
-          >
-            <BookOpen className="w-3.5 h-3.5" />
-            Developer Docs
-          </Link>
-          <WalletMultiButton className="!bg-indigo-600 hover:!bg-indigo-700 !transition-all !rounded-xl !h-10 !text-xs !font-bold !px-5 shadow-lg shadow-indigo-500/10 hover:scale-[1.02]" />
-        </div>
-      </header>
-
-      {/* Global Notification Banner */}
-      {notification.type && (
-        <div className="fixed top-20 right-6 z-50 animate-in fade-in slide-in-from-top-4 duration-300">
-          <div className={`flex items-center gap-3 px-5 py-4 rounded-2xl border backdrop-blur-lg shadow-xl ${
-            notification.type === "success" 
-              ? "bg-emerald-950/45 border-emerald-500/30 text-emerald-300"
-              : notification.type === "error"
-              ? "bg-red-950/45 border-red-500/30 text-red-300"
-              : "bg-indigo-950/45 border-indigo-500/30 text-indigo-300"
-          }`}>
-            {notification.type === "success" && <CheckCircle2 className="w-5 h-5 text-emerald-400 shrink-0" />}
-            {notification.type === "error" && <AlertCircle className="w-5 h-5 text-red-400 shrink-0" />}
-            {notification.type === "info" && <Shield className="w-5 h-5 text-indigo-400 shrink-0" />}
-            <span className="text-xs font-semibold">{notification.message}</span>
-          </div>
-        </div>
-      )}
+      <DashboardHeader />
+      <NotificationBanner notification={notification} />
 
       {/* Main Workspace Dashboard Grid */}
       <div className="max-w-7xl mx-auto w-full px-6 py-8 flex-grow flex flex-col md:flex-row gap-8 relative z-10">
         
-        {/* SIDEBAR TABS BAR */}
-        <aside className="w-full md:w-64 shrink-0 flex flex-col gap-2">
-          <div className="text-[10px] text-zinc-500 font-bold uppercase tracking-widest px-3 mb-2">Vesting Operations</div>
-          
-          <button
-            onClick={() => setActiveTab("streams")}
-            className={`w-full flex items-center justify-between px-4 py-3 rounded-xl transition-all ${
-              activeTab === "streams" 
-                ? "bg-indigo-600/15 border border-indigo-500/30 text-indigo-300 font-bold"
-                : "hover:bg-zinc-900 border border-transparent text-zinc-400 hover:text-zinc-200"
-            }`}
-          >
-            <div className="flex items-center gap-3">
-              <Layers className="w-4 h-4" />
-              <span className="text-xs">Active Streams</span>
-            </div>
-            <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-zinc-800/80 font-mono text-zinc-400">
-              {streams.length}
-            </span>
-          </button>
-
-          <button
-            onClick={() => setActiveTab("create_streams")}
-            className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all ${
-              activeTab === "create_streams" 
-                ? "bg-indigo-600/15 border border-indigo-500/30 text-indigo-300 font-bold"
-                : "hover:bg-zinc-900 border border-transparent text-zinc-400 hover:text-zinc-200"
-            }`}
-          >
-            <PlusCircle className="w-4 h-4" />
-            <span className="text-xs">Create Stream</span>
-          </button>
-
-          <button
-            onClick={() => setActiveTab("withdraw")}
-            className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all ${
-              activeTab === "withdraw" 
-                ? "bg-indigo-600/15 border border-indigo-500/30 text-indigo-300 font-bold"
-                : "hover:bg-zinc-900 border border-transparent text-zinc-400 hover:text-zinc-200"
-            }`}
-          >
-            <ArrowDownRight className="w-4 h-4" />
-            <span className="text-xs">Withdraw Claim</span>
-          </button>
-
-          <button
-            onClick={() => setActiveTab("cancel")}
-            className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all ${
-              activeTab === "cancel" 
-                ? "bg-indigo-600/15 border border-indigo-500/30 text-indigo-300 font-bold"
-                : "hover:bg-zinc-900 border border-transparent text-zinc-400 hover:text-zinc-200"
-            }`}
-          >
-            <XCircle className="w-4 h-4" />
-            <span className="text-xs">Cancel Stream</span>
-          </button>
-
-          <div className="text-[10px] text-zinc-500 font-bold uppercase tracking-widest px-3 mt-6 mb-2">Structure Editors</div>
-
-          <button
-            onClick={() => setActiveTab("unlock_milestone")}
-            className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all ${
-              activeTab === "unlock_milestone" 
-                ? "bg-indigo-600/15 border border-indigo-500/30 text-indigo-300 font-bold"
-                : "hover:bg-zinc-900 border border-transparent text-zinc-400 hover:text-zinc-200"
-            }`}
-          >
-            <Unlock className="w-4 h-4" />
-            <span className="text-xs">Unlock Milestone</span>
-          </button>
-
-          <button
-            onClick={() => setActiveTab("edit_csv")}
-            className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all ${
-              activeTab === "edit_csv" 
-                ? "bg-indigo-600/15 border border-indigo-500/30 text-indigo-300 font-bold"
-                : "hover:bg-zinc-900 border border-transparent text-zinc-400 hover:text-zinc-200"
-            }`}
-          >
-            <FileText className="w-4 h-4 text-emerald-400" />
-            <span className="text-xs font-bold text-emerald-400">Bulk Edit CSV</span>
-          </button>
-
-          <button
-            onClick={() => setActiveTab("edit_milestone")}
-            className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all ${
-              activeTab === "edit_milestone" 
-                ? "bg-indigo-600/15 border border-indigo-500/30 text-indigo-300 font-bold"
-                : "hover:bg-zinc-900 border border-transparent text-zinc-400 hover:text-zinc-200"
-            }`}
-          >
-            <Settings className="w-4 h-4" />
-            <span className="text-xs">Edit Milestone Struct</span>
-          </button>
-
-          <button
-            onClick={() => setActiveTab("edit_linear")}
-            className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all ${
-              activeTab === "edit_linear" 
-                ? "bg-indigo-600/15 border border-indigo-500/30 text-indigo-300 font-bold"
-                : "hover:bg-zinc-900 border border-transparent text-zinc-400 hover:text-zinc-200"
-            }`}
-          >
-            <Clock className="w-4 h-4" />
-            <span className="text-xs">Edit Linear Timeline</span>
-          </button>
-
-          <button
-            onClick={() => setActiveTab("edit_cliff")}
-            className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all ${
-              activeTab === "edit_cliff" 
-                ? "bg-indigo-600/15 border border-indigo-500/30 text-indigo-300 font-bold"
-                : "hover:bg-zinc-900 border border-transparent text-zinc-400 hover:text-zinc-200"
-            }`}
-          >
-            <Shield className="w-4 h-4" />
-            <span className="text-xs">Edit Cliff Conditions</span>
-          </button>
-        </aside>
+        <DashboardSidebar activeTab={activeTab} setActiveTab={setActiveTab} streamsCount={streams.length} />
 
         {/* WORKSPACE AREA */}
         <section className="flex-grow min-w-0 bg-zinc-900/25 border border-zinc-800/80 rounded-3xl p-6 backdrop-blur-sm shadow-2xl flex flex-col justify-between relative">
@@ -985,152 +675,9 @@ export default function Home() {
                           (currentPage - 1) * itemsPerPage,
                           currentPage * itemsPerPage
                         );
-                        return paginatedStreams.map((stream) => {
-                          const now = Math.floor(Date.now() / 1000);
-                          const start = Number(stream.startTs);
-                          const end = Number(stream.endTs);
-                          const cliff = Number(stream.cliffTs);
-                          const total = Number(stream.totalAmount);
-                          const withdrawn = Number(stream.withdrawn);
-                          const unlocked = Number(stream.unlockedAmount || 0);
-
-                          let vested = 0;
-                          let progress = 0;
-
-                          if (stream.vestingType === 2) {
-                            // Milestone-based: progress is discrete based on unlocked amount
-                            vested = unlocked;
-                            progress = Math.min((unlocked / total) * 100, 100);
-                          } else if (stream.vestingType === 1) {
-                            // Cliff-based: 0 before cliff timestamp, linear scale after
-                            if (now < cliff) {
-                              vested = 0;
-                              progress = 0;
-                            } else {
-                              const duration = end - start || 1;
-                              const elapsed = Math.min(Math.max(now - start, 0), duration);
-                              vested = Math.floor((total * elapsed) / duration);
-                              progress = Math.min((elapsed / duration) * 100, 100);
-                            }
-                          } else {
-                            // Linear-based
-                            const duration = end - start || 1;
-                            const elapsed = Math.min(Math.max(now - start, 0), duration);
-                            vested = Math.floor((total * elapsed) / duration);
-                            progress = Math.min((elapsed / duration) * 100, 100);
-                          }
-
-                          const claimable = Math.max(vested - withdrawn, 0);
-
-                          const isCompleted = withdrawn >= total;
-                          const isNotStarted = now < start;
-                          const isEnded = stream.vestingType === 2 ? (unlocked >= total) : (now >= end);
-                          const isCliffLocked = stream.vestingType === 1 && now < cliff;
-                          const isMilestone = stream.vestingType === 2;
-                          const unlockedCount = isMilestone ? Math.round((Number(stream.unlockedAmount || 0) / Number(stream.totalAmount)) * stream.milestoneCount) : 0;
-
-                          return (
-                            <div 
-                              key={stream.id}
-                              onClick={() => fetchStreamDetails(stream.id)}
-                              className="bg-zinc-950/65 border border-zinc-900 hover:border-indigo-500/50 hover:bg-zinc-950/90 rounded-2xl p-5 transition-all shadow-md group relative overflow-hidden cursor-pointer"
-                            >
-                              {/* Hover Accent Glow */}
-                              <div className="absolute top-0 right-0 w-24 h-24 bg-indigo-500/5 rounded-full blur-2xl group-hover:bg-indigo-500/10 transition-colors pointer-events-none" />
-
-                              {/* Top Status and Copy Actions */}
-                              <div className="flex items-center justify-between mb-4">
-                                <div className="flex items-center gap-2">
-                                  <span className="text-[10px] font-bold text-zinc-500 uppercase tracking-wider font-mono">Stream PDA</span>
-                                  <div className="flex items-center gap-1 bg-zinc-900 px-2 py-0.5 rounded font-mono text-[10px] border border-zinc-850">
-                                    <span>{shorten(stream.id)}</span>
-                                  </div>
-                                  {stream.isCsvCreated && (
-                                    <span className="text-[8px] bg-emerald-500/10 text-emerald-400 border border-emerald-500/30 px-1.5 py-0.2 rounded font-bold uppercase tracking-wider">CSV Created</span>
-                                  )}
-                                </div>
-                                
-                                <span className={`text-[10px] px-2.5 py-0.5 rounded-full font-bold uppercase tracking-widest ${
-                                  isCompleted 
-                                    ? "bg-emerald-500/10 text-emerald-400 border border-emerald-500/25"
-                                    : isEnded
-                                    ? "bg-zinc-500/10 text-zinc-400 border border-zinc-500/25"
-                                    : isNotStarted
-                                    ? "bg-indigo-500/10 text-indigo-400 border border-indigo-500/25"
-                                    : isCliffLocked
-                                    ? "bg-amber-500/10 text-amber-400 border border-amber-500/25"
-                                    : isMilestone
-                                    ? "bg-purple-500/10 text-purple-400 border border-purple-500/25"
-                                    : "bg-blue-500/10 text-blue-400 border border-blue-500/25"
-                                }`}>
-                                  {isCompleted 
-                                    ? "Completed" 
-                                    : isEnded 
-                                    ? "Ended" 
-                                    : isNotStarted 
-                                    ? "Scheduled" 
-                                    : isCliffLocked 
-                                    ? "Cliff Lock" 
-                                    : isMilestone 
-                                    ? `Milestone Index ${unlockedCount}` 
-                                    : "Streaming"}
-                                </span>
-                              </div>
-
-                              {/* Progress Bar */}
-                              <div className="mb-4">
-                                <div className="flex justify-between items-center text-xs mb-1.5">
-                                  <span className="font-semibold text-zinc-400">Vesting Completion</span>
-                                  <span className="font-mono text-zinc-200 font-bold">{progress.toFixed(2)}%</span>
-                                </div>
-                                <div className="h-2 w-full bg-zinc-900 rounded-full overflow-hidden border border-zinc-800/40">
-                                  <div 
-                                    className="h-full bg-gradient-to-r from-indigo-500 to-purple-500 rounded-full transition-all duration-500"
-                                    style={{ width: `${progress}%` }}
-                                  />
-                                </div>
-                              </div>
-
-                              {/* Data Matrix */}
-                              <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 bg-zinc-900/35 border border-zinc-900/60 rounded-xl p-3.5 text-xs">
-                                <div>
-                                  <div className="text-zinc-500 font-medium">Total Amount</div>
-                                  <div className="font-bold text-zinc-200">{total.toLocaleString()} tokens</div>
-                                </div>
-                                <div>
-                                  <div className="text-zinc-500 font-medium">Claimable</div>
-                                  <div className="font-bold text-indigo-400">{claimable.toLocaleString()} tokens</div>
-                                </div>
-                                <div>
-                                  <div className="text-zinc-500 font-medium">Withdrawn</div>
-                                  <div className="font-bold text-zinc-200">{withdrawn.toLocaleString()} tokens</div>
-                                </div>
-                                <div>
-                                  <div className="text-zinc-500 font-medium">Type</div>
-                                  <div className="font-semibold text-zinc-300 uppercase tracking-wider text-[10px]">
-                                    {stream.vestingType === 0 ? "Linear" : stream.vestingType === 1 ? "Cliff" : "Milestone"}
-                                  </div>
-                                </div>
-                              </div>
-
-                              {/* Click Indicator */}
-                              <div className="mt-4 flex flex-col gap-1 border-t border-zinc-900/50 pt-2 text-[10px] text-zinc-500 font-mono">
-                                <div className="flex justify-between items-center">
-                                  <span>Start: {formatDate(stream.startTs)}</span>
-                                  <span className="text-indigo-400 flex items-center gap-0.5 font-bold group-hover:translate-x-0.5 transition-transform">
-                                    View Detailed Timeline <ChevronRight className="w-3.5 h-3.5" />
-                                  </span>
-                                </div>
-                                {stream.vestingType === 1 && (
-                                  <div className="flex justify-between items-center text-amber-500 font-bold mt-0.5">
-                                    <span>Cliff Unlock: {formatDate(stream.cliffTs)}</span>
-                                    <span>({Number(stream.cliffTs) - Number(stream.startTs)}s duration)</span>
-                                  </div>
-                                )}
-                              </div>
-                            </div>
-                          );
-                        });
+                          return paginatedStreams.map((stream) => (
+                            <StreamCard key={stream.id} stream={stream} onOpen={fetchStreamDetails} />
+                          ));
                       })()}
                     </div>
 
@@ -1424,7 +971,7 @@ export default function Home() {
                       />
                     </div>
 
-                    {renderCsvDiffPanel("create")}
+                    <CsvDiffPanel csvDiffResult={csvDiffResult} compareVersionSelected={compareVersionSelected} onClose={() => setCsvDiffResult(null)} />
 
                     <button
                       onClick={() => handleAction("create_stream_csv", null)}
@@ -1517,7 +1064,7 @@ export default function Home() {
                     />
                   </div>
 
-                  {renderCsvDiffPanel("edit")}
+                  <CsvDiffPanel csvDiffResult={csvDiffResult} compareVersionSelected={compareVersionSelected} onClose={() => setCsvDiffResult(null)} />
 
                   <button
                     onClick={() => handleAction("edit_stream_csv", null)}
@@ -1902,342 +1449,22 @@ export default function Home() {
           {/* ========================================================================= */}
           {/* SLIDE-OVER PREMIUM DRAWER PANEL FOR STREAM DETAILS & TRANSACTION LOGS */}
           {/* ========================================================================= */}
-          {selectedStream && (
-            <div className="absolute inset-0 bg-black/60 backdrop-blur-md rounded-3xl z-40 flex justify-end animate-in fade-in duration-200">
-              
-              {/* Drawer Container */}
-              <div className="w-full max-w-md bg-zinc-950 border-l border-zinc-800 h-full rounded-r-3xl flex flex-col justify-between p-6 shadow-2xl relative animate-in slide-in-from-right duration-350">
-                
-                {/* Scrollable Content */}
-                <div className="overflow-y-auto max-h-[85%] pr-1">
-                  
-                  {/* Header Title / Close Actions */}
-                  <div className="flex items-center justify-between border-b border-zinc-900 pb-4 mb-5">
-                    <div className="flex items-center gap-2">
-                      <Info className="w-5 h-5 text-indigo-400" />
-                      <h3 className="text-md font-extrabold text-zinc-100">Stream Specifications</h3>
-                    </div>
-                    <button 
-                      onClick={() => setSelectedStream(null)}
-                      className="p-1 rounded-lg border border-zinc-900 hover:border-zinc-800 bg-zinc-900/50 text-zinc-400 hover:text-zinc-100 transition-all"
-                    >
-                      <X className="w-4 h-4" />
-                    </button>
-                  </div>
-
-                  {loadingDetails ? (
-                    <div className="flex flex-col items-center justify-center py-20 text-zinc-400 gap-2">
-                      <RefreshCw className="w-7 h-7 animate-spin text-indigo-500" />
-                      <span className="text-xs">Fetching event signatures & slots...</span>
-                    </div>
-                  ) : (
-                    <>
-                      {/* Interactive Progress Metric */}
-                      <div className="bg-zinc-900/40 border border-zinc-900 rounded-2xl p-4 mb-5">
-                        <div className="text-[10px] text-zinc-500 font-bold uppercase tracking-widest mb-1.5">
-                          {selectedStream.vestingType === 2 ? "Milestone Unlock Progress" : "Claim Completeness Index"}
-                        </div>
-                        <div className="flex justify-between items-end mb-2">
-                          <span className="text-xl font-black font-mono bg-gradient-to-r from-indigo-400 to-purple-400 bg-clip-text text-transparent">
-                            {(() => {
-                              const total = Number(selectedStream.totalAmount);
-                              const withdrawn = Number(selectedStream.withdrawn);
-                              const unlocked = Number(selectedStream.unlockedAmount || 0);
-                              const value = selectedStream.vestingType === 2 ? unlocked : withdrawn;
-                              return ((value / total) * 100).toFixed(1);
-                            })()}%
-                          </span>
-                          <span className="text-[10px] text-zinc-400 font-mono">
-                            {selectedStream.vestingType === 2 ? (
-                              `${Number(selectedStream.unlockedAmount || 0).toLocaleString()} / ${Number(selectedStream.totalAmount).toLocaleString()} Unlocked`
-                            ) : (
-                              `${Number(selectedStream.withdrawn).toLocaleString()} / ${Number(selectedStream.totalAmount).toLocaleString()} Claimed`
-                            )}
-                          </span>
-                        </div>
-                        <div className="h-2 w-full bg-zinc-950 rounded-full overflow-hidden border border-zinc-850">
-                          <div 
-                            className="h-full bg-gradient-to-r from-emerald-500 to-teal-500 rounded-full transition-all duration-300"
-                            style={{ 
-                              width: `${Math.min(((() => {
-                                const total = Number(selectedStream.totalAmount);
-                                const withdrawn = Number(selectedStream.withdrawn);
-                                const unlocked = Number(selectedStream.unlockedAmount || 0);
-                                return selectedStream.vestingType === 2 ? unlocked : withdrawn;
-                              })() / Number(selectedStream.totalAmount)) * 100, 100)}%` 
-                            }}
-                          />
-                        </div>
-                      </div>
-
-                      {/* Detail Core Matrix Grid */}
-                      <div className="text-xs grid gap-3.5 bg-zinc-900/25 border border-zinc-900 p-4 rounded-2xl">
-                        
-                        <div>
-                          <span className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest block mb-0.5">Stream ID (PDA)</span>
-                          <div className="flex items-center justify-between font-mono bg-zinc-950 border border-zinc-900 rounded-lg px-2.5 py-1.5 text-zinc-300">
-                            <span className="truncate mr-2">{selectedStream.id}</span>
-                            <button 
-                              onClick={() => copyToClipboard(selectedStream.id, "drawer_id")}
-                              className="text-zinc-500 hover:text-zinc-300 shrink-0"
-                            >
-                              {copiedId === "drawer_id" ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <Copy className="w-3.5 h-3.5" />}
-                            </button>
-                          </div>
-                        </div>
-
-                        <div className="grid grid-cols-2 gap-4 border-t border-zinc-900/60 pt-3">
-                          <div>
-                            <span className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest block mb-0.5">Vesting Mode</span>
-                            <span className="font-semibold text-zinc-300">
-                              {selectedStream.vestingType === 0 ? "Linear Stream" : selectedStream.vestingType === 1 ? "Cliff Lockup" : "Milestone-Based"}
-                            </span>
-                          </div>
-                          <div>
-                            <span className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest block mb-0.5">Creation Origin</span>
-                            <span className={`text-[10px] px-2 py-0.5 rounded-full font-bold uppercase tracking-wider inline-block ${
-                              selectedStream.isCsvCreated
-                                ? "bg-emerald-500/10 text-emerald-400 border border-emerald-500/25"
-                                : "bg-indigo-500/10 text-indigo-400 border border-indigo-500/25"
-                            }`}>
-                              {selectedStream.isCsvCreated ? "CSV Bulk" : "Manual"}
-                            </span>
-                          </div>
-                        </div>
-
-                        <div className="grid grid-cols-2 gap-4 border-t border-zinc-900/60 pt-3">
-                          <div>
-                            <span className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest block mb-0.5">Cancelable</span>
-                            <span className="font-semibold text-zinc-300">{selectedStream.cancelable ? "Yes (Permitted)" : "No (Immutable)"}</span>
-                          </div>
-                          <div>
-                            <span className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest block mb-0.5">Milestones Defined</span>
-                            <span className="font-semibold text-zinc-300 font-mono">{selectedStream.milestoneCount} milestones</span>
-                          </div>
-                        </div>
-
-                        {selectedStream.vestingType === 2 && (
-                          <>
-                            <div className="grid grid-cols-2 gap-4 border-t border-zinc-900/60 pt-3">
-                              <div>
-                                <span className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest block mb-0.5">Unlocked Amount</span>
-                                <span className="font-semibold text-emerald-400 font-mono">
-                                  {Number(selectedStream.unlockedAmount || 0).toLocaleString()} tokens
-                                </span>
-                              </div>
-                              <div>
-                                <span className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest block mb-0.5">Claimable Remaining</span>
-                                <span className="font-semibold text-indigo-400 font-mono">
-                                  {Math.max(Number(selectedStream.unlockedAmount || 0) - Number(selectedStream.withdrawn), 0).toLocaleString()} tokens
-                                </span>
-                              </div>
-                            </div>
-
-                            <div className="border-t border-zinc-900/60 pt-3">
-                              <span className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest block mb-2">Milestones Allocation per Index</span>
-                              <div className="grid gap-2">
-                                {(() => {
-                                  const list = selectedStream.milestones
-                                    ? selectedStream.milestones.split(";").map(Number)
-                                    : Array(selectedStream.milestoneCount).fill(Math.floor(Number(selectedStream.totalAmount) / (selectedStream.milestoneCount || 1)));
-                                  
-                                  let cumulativeSum = 0;
-                                  const unlocked = Number(selectedStream.unlockedAmount || 0);
-
-                                  return list.map((amt: number, idx: number) => {
-                                    cumulativeSum += amt;
-                                    const isUnlocked = cumulativeSum <= unlocked;
-
-                                    return (
-                                      <div 
-                                        key={idx}
-                                        className="flex items-center justify-between font-mono bg-zinc-950 border border-zinc-900/70 rounded-xl px-3 py-2 text-zinc-300 text-[11px]"
-                                      >
-                                        <div className="flex items-center gap-2">
-                                          <span className={`w-1.5 h-1.5 rounded-full ${isUnlocked ? 'bg-emerald-450 shadow-[0_0_6px_rgba(16,185,129,0.5)]' : 'bg-zinc-800'}`} />
-                                          <span className="font-extrabold">Milestone #{idx}</span>
-                                        </div>
-                                        <div className="flex items-center gap-3">
-                                          <span className="text-zinc-400 font-bold">{amt.toLocaleString()} tokens</span>
-                                          <span className={`text-[9px] px-2 py-0.5 rounded font-black uppercase ${
-                                            isUnlocked 
-                                              ? "bg-emerald-500/10 text-emerald-400 border border-emerald-500/20" 
-                                              : "bg-zinc-900 text-zinc-600 border border-zinc-850"
-                                          }`}>
-                                            {isUnlocked ? "Unlocked" : "Locked"}
-                                          </span>
-                                        </div>
-                                      </div>
-                                    );
-                                  });
-                                })()}
-                              </div>
-                            </div>
-                          </>
-                        )}
-
-                        <div className="border-t border-zinc-900/60 pt-3">
-                          <span className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest block mb-0.5">Creator Account</span>
-                          <span className="font-mono text-zinc-400 truncate block">{selectedStream.creator}</span>
-                        </div>
-
-                        <div className="border-t border-zinc-900/60 pt-3">
-                          <span className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest block mb-0.5">Recipient Destination</span>
-                          <span className="font-mono text-zinc-400 truncate block">{selectedStream.recipient}</span>
-                        </div>
-
-                        <div className="border-t border-zinc-900/60 pt-3">
-                          <span className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest block mb-0.5">Token Mint Address</span>
-                          <span className="font-mono text-zinc-400 truncate block">{selectedStream.mint}</span>
-                        </div>
-
-                        <div className="border-t border-zinc-900/60 pt-3 grid grid-cols-2 gap-2 text-[10px] text-zinc-500 font-mono">
-                          <span className="flex items-center gap-1"><Calendar className="w-3 h-3" /> Start: {formatDate(selectedStream.startTs)}</span>
-                          <span className="flex items-center gap-1"><Calendar className="w-3 h-3" /> End: {formatDate(selectedStream.endTs)}</span>
-                          {selectedStream.vestingType === 1 && (
-                            <span className="col-span-2 flex items-center gap-1 text-amber-500 font-bold border-t border-zinc-900/40 pt-1.5 mt-1"><Calendar className="w-3 h-3" /> Cliff Unlock: {formatDate(selectedStream.cliffTs)} ({Number(selectedStream.cliffTs) - Number(selectedStream.startTs)}s duration)</span>
-                          )}
-                        </div>
-
-                      </div>
-
-                      {/* Transaction History Section */}
-                      <div className="mt-5 border-t border-zinc-900 pt-5">
-                        <div className="flex items-center gap-2 mb-3">
-                          <History className="w-4 h-4 text-indigo-400" />
-                          <h4 className="text-xs font-bold uppercase tracking-wider text-zinc-350">Transaction Ledger</h4>
-                        </div>
-
-                        {!selectedStream.transactions || selectedStream.transactions.length === 0 ? (
-                          <div className="text-[10px] text-zinc-600 bg-zinc-900/10 border border-zinc-900/50 text-center py-4 rounded-xl">
-                            No indexed ledger entries found for this stream.
-                          </div>
-                        ) : (
-                          <div className="grid gap-2.5">
-                            {selectedStream.transactions.map((tx: any) => (
-                              <div 
-                                key={tx.id}
-                                className="bg-zinc-900/20 border border-zinc-900 rounded-xl p-3 flex justify-between items-start text-[10px]"
-                              >
-                                <div>
-                                  <div className="flex items-center gap-1.5 mb-1">
-                                    <span className={`w-1.5 h-1.5 rounded-full ${
-                                      tx.type === "CREATE_STREAM" ? "bg-indigo-400" : "bg-emerald-400"
-                                    }`} />
-                                    <span className="font-bold text-zinc-300 uppercase tracking-wide">{tx.type}</span>
-                                  </div>
-                                  <span className="text-[9px] text-zinc-500 font-mono block">Signature: {shorten(tx.signature)}</span>
-                                  <span className="text-[9px] text-zinc-500 font-mono block">Slot: {tx.slot}</span>
-                                </div>
-                                
-                                <a 
-                                  href={`https://solscan.io/tx/${tx.signature}?cluster=devnet`}
-                                  target="_blank"
-                                  rel="noopener noreferrer"
-                                  className="text-indigo-400 hover:text-indigo-300 flex items-center gap-0.5 font-bold transition-all"
-                                >
-                                  Solscan <ArrowUpRight className="w-3 h-3" />
-                                </a>
-                              </div>
-                            ))}
-                          </div>
-                        )}
-                      </div>
-                    </>
-                  )}
-
-                </div>
-
-                {/* Instant Quick Action Prefillers Footer */}
-                {!loadingDetails && (
-                  <div className="border-t border-zinc-900 pt-4 flex flex-col gap-2">
-                    <div className="text-[10px] text-zinc-500 font-bold uppercase tracking-widest">Instant Action Shortcuts</div>
-                    <div className="grid grid-cols-2 gap-2 text-xs font-semibold">
-                      <button
-                        onClick={() => prefillAction("withdraw", selectedStream.id)}
-                        className="flex items-center justify-center gap-1.5 bg-indigo-600 hover:bg-indigo-700 text-zinc-50 py-2.5 rounded-xl transition-all"
-                      >
-                        <ArrowDownRight className="w-3.5 h-3.5" />
-                        Claim Tokens
-                      </button>
-
-                      {selectedStream.cancelable && (
-                        <button
-                          onClick={() => prefillAction("cancel", selectedStream.id)}
-                          className="flex items-center justify-center gap-1.5 bg-zinc-900 hover:bg-zinc-800 text-red-400 hover:text-red-300 border border-zinc-800 hover:border-zinc-700 py-2.5 rounded-xl transition-all"
-                        >
-                          <XCircle className="w-3.5 h-3.5" />
-                          Cancel Stream
-                        </button>
-                      )}
-
-                      {selectedStream.isCsvCreated ? (
-                        <button
-                          onClick={() => {
-                            setActiveTab("edit_csv");
-                            setCsvEditText(`id,amount,duration,cancelable\n${selectedStream.id},${selectedStream.totalAmount},3600,${selectedStream.cancelable}`);
-                            setSelectedStream(null);
-                          }}
-                          className="col-span-2 flex items-center justify-center gap-1.5 bg-emerald-600 hover:bg-emerald-700 text-white py-2.5 rounded-xl transition-all"
-                        >
-                          <FileText className="w-3.5 h-3.5" />
-                          Edit via CSV Console
-                        </button>
-                      ) : (
-                        <>
-                          {selectedStream.vestingType === 2 && (
-                            <button
-                              onClick={() => prefillAction("unlock_milestone", selectedStream.id)}
-                              className="col-span-2 flex items-center justify-center gap-1.5 bg-zinc-900 hover:bg-zinc-800 text-indigo-400 hover:text-indigo-300 border border-zinc-800 hover:border-zinc-700 py-2.5 rounded-xl transition-all"
-                            >
-                              <Unlock className="w-3.5 h-3.5" />
-                              Unlock Milestone Target
-                            </button>
-                          )}
-
-                          <button
-                            onClick={() => {
-                              const tab = selectedStream.vestingType === 0 ? "edit_linear" : selectedStream.vestingType === 1 ? "edit_cliff" : "edit_milestone";
-                              prefillAction(tab, selectedStream.id);
-                            }}
-                            className="col-span-2 flex items-center justify-center gap-1.5 bg-zinc-900 hover:bg-zinc-800 text-zinc-400 hover:text-zinc-200 border border-zinc-850 hover:border-zinc-750 py-2.5 rounded-xl transition-all"
-                          >
-                            <Settings className="w-3.5 h-3.5" />
-                            Modify Vesting Structure
-                          </button>
-                        </>
-                      )}
-                    </div>
-                  </div>
-                )}
-
-              </div>
-            </div>
-          )}
+          <StreamDetailsDrawer
+            selectedStream={selectedStream}
+            loadingDetails={loadingDetails}
+            copiedId={copiedId}
+            copyToClipboard={copyToClipboard}
+            prefillAction={prefillAction}
+            setActiveTab={setActiveTab}
+            setCsvEditText={setCsvEditText}
+            setSelectedStream={setSelectedStream}
+          />
 
         </section>
 
       </div>
 
-      {/* Footer */}
-      <footer className="max-w-7xl mx-auto w-full px-6 py-6 border-t border-zinc-900 flex flex-col md:flex-row justify-between items-center gap-4 text-xs text-zinc-500 relative z-10">
-        <div>
-          &copy; {new Date().getFullYear()} Unified Flow Protocol. Built for Solana Devnet.
-        </div>
-        <div className="flex gap-4">
-          <Link href="/docs" className="hover:text-indigo-400 transition-colors">
-            API Reference
-          </Link>
-          <span>&middot;</span>
-          <Link href="/docs" className="hover:text-indigo-400 transition-colors">
-            MCP Server
-          </Link>
-          <span>&middot;</span>
-          <Link href="/docs" className="hover:text-indigo-400 transition-colors">
-            CLI & Skills
-          </Link>
-        </div>
-      </footer>
+      <DashboardFooter />
     </main>
   );
 }
