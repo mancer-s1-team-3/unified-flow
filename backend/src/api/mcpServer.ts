@@ -3,7 +3,6 @@ import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js"
 import { z } from "zod";
 import * as anchor from "@coral-xyz/anchor";
 import {
-    Connection,
     Keypair,
     PublicKey,
     SystemProgram,
@@ -21,6 +20,7 @@ import dotenv from "dotenv";
 import path from "path";
 
 import prisma from "../db/prisma";
+import { connection } from "../services/rpc";
 import idl from "../../../target/idl/solana_program.json";
 
 dotenv.config();
@@ -28,9 +28,6 @@ dotenv.config();
 // ============================================================================
 // SOLANA CONNECTION & UTILITIES
 // ============================================================================
-
-const RPC_HTTP = process.env.RPC_HTTP || "https://api.devnet.solana.com";
-const connection = new Connection(RPC_HTTP, "confirmed");
 
 const PROGRAM_ID = new PublicKey(
     process.env.PROGRAM_ID || "8M5yieUh7pxwUi1YBByDF82nqoorZwaKi8dBoMVpurFa"

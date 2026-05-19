@@ -1,6 +1,5 @@
 import * as anchor from "@coral-xyz/anchor";
 import {
-    Connection,
     Keypair,
     PublicKey,
     SystemProgram,
@@ -15,6 +14,7 @@ import fs from "fs";
 import path from "path";
 import dotenv from "dotenv";
 
+import { connection } from "../services/rpc";
 import idl from "../../../target/idl/solana_program.json";
 
 dotenv.config();
@@ -39,8 +39,6 @@ function logError(msg: string) { console.log(`${C_RED}${C_BOLD}✘ Error:${C_RES
 // ============================================================================
 // SYSTEM & WALLET BOOT
 // ============================================================================
-const RPC_HTTP = process.env.RPC_HTTP || "https://api.devnet.solana.com";
-const connection = new Connection(RPC_HTTP, "confirmed");
 const PROGRAM_ID = new PublicKey(
     process.env.PROGRAM_ID || "8M5yieUh7pxwUi1YBByDF82nqoorZwaKi8dBoMVpurFa"
 );

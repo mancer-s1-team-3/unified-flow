@@ -5,17 +5,16 @@ import path from "path";
 const envPath = path.resolve(__dirname, "../../.env");
 dotenv.config({ path: envPath });
 
-import { Connection, PublicKey } from "@solana/web3.js";
+import { PublicKey } from "@solana/web3.js";
 import { eventParser } from "../services/eventParser";
+import { connection } from "../services/rpc";
 
-const RPC_HTTP = process.env.RPC_HTTP || "https://api.devnet.solana.com";
 const PROGRAM_ID = new PublicKey(
     process.env.PROGRAM_ID || "8M5yieUh7pxwUi1YBByDF82nqoorZwaKi8dBoMVpurFa"
 );
 
 async function main() {
     console.log("--- PARSING ALL DEVNET TRANSACTIONS FOR EVENTS ---");
-    const connection = new Connection(RPC_HTTP, "confirmed");
     const signatures = await connection.getSignaturesForAddress(PROGRAM_ID);
     
     console.log(`Total transactions fetched: ${signatures.length}`);

@@ -14,11 +14,11 @@ import {
     PublicKey,
     SystemProgram,
     SYSVAR_RENT_PUBKEY,
-    Connection,
 } from "@solana/web3.js";
 
 import fs from "fs";
 
+import { connection } from "../services/rpc";
 import idl from "../../../target/idl/solana_program.json";
 
 // =====================================================
@@ -27,11 +27,6 @@ import idl from "../../../target/idl/solana_program.json";
 
 const PROGRAM_ID = new PublicKey(
     "8M5yieUh7pxwUi1YBByDF82nqoorZwaKi8dBoMVpurFa"
-);
-
-const connection = new Connection(
-    "https://api.devnet.solana.com",
-    "confirmed"
 );
 
 // =====================================================
