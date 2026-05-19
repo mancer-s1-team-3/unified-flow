@@ -1,9 +1,5 @@
 import "./globals.css";
 
-import {
-  Providers,
-} from "@/components/wallet/provider";
-
 const siteName = "Unified Flow";
 const siteDescription =
   "Unified Flow is a Solana token vesting and distribution protocol for linear, cliff, and milestone-based streams with an indexer, dashboard, CLI, and MCP tools.";
@@ -65,9 +61,7 @@ export default function RootLayout({
         <link rel="apple-touch-icon" href="/icon-192.svg" />
       </head>
       <body>
-        <Providers>
-          {children}
-        </Providers>
+        {children}
       </body>
     </html>
   );
