@@ -2,6 +2,8 @@ import { DashboardHeader } from "@/components/dashboard/dashboard-header";
 import { DashboardFooter } from "@/components/dashboard/dashboard-footer";
 import DashboardHomeClient from "@/components/dashboard/dashboard-home-client";
 
+export const dynamic = "force-dynamic";
+
 export const metadata = {
   title: "Unified Flow | Solana Token Vesting Dashboard",
   description:
@@ -11,11 +13,35 @@ export const metadata = {
   },
 };
 
-export default function HomePage() {
+async function getInitialStreams() {
+  const apiBase = process.env.NEXT_PUBLIC_API;
+
+  if (!apiBase) {
+    return [];
+  }
+
+  try {
+    const res = await fetch(`${apiBase}/streams`, {
+      cache: "no-store",
+    });
+
+    if (!res.ok) {
+      return [];
+    }
+
+    return await res.json();
+  } catch {
+    return [];
+  }
+}
+
+export default async function HomePage() {
+  const initialStreams = await getInitialStreams();
+
   return (
-      <div className="min-h-screen bg-zinc-950 text-zinc-50">
+    <div className="min-h-screen bg-zinc-950 text-zinc-50">
       <DashboardHeader />
-      <DashboardHomeClient />
+      <DashboardHomeClient initialStreams={initialStreams} />
       <DashboardFooter />
     </div>
   );

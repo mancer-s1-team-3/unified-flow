@@ -6,6 +6,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useWallet } from "@solana/wallet-adapter-react";
 import { WalletPickerButton } from "@/components/wallet/wallet-picker-button";
+import { Providers } from "@/components/wallet/provider";
 import { 
   Sparkles, Layers, ChevronRight, Copy, Check, X, Info, 
   History, Calendar, RefreshCw, ArrowDownRight, XCircle, 
@@ -118,6 +119,7 @@ export default function StreamsPage() {
   });
 
   return (
+    <Providers>
     <main className="min-h-screen bg-zinc-950 text-zinc-50 font-sans relative overflow-hidden flex flex-col justify-between selection:bg-indigo-500/30 selection:text-indigo-200">
       
       {/* Glow backgrounds */}
@@ -750,5 +752,6 @@ export default function StreamsPage() {
         </div>
       </footer>
     </main>
+    </Providers>
   );
 }

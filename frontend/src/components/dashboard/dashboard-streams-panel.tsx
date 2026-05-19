@@ -8,8 +8,6 @@ import { StreamCard } from "@/components/dashboard/stream-card";
 type Props = {
   streams: any[];
   loading: boolean;
-  walletConnected: boolean;
-  walletPublicKey: string | null;
   nowTs: number;
   fetchStreams: () => void;
   fetchStreamDetails: (id: string) => void;
@@ -18,8 +16,6 @@ type Props = {
 export function DashboardStreamsPanel({
   streams,
   loading,
-  walletConnected,
-  walletPublicKey,
   nowTs,
   fetchStreams,
   fetchStreamDetails,
@@ -73,8 +69,6 @@ export function DashboardStreamsPanel({
   const filteredStreams = useMemo(() => {
     const query = deferredSearchQuery.trim().toLowerCase();
     const squadsAddress = deferredFilterSquadsAddress.trim().toLowerCase();
-    const walletAddress = walletConnected && walletPublicKey ? walletPublicKey.toLowerCase() : "";
-
     return streams.filter((stream) => {
       const matchesSearch =
         query === "" ||
@@ -90,16 +84,9 @@ export function DashboardStreamsPanel({
         return matchesSearch && isSquadsAssociated;
       }
 
-      if (walletAddress) {
-        const isWalletAssociated =
-          stream.creator.toLowerCase() === walletAddress ||
-          stream.recipient.toLowerCase() === walletAddress;
-        return matchesSearch && isWalletAssociated;
-      }
-
-      return false;
+      return matchesSearch;
     });
-  }, [deferredSearchQuery, deferredFilterSquadsAddress, showOnlySquads, streams, walletConnected, walletPublicKey]);
+  }, [deferredSearchQuery, deferredFilterSquadsAddress, showOnlySquads, streams]);
 
   const totalPages = useMemo(() => Math.ceil(filteredStreams.length / itemsPerPage), [filteredStreams.length]);
   const safeCurrentPage = Math.min(currentPage, Math.max(totalPages, 1));
@@ -183,17 +170,8 @@ export function DashboardStreamsPanel({
       ) : filteredStreams.length === 0 ? (
         <div className="flex flex-col items-center justify-center py-20 text-zinc-400 border-2 border-dashed border-zinc-900 rounded-2xl">
           <Layers className="w-10 h-10 text-zinc-700 mb-3" />
-          {!walletConnected && !(showOnlySquads && filterSquadsAddress.trim() !== "") ? (
-            <>
-              <span className="text-xs font-bold text-zinc-300">Wallet Disconnected</span>
-              <span className="text-[10px] text-zinc-500 max-w-xs text-center mt-1">Connect your Solana wallet in the header or activate the Squads Multisig filter to view active streams.</span>
-            </>
-          ) : (
-            <>
-              <span className="text-xs font-bold text-zinc-300">No matching streams indexed</span>
-              <span className="text-[10px] text-zinc-500 max-w-xs text-center mt-1">Adjust your search query or verify that the correct Squads Multisig address has been inputted.</span>
-            </>
-          )}
+          <span className="text-xs font-bold text-zinc-300">No matching streams indexed</span>
+          <span className="text-[10px] text-zinc-500 max-w-xs text-center mt-1">Adjust your search query or verify that the correct Squads Multisig address has been inputted.</span>
         </div>
       ) : (
         <div className="flex flex-col gap-6">

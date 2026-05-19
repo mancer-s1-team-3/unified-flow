@@ -3,7 +3,6 @@
 import dynamic from "next/dynamic";
 import { useState, useEffect, useRef, useCallback } from "react";
 import { useRouter } from "next/navigation";
-import { useWallet } from "@solana/wallet-adapter-react";
 import { api } from "@/lib/api";
 import { DashboardSidebar } from "@/components/dashboard/dashboard-sidebar";
 import { NotificationBanner } from "@/components/dashboard/notification-banner";
@@ -11,17 +10,20 @@ import { StreamDetailsDrawer } from "@/components/dashboard/stream-details-drawe
 import { DashboardStreamsPanel } from "@/components/dashboard/dashboard-streams-panel";
 import type { TabId } from "@/components/dashboard/types";
 
+type Props = {
+  initialStreams?: any[];
+};
+
 const DashboardActionPanels = dynamic(
   () => import("@/components/dashboard/dashboard-action-panels").then((mod) => mod.DashboardActionPanels),
   { ssr: false, loading: () => null }
 );
 
-export default function Home() {
-  const wallet = useWallet();
+export default function Home({ initialStreams = [] }: Props) {
   const router = useRouter();
   const [activeTab, setActiveTab] = useState<TabId>("streams");
-  const [streams, setStreams] = useState<any[]>([]);
-  const [loading, setLoading] = useState(false);
+  const [streams, setStreams] = useState<any[]>(initialStreams);
+  const [loading, setLoading] = useState(initialStreams.length === 0);
   const [copiedId, setCopiedId] = useState<string | null>(null);
   
   // Details Drawer State
@@ -351,7 +353,7 @@ export default function Home() {
         await api.post("/csv/upload", {
           content: csvCreateText,
           filename: `bulk_create_v${csvVersions.length + 1}.csv`,
-          uploader: wallet.publicKey?.toString() || "System Uploader"
+          uploader: "System Uploader"
         });
 
         // 2. Direct deploy
@@ -382,7 +384,7 @@ export default function Home() {
         await api.post("/csv/upload", {
           content: csvEditText,
           filename: `bulk_edit_v${csvVersions.length + 1}.csv`,
-          uploader: wallet.publicKey?.toString() || "System Uploader"
+          uploader: "System Uploader"
         });
 
         // 2. Execute bulk updates
@@ -416,10 +418,6 @@ export default function Home() {
       return;
     }
 
-    if (!wallet.connected) {
-      showNotification("info", `Wallet simulated. In real devnet, approve instruction: ${actionName}`);
-      return;
-    }
     // Simulation success
     showNotification("success", `Transaction submitted: Successfully executed ${actionName}!`);
   };
@@ -461,8 +459,6 @@ export default function Home() {
               <DashboardStreamsPanel
                 streams={streams}
                 loading={loading}
-                walletConnected={wallet.connected}
-                walletPublicKey={wallet.publicKey?.toString() ?? null}
                 nowTs={Math.floor(Date.now() / 1000)}
                 fetchStreams={fetchStreams}
                 fetchStreamDetails={fetchStreamDetails}
