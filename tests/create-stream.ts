@@ -278,6 +278,39 @@ describe("create-stream", () => {
     expect(stream.withdrawn.toString()).to.equal("0");
   });
 
+  it("Fails when cliff date is after end date", async () => {
+    const nonce = new anchor.BN(900004);
+    const now = Math.floor(Date.now() / 1000);
+    const startTs = new anchor.BN(now + 60);
+    const endTs = startTs.add(new anchor.BN(100));
+    const cliffTs = endTs.add(new anchor.BN(1));
+
+    try {
+      await program.methods
+        .createStream(
+          amount,
+          startTs,
+          cliffTs,
+          endTs,
+          VESTING_TYPE_CLIFF,
+          [],
+          nonce
+        )
+        .accounts({
+          creator: creator.publicKey,
+          recipient: recipient.publicKey,
+          mint,
+          creatorTokenAccount,
+          tokenProgram: TOKEN_PROGRAM_ID,
+        })
+        .rpc();
+
+      expect.fail("Should fail with InvalidSchedule");
+    } catch (err: any) {
+      expect(err.toString()).to.contain("InvalidSchedule");
+    }
+  });
+
   // =========================================================
   // MILESTONE VESTING
   // =========================================================
@@ -483,6 +516,49 @@ describe("create-stream", () => {
     );
     expect(m3.approved).to.equal(true);
   });
+
+  it("Fails when milestone count exceeds u8 range", async () => {
+    const nonce = new anchor.BN(900004);
+    const now = Math.floor(Date.now() / 1000);
+    const startTs = new anchor.BN(now + 60);
+    const cliffTs = startTs;
+    const endTs = startTs.add(new anchor.BN(86400));
+    const overflowAmount = new anchor.BN(256);
+
+    const tooManyMilestones = Array.from({ length: 256 }, () => ({
+      amount: new anchor.BN(1),
+    }));
+
+    try {
+      await program.methods
+        .createStream(
+          overflowAmount,
+          startTs,
+          cliffTs,
+          endTs,
+          VESTING_TYPE_MILESTONE,
+          tooManyMilestones,
+          nonce
+        )
+        .accounts({
+          creator: creator.publicKey,
+          recipient: recipient.publicKey,
+          mint,
+          creatorTokenAccount,
+          tokenProgram: TOKEN_PROGRAM_ID,
+        })
+        .rpc();
+
+      expect.fail("Should fail before creating the stream");
+    } catch (err: any) {
+      expect(err.toString()).to.satisfy(
+        (msg: string) =>
+          msg.includes("InvalidMilestoneCount") ||
+          msg.includes("RangeError: encoding overruns Buffer")
+      );
+    }
+  });
+
   // =========================================================
   // INVALID AMOUNT
   // =========================================================
