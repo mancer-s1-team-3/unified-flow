@@ -295,11 +295,366 @@
           "type": "i64"
         },
         {
+          "name": "cliff_ts",
+          "type": "i64"
+        },
+        {
           "name": "end_ts",
           "type": "i64"
         },
         {
+          "name": "vesting_type",
+          "type": "u8"
+        },
+        {
+          "name": "milestones",
+          "type": {
+            "vec": {
+              "defined": {
+                "name": "MilestoneInput"
+              }
+            }
+          }
+        },
+        {
           "name": "nonce",
+          "type": "u64"
+        }
+      ]
+    },
+    {
+      "name": "edit_cliff",
+      "discriminator": [
+        41,
+        203,
+        122,
+        7,
+        21,
+        225,
+        162,
+        98
+      ],
+      "accounts": [
+        {
+          "name": "creator",
+          "writable": true,
+          "signer": true,
+          "relations": [
+            "stream"
+          ]
+        },
+        {
+          "name": "stream",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  115,
+                  116,
+                  114,
+                  101,
+                  97,
+                  109
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "stream.creator",
+                "account": "StreamAccount"
+              },
+              {
+                "kind": "account",
+                "path": "stream.recipient",
+                "account": "StreamAccount"
+              },
+              {
+                "kind": "account",
+                "path": "stream.nonce",
+                "account": "StreamAccount"
+              }
+            ]
+          }
+        }
+      ],
+      "args": [
+        {
+          "name": "new_cliff_ts",
+          "type": "i64"
+        }
+      ]
+    },
+    {
+      "name": "edit_linear",
+      "discriminator": [
+        255,
+        42,
+        53,
+        36,
+        79,
+        96,
+        83,
+        223
+      ],
+      "accounts": [
+        {
+          "name": "creator",
+          "writable": true,
+          "signer": true,
+          "relations": [
+            "stream"
+          ]
+        },
+        {
+          "name": "mint",
+          "relations": [
+            "stream"
+          ]
+        },
+        {
+          "name": "stream",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  115,
+                  116,
+                  114,
+                  101,
+                  97,
+                  109
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "stream.creator",
+                "account": "StreamAccount"
+              },
+              {
+                "kind": "account",
+                "path": "stream.recipient",
+                "account": "StreamAccount"
+              },
+              {
+                "kind": "account",
+                "path": "stream.nonce",
+                "account": "StreamAccount"
+              }
+            ]
+          }
+        },
+        {
+          "name": "vault",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "account",
+                "path": "stream"
+              },
+              {
+                "kind": "account",
+                "path": "token_program"
+              },
+              {
+                "kind": "account",
+                "path": "mint"
+              }
+            ],
+            "program": {
+              "kind": "const",
+              "value": [
+                140,
+                151,
+                37,
+                143,
+                78,
+                36,
+                137,
+                241,
+                187,
+                61,
+                16,
+                41,
+                20,
+                142,
+                13,
+                131,
+                11,
+                90,
+                19,
+                153,
+                218,
+                255,
+                16,
+                132,
+                4,
+                142,
+                123,
+                216,
+                219,
+                233,
+                248,
+                89
+              ]
+            }
+          }
+        },
+        {
+          "name": "creator_token_account",
+          "writable": true
+        },
+        {
+          "name": "token_program"
+        }
+      ],
+      "args": [
+        {
+          "name": "new_end_ts",
+          "type": "i64"
+        },
+        {
+          "name": "topup_amount",
+          "type": "u64"
+        }
+      ]
+    },
+    {
+      "name": "edit_milestone",
+      "discriminator": [
+        123,
+        218,
+        165,
+        226,
+        209,
+        227,
+        8,
+        166
+      ],
+      "accounts": [
+        {
+          "name": "creator",
+          "writable": true,
+          "signer": true,
+          "relations": [
+            "stream"
+          ]
+        },
+        {
+          "name": "stream",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  115,
+                  116,
+                  114,
+                  101,
+                  97,
+                  109
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "stream.creator",
+                "account": "StreamAccount"
+              },
+              {
+                "kind": "account",
+                "path": "stream.recipient",
+                "account": "StreamAccount"
+              },
+              {
+                "kind": "account",
+                "path": "stream.nonce",
+                "account": "StreamAccount"
+              }
+            ]
+          }
+        },
+        {
+          "name": "milestone",
+          "writable": true
+        },
+        {
+          "name": "mint",
+          "relations": [
+            "stream"
+          ]
+        },
+        {
+          "name": "vault",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "account",
+                "path": "stream"
+              },
+              {
+                "kind": "account",
+                "path": "token_program"
+              },
+              {
+                "kind": "account",
+                "path": "mint"
+              }
+            ],
+            "program": {
+              "kind": "const",
+              "value": [
+                140,
+                151,
+                37,
+                143,
+                78,
+                36,
+                137,
+                241,
+                187,
+                61,
+                16,
+                41,
+                20,
+                142,
+                13,
+                131,
+                11,
+                90,
+                19,
+                153,
+                218,
+                255,
+                16,
+                132,
+                4,
+                142,
+                123,
+                216,
+                219,
+                233,
+                248,
+                89
+              ]
+            }
+          }
+        },
+        {
+          "name": "creator_token_account",
+          "writable": true
+        },
+        {
+          "name": "token_program"
+        }
+      ],
+      "args": [
+        {
+          "name": "new_amount",
           "type": "u64"
         }
       ]
@@ -340,6 +695,72 @@
               }
             ]
           }
+        },
+        {
+          "name": "system_program",
+          "address": "11111111111111111111111111111111"
+        }
+      ],
+      "args": []
+    },
+    {
+      "name": "unlock_milestone",
+      "discriminator": [
+        131,
+        196,
+        6,
+        134,
+        153,
+        130,
+        248,
+        238
+      ],
+      "accounts": [
+        {
+          "name": "creator",
+          "writable": true,
+          "signer": true,
+          "relations": [
+            "stream"
+          ]
+        },
+        {
+          "name": "stream",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  115,
+                  116,
+                  114,
+                  101,
+                  97,
+                  109
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "stream.creator",
+                "account": "StreamAccount"
+              },
+              {
+                "kind": "account",
+                "path": "stream.recipient",
+                "account": "StreamAccount"
+              },
+              {
+                "kind": "account",
+                "path": "stream.nonce",
+                "account": "StreamAccount"
+              }
+            ]
+          }
+        },
+        {
+          "name": "milestone",
+          "writable": true
         },
         {
           "name": "system_program",
@@ -535,6 +956,19 @@
       ]
     },
     {
+      "name": "MilestoneAccount",
+      "discriminator": [
+        21,
+        222,
+        32,
+        140,
+        43,
+        166,
+        109,
+        19
+      ]
+    },
+    {
       "name": "StreamAccount",
       "discriminator": [
         243,
@@ -549,6 +983,58 @@
     }
   ],
   "events": [
+    {
+      "name": "CliffEdited",
+      "discriminator": [
+        143,
+        207,
+        9,
+        136,
+        149,
+        157,
+        201,
+        139
+      ]
+    },
+    {
+      "name": "LinearEdited",
+      "discriminator": [
+        94,
+        168,
+        133,
+        235,
+        122,
+        111,
+        156,
+        155
+      ]
+    },
+    {
+      "name": "MilestoneEdited",
+      "discriminator": [
+        178,
+        220,
+        80,
+        222,
+        55,
+        97,
+        104,
+        50
+      ]
+    },
+    {
+      "name": "MilestoneUnlocked",
+      "discriminator": [
+        234,
+        55,
+        24,
+        33,
+        42,
+        152,
+        104,
+        241
+      ]
+    },
     {
       "name": "StreamCreated",
       "discriminator": [
@@ -691,9 +1177,93 @@
       "code": 6022,
       "name": "InvalidFeeReceiver",
       "msg": "Invalid fee receiver account"
+    },
+    {
+      "code": 6023,
+      "name": "AlreadyCancelled",
+      "msg": "Already cancelled"
+    },
+    {
+      "code": 6024,
+      "name": "FullyVested",
+      "msg": "Fully vested"
+    },
+    {
+      "code": 6025,
+      "name": "StreamExpired",
+      "msg": "Stream expired"
+    },
+    {
+      "code": 6026,
+      "name": "MilestoneAlreadyUnlocked",
+      "msg": "Milestone already unlocked"
+    },
+    {
+      "code": 6027,
+      "name": "InvalidVestingType",
+      "msg": "Invalid vesting type"
+    },
+    {
+      "code": 6028,
+      "name": "InvalidMilestoneCount",
+      "msg": "Invalid milestone count"
+    },
+    {
+      "code": 6029,
+      "name": "InvalidMilestonePda",
+      "msg": "Invalid milestone PDA"
+    },
+    {
+      "code": 6030,
+      "name": "InvalidMilestoneAmount",
+      "msg": "Invalid milestone amount"
+    },
+    {
+      "code": 6031,
+      "name": "PreviousMilestoneNotApproved",
+      "msg": "Previous milestone not approved"
+    },
+    {
+      "code": 6032,
+      "name": "InvalidMilestoneOrder",
+      "msg": "Invalid milestone order"
+    },
+    {
+      "code": 6033,
+      "name": "PreviousMilestoneMissing",
+      "msg": "Previous milestone missing"
+    },
+    {
+      "code": 6034,
+      "name": "StreamAlreadyStarted",
+      "msg": "Stream already started and cannot be modified"
     }
   ],
   "types": [
+    {
+      "name": "CliffEdited",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "stream",
+            "type": "pubkey"
+          },
+          {
+            "name": "old_cliff_ts",
+            "type": "i64"
+          },
+          {
+            "name": "new_cliff_ts",
+            "type": "i64"
+          },
+          {
+            "name": "timestamp",
+            "type": "i64"
+          }
+        ]
+      }
+    },
     {
       "name": "ConfigAccount",
       "type": {
@@ -742,6 +1312,150 @@
           {
             "name": "bump",
             "type": "u8"
+          }
+        ]
+      }
+    },
+    {
+      "name": "LinearEdited",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "stream",
+            "type": "pubkey"
+          },
+          {
+            "name": "old_end_ts",
+            "type": "i64"
+          },
+          {
+            "name": "new_end_ts",
+            "type": "i64"
+          },
+          {
+            "name": "old_total_amount",
+            "type": "u64"
+          },
+          {
+            "name": "new_total_amount",
+            "type": "u64"
+          },
+          {
+            "name": "topup_amount",
+            "type": "u64"
+          },
+          {
+            "name": "timestamp",
+            "type": "i64"
+          }
+        ]
+      }
+    },
+    {
+      "name": "MilestoneAccount",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "stream",
+            "type": "pubkey"
+          },
+          {
+            "name": "index",
+            "type": "u8"
+          },
+          {
+            "name": "unlock_ts",
+            "type": "i64"
+          },
+          {
+            "name": "amount",
+            "type": "u64"
+          },
+          {
+            "name": "approved",
+            "type": "bool"
+          },
+          {
+            "name": "unlocked",
+            "type": "bool"
+          },
+          {
+            "name": "bump",
+            "type": "u8"
+          }
+        ]
+      }
+    },
+    {
+      "name": "MilestoneEdited",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "stream",
+            "type": "pubkey"
+          },
+          {
+            "name": "milestone",
+            "type": "pubkey"
+          },
+          {
+            "name": "index",
+            "type": "u8"
+          },
+          {
+            "name": "old_amount",
+            "type": "u64"
+          },
+          {
+            "name": "new_amount",
+            "type": "u64"
+          },
+          {
+            "name": "timestamp",
+            "type": "i64"
+          }
+        ]
+      }
+    },
+    {
+      "name": "MilestoneInput",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "amount",
+            "type": "u64"
+          }
+        ]
+      }
+    },
+    {
+      "name": "MilestoneUnlocked",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "stream",
+            "type": "pubkey"
+          },
+          {
+            "name": "milestone",
+            "type": "pubkey"
+          },
+          {
+            "name": "index",
+            "type": "u8"
+          },
+          {
+            "name": "amount",
+            "type": "u64"
+          },
+          {
+            "name": "unlock_ts",
+            "type": "i64"
           }
         ]
       }
@@ -820,12 +1534,24 @@
             "type": "u8"
           },
           {
+            "name": "next_milestone_index",
+            "type": "u8"
+          },
+          {
+            "name": "cancelled",
+            "type": "bool"
+          },
+          {
             "name": "nonce",
             "type": "u64"
           },
           {
             "name": "bump",
             "type": "u8"
+          },
+          {
+            "name": "unlocked_milestone_amount",
+            "type": "u64"
           }
         ]
       }
@@ -860,12 +1586,28 @@
             "type": "u64"
           },
           {
+            "name": "vesting_type",
+            "type": "u8"
+          },
+          {
             "name": "start_ts",
+            "type": "i64"
+          },
+          {
+            "name": "cliff_ts",
             "type": "i64"
           },
           {
             "name": "end_ts",
             "type": "i64"
+          },
+          {
+            "name": "milestone_count",
+            "type": "u8"
+          },
+          {
+            "name": "cancelable",
+            "type": "bool"
           },
           {
             "name": "nonce",
