@@ -8,7 +8,6 @@ import {
   Terminal, 
   Cpu, 
   Globe, 
-  ChevronRight, 
   Copy, 
   Check, 
   ArrowLeft, 
@@ -558,10 +557,14 @@ export default function DocsPage() {
                 Our code has native supports for Model Context Protocol. AI Agents can instantly connect and execute complex operations for you securely.
               </p>
               <div className="mt-4">
-                <span className="text-3xs uppercase tracking-wider font-semibold text-indigo-300 block mb-1">Backend Spec File</span>
-                <code className="font-mono text-3xs text-zinc-400 break-all bg-black/40 px-2 py-1.5 rounded block border border-zinc-800">
-                  backend/agent_skills.md
-                </code>
+                <span className="text-3xs uppercase tracking-wider font-semibold text-indigo-300 block mb-1">Skills Route</span>
+                <Link
+                  href="/skills"
+                  className="inline-flex items-center gap-2 font-mono text-3xs text-zinc-200 bg-black/40 px-2 py-1.5 rounded border border-zinc-800 hover:border-indigo-500/40 hover:text-white transition-colors"
+                >
+                  <BookOpen className="w-3 h-3 text-indigo-400" />
+                  /skills
+                </Link>
               </div>
             </div>
 
