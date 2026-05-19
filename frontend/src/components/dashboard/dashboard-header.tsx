@@ -1,8 +1,6 @@
-"use client";
-
 import Link from "next/link";
 import { BookOpen, Sparkles } from "lucide-react";
-import { WalletPickerButton } from "@/components/wallet/wallet-picker-button";
+import { DashboardHeaderWallet } from "@/components/dashboard/dashboard-header-wallet";
 
 export function DashboardHeader() {
   return (
@@ -27,7 +25,7 @@ export function DashboardHeader() {
           <BookOpen className="w-3.5 h-3.5" />
           Developer Docs
         </Link>
-        <WalletPickerButton />
+        <DashboardHeaderWallet />
       </div>
     </header>
   );
