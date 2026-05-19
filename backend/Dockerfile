@@ -24,7 +24,8 @@ COPY package.json package-lock.json tsconfig.json prisma.config.ts ./
 COPY prisma ./prisma
 COPY src ./src
 
-RUN npx prisma generate --schema=prisma/schema.prisma
+RUN DATABASE_URL="postgresql://user:pass@localhost:5432/db" \
+    npx prisma generate --schema=prisma/schema.prisma
 RUN npm run build
 
 # ---------- Stage 3: runner ----------
