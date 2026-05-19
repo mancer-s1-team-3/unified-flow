@@ -14,7 +14,7 @@ async function readSkillDoc() {
       const content = await fs.readFile(filePath, "utf8");
       return { content };
     } catch {
-      // Try the next known location.
+      // Try the next known location
     }
   }
 
