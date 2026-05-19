@@ -52,7 +52,7 @@ export default function RootLayout({
         <meta name="twitter:card" content="summary_large_image" />
         <meta name="twitter:title" content={siteName} />
         <meta name="twitter:description" content={siteDescription} />
-        <meta name="application-name" content="Mancer Flow" />
+        <meta name="application-name" content="Unified Flow" />
         <meta name="apple-mobile-web-app-capable" content="yes" />
         <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
         <meta name="theme-color" content="#0b1120" />
