@@ -1,6 +1,6 @@
 {
-  "name": "Mancer Flow",
-  "short_name": "Mancer",
+  "name": "Unified Flow",
+  "short_name": "Unified Flow",
   "description": "Token distribution, vesting, and stream management dashboard.",
   "start_url": "/",
   "scope": "/",
