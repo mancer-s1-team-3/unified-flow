@@ -59,7 +59,7 @@ const API_ENDPOINTS = [
   "withdrawn": "25000000",
   "startTs": "1789045600",
   "cliffTs": "1789045600",
-  "endTs": "1791637600",
+  "endTs": "1791637601",
   "vestingType": 0,
   "status": 1,
   "createdAt": "2026-05-17T05:10:00.000Z"
