@@ -1,31 +1,22 @@
-"use client";
+import DashboardHomeClient from "@/components/dashboard/dashboard-home-client";
+import { DashboardHeader } from "@/components/dashboard/dashboard-header";
+import { DashboardFooter } from "@/components/dashboard/dashboard-footer";
 
-import {
-  WalletMultiButton,
-} from "@solana/wallet-adapter-react-ui";
+export const metadata = {
+  title: "Unified Flow | Solana Token Vesting Dashboard",
+  description:
+    "Monitor, create, and manage linear, cliff, and milestone vesting streams on Solana with a real-time dashboard, CSV bulk tools, CLI, and MCP support.",
+  alternates: {
+    canonical: "/",
+  },
+};
 
-import Link from "next/link";
-
-export default function Home() {
+export default function HomePage() {
   return (
-    <main className="p-10">
-      <div className="flex justify-between">
-        <h1 className="text-4xl font-bold">
-          Unified Flow
-        </h1>
-
-        <WalletMultiButton />
-      </div>
-
-      <div className="mt-10 flex gap-4">
-        <Link href="/streams">
-          View Streams
-        </Link>
-
-        <Link href="/create">
-          Create Stream
-        </Link>
-      </div>
-    </main>
+    <div className="min-h-screen bg-zinc-950 text-zinc-50">
+      <DashboardHeader />
+      <DashboardHomeClient />
+      <DashboardFooter />
+    </div>
   );
 }

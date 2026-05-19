@@ -20,7 +20,7 @@ Core program instructions currently scaffolded:
 
 The `create_stream` instruction initializes a new token vesting stream and locks SPL tokens into a program-controlled vault account.
 
-Current implementation supports linear vesting streams.
+Current implementation supports linear, cliff, and milestone vesting streams.
 
 ### Parameters
 
@@ -28,7 +28,10 @@ Current implementation supports linear vesting streams.
 | --- | --- | --- |
 | `amount` | `u64` | Total token amount locked into the stream |
 | `start_ts` | `i64` | Vesting start timestamp (Unix timestamp) |
+| `cliff_ts` | `i64` | Cliff unlock timestamp. For linear streams this should match `start_ts`. For cliff streams it must be between `start_ts` and `end_ts`. For milestone streams it is stored but not used by the unlock logic. |
 | `end_ts` | `i64` | Vesting end timestamp (Unix timestamp) |
+| `vesting_type` | `u8` | Vesting model: `0` = linear, `1` = cliff, `2` = milestone |
+| `milestones` | `Vec<MilestoneInput>` | Ordered milestone allocations. Required for milestone streams, must be empty for linear and cliff streams |
 | `nonce` | `u64` | Unique nonce used for PDA derivation |
 
 ### PDA Structure
@@ -43,6 +46,28 @@ The stream account PDA is derived using:
   nonce
 ]
 ```
+
+### Vesting Rules
+
+- Linear streams require `milestones = []` and validate `start_ts >= now`, `end_ts > now`, `end_ts > start_ts`, and `cliff_ts >= start_ts`.
+- Cliff streams require `milestones = []` and the same base timing checks as linear streams, plus `cliff_ts <= end_ts`.
+- Milestone streams require at least one milestone, a matching `remainingAccounts` entry for each milestone PDA, and the milestone amounts must sum exactly to `amount`.
+- Milestone amounts must all be greater than zero.
+- Milestone count is capped at `255` entries because the on-chain account stores the count as `u8`.
+
+### Milestone PDA Structure
+
+For milestone streams, each milestone account PDA is derived using:
+
+```text
+[
+  "milestone",
+  stream,
+  milestone_index
+]
+```
+
+Milestones must be passed in order starting from index `0`.
 ## `withdraw` Instruction
 
 The `withdraw` instruction allows the stream recipient to claim tokens that have already vested. Tokens unlock linearly over time — the recipient can call `withdraw` at any point after vesting begins and receive whatever portion has unlocked since the last claim.

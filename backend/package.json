@@ -8,10 +8,13 @@
     "dev": "nodemon src/index.ts",
     "test:create-stream": "ts-node src/scripts/createStream.ts",
     "init-config": "ts-node src/scripts/initConfig.ts",
+    "mcp": "ts-node src/api/mcpServer.ts",
+    "cli": "ts-node src/api/cli.ts",
     "build": "tsc"
   },
   "dependencies": {
     "@coral-xyz/anchor": "^0.32.1",
+    "@modelcontextprotocol/sdk": "^1.29.0",
     "@prisma/adapter-pg": "^7.8.0",
     "@prisma/client": "^7.8.0",
     "@solana/spl-token": "^0.4.14",
@@ -21,7 +24,8 @@
     "dotenv": "^16.6.1",
     "express": "^4.22.2",
     "pg": "^8.20.0",
-    "prisma": "^7.8.0"
+    "prisma": "^7.8.0",
+    "zod": "^4.4.3"
   },
   "devDependencies": {
     "@types/cors": "^2.8.17",
