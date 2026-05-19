@@ -302,7 +302,7 @@ async function main() {
 
                 recipient.publicKey.toBuffer(),
 
-                streamConfig.endTs.toArrayLike(
+                nonce.toArrayLike(
                     Buffer,
                     "le",
                     8
