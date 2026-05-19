@@ -2,7 +2,7 @@ import dotenv from "dotenv";
 import { PublicKey } from "@solana/web3.js";
 import { connection } from "./rpc";
 import prisma from "../db/prisma";
-import { eventParser } from "./eventParser";
+import { parseEventsSafely } from "./eventParser";
 
 dotenv.config();
 
@@ -60,10 +60,7 @@ export async function backfill() {
                 // =========================
                 // PARSE EVENTS
                 // =========================
-                const events = [];
-                for (const event of eventParser.parseLogs(logs)) {
-                    events.push(event);
-                }
+                const events = parseEventsSafely(logs);
 
                 // =========================
                 // HANDLE EVENTS
