@@ -6,21 +6,26 @@ import {
 } from "@solana/wallet-adapter-react";
 
 import {
-  WalletModalProvider,
-} from "@solana/wallet-adapter-react-ui";
+  PhantomWalletAdapter,
+} from "@solana/wallet-adapter-phantom";
 
 import {
-  PhantomWalletAdapter,
-} from "@solana/wallet-adapter-wallets";
+  SolflareWalletAdapter,
+} from "@solana/wallet-adapter-solflare";
+
+import {
+  WalletAdapterNetwork,
+} from "@solana/wallet-adapter-base";
+
+import {
+  WalletConnectWalletAdapter,
+} from "@walletconnect/solana-adapter";
 
 
 
 import {
   useMemo,
 } from "react";
-
-// src/app/layout.tsx
-import "@solana/wallet-adapter-react-ui/styles.css";
 
 export function Providers({
   children,
@@ -34,6 +39,17 @@ export function Providers({
   const wallets = useMemo(
     () => [
       new PhantomWalletAdapter(),
+      new SolflareWalletAdapter({ network: WalletAdapterNetwork.Devnet }),
+      ...(process.env.NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID
+        ? [
+            new WalletConnectWalletAdapter({
+              network: WalletAdapterNetwork.Devnet,
+              options: {
+                projectId: process.env.NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID,
+              },
+            }),
+          ]
+        : []),
     ],
     []
   );
@@ -46,9 +62,7 @@ export function Providers({
         wallets={wallets}
         autoConnect
       >
-        <WalletModalProvider>
-          {children}
-        </WalletModalProvider>
+        {children}
       </WalletProvider>
     </ConnectionProvider>
   );

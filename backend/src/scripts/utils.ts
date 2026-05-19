@@ -1,15 +1,12 @@
 import {
-    Connection,
     Keypair,
     PublicKey,
 } from "@solana/web3.js";
 
 import fs from "fs";
+import { connection } from "../services/rpc";
 
-export const connection = new Connection(
-    "https://api.devnet.solana.com",
-    "confirmed"
-);
+export { connection };
 
 export function loadWallet(
     path: string
