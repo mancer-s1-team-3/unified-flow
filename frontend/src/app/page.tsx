@@ -1,6 +1,6 @@
-import DashboardHomeClient from "@/components/dashboard/dashboard-home-client";
 import { DashboardHeader } from "@/components/dashboard/dashboard-header";
 import { DashboardFooter } from "@/components/dashboard/dashboard-footer";
+import DashboardHomeClient from "@/components/dashboard/dashboard-home-client";
 
 export const metadata = {
   title: "Unified Flow | Solana Token Vesting Dashboard",
@@ -13,7 +13,7 @@ export const metadata = {
 
 export default function HomePage() {
   return (
-    <div className="min-h-screen bg-zinc-950 text-zinc-50">
+      <div className="min-h-screen bg-zinc-950 text-zinc-50">
       <DashboardHeader />
       <DashboardHomeClient />
       <DashboardFooter />

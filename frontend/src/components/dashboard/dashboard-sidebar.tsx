@@ -1,5 +1,6 @@
 "use client";
 
+import { memo } from "react";
 import type { ReactNode } from "react";
 import { ArrowDownRight, Clock, FileText, Layers, PlusCircle, Settings, Shield, Unlock, XCircle } from "lucide-react";
 import type { TabId } from "./types";
@@ -44,7 +45,7 @@ function TabButton({
   );
 }
 
-export function DashboardSidebar({
+export const DashboardSidebar = memo(function DashboardSidebar({
   activeTab,
   setActiveTab,
   streamsCount,
@@ -125,4 +126,4 @@ export function DashboardSidebar({
       />
     </aside>
   );
-}
+});
