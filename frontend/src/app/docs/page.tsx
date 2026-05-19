@@ -1,7 +1,8 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { 
   BookOpen, 
   Terminal, 
@@ -166,7 +167,22 @@ const CodeSnippet = ({ code }: { code: string }) => {
 // MAIN PAGE COMPONENT
 // ============================================================================
 export default function DocsPage() {
+  const router = useRouter();
   const [activeTab, setActiveTab] = useState<"overview" | "api" | "mcp" | "cli">("overview");
+
+  useEffect(() => {
+    const resetView = () => {
+      setActiveTab("overview");
+      window.scrollTo({ top: 0, left: 0, behavior: "auto" });
+    };
+
+    resetView();
+
+    const handlePageShow = () => resetView();
+    window.addEventListener("pageshow", handlePageShow);
+
+    return () => window.removeEventListener("pageshow", handlePageShow);
+  }, []);
 
   return (
     <div className="min-h-screen bg-zinc-950 text-zinc-50 font-sans selection:bg-indigo-500/30 selection:text-indigo-200">
@@ -179,13 +195,14 @@ export default function DocsPage() {
         
         {/* BACK TO APP */}
         <div className="mb-8">
-          <Link 
-            href="/" 
+          <button
+            type="button"
+            onClick={() => router.push("/")}
             className="inline-flex items-center gap-2 text-zinc-400 hover:text-indigo-400 font-medium text-sm transition-colors group"
           >
             <ArrowLeft className="w-4 h-4 group-hover:-translate-x-1 transition-transform" />
             Back to App Dashboard
-          </Link>
+          </button>
         </div>
 
         {/* HERO TITLE */}
@@ -395,21 +412,26 @@ export default function DocsPage() {
                   <CodeSnippet code={`{
   "mcpServers": {
     "solana-distribution-mcp": {
-      "command": "node",
+      "command": "npm",
       "args": [
-        "/Users/iqbalfachry/kode/mancer/token-distribution/backend/node_modules/.bin/ts-node",
-        "/Users/iqbalfachry/kode/mancer/token-distribution/backend/src/api/mcpServer.ts"
+        "--prefix",
+        "<ABSOLUTE_PATH_TO_BACKEND>",
+        "run",
+        "mcp"
       ],
       "env": {
-        "RPC_HTTP": "https://api.devnet.solana.com",
-        "RPC_WS": "wss://api.devnet.solana.com",
-        "PROGRAM_ID": "8M5yieUh7pxwUi1YBByDF82nqoorZwaKi8dBoMVpurFa",
-        "DATABASE_URL": "postgresql://postgres:postgres@localhost:5432/streaming",
-        "WALLET_PATH": "/Users/iqbalfachry/.config/solana/id.json"
+        "RPC_HTTP": "<YOUR_RPC_HTTP>",
+        "RPC_WS": "<YOUR_RPC_WS>",
+        "PROGRAM_ID": "<YOUR_PROGRAM_ID>",
+        "DATABASE_URL": "<YOUR_DATABASE_URL>",
+        "WALLET_PATH": "<YOUR_WALLET_PATH>"
       }
     }
   }
 }`} />
+                  <p className="mt-3 text-xs text-zinc-500 leading-relaxed">
+                    Replace the placeholders with your local values. Keep secrets in your local environment or `.env` file, not in docs.
+                  </p>
                 </div>
 
                 {/* EXPOSED MCP TOOLS */}
