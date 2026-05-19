@@ -1,0 +1,18 @@
+services:
+  backend:
+    image: ghcr.io/mancer-s1-team-3/unified-flow-backend:${IMAGE_TAG:-latest}
+    container_name: unified-flow-backend
+    restart: unless-stopped
+    pull_policy: always
+    env_file:
+      - .env
+    ports:
+      - "3000:3000"
+    volumes:
+      - ${WALLET_HOST_PATH:-./secrets/id.json}:${WALLET_PATH:-/app/secrets/id.json}:ro
+    networks:
+      - shared
+
+networks:
+  shared:
+    external: true
