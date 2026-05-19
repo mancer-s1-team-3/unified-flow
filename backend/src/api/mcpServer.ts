@@ -21,7 +21,7 @@ import path from "path";
 
 import prisma from "../db/prisma";
 import { connection } from "../services/rpc";
-import idl from "../../../target/idl/solana_program.json";
+import idl from "../idl/solana_program.json";
 
 dotenv.config();
 

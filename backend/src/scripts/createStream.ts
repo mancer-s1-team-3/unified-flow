@@ -19,7 +19,7 @@ import {
 import fs from "fs";
 
 import { connection } from "../services/rpc";
-import idl from "../../../target/idl/solana_program.json";
+import idl from "../idl/solana_program.json";
 
 // =====================================================
 // CONFIG
