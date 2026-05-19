@@ -10,6 +10,7 @@
     "init-config": "ts-node src/scripts/initConfig.ts",
     "mcp": "ts-node src/api/mcpServer.ts",
     "cli": "ts-node src/api/cli.ts",
+    "sync-idl": "node -e \"require('fs').copyFileSync('../target/idl/solana_program.json','src/idl/solana_program.json')\"",
     "build": "tsc"
   },
   "dependencies": {
