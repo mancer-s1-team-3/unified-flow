@@ -29,6 +29,23 @@ const PROGRAM_ID = new PublicKey(
     "8M5yieUh7pxwUi1YBByDF82nqoorZwaKi8dBoMVpurFa"
 );
 
+const DEFAULT_AMOUNT = new anchor.BN(500_000_000);
+const DEFAULT_LINEAR_DURATION = 3600;
+const DEFAULT_CLIFF_DELAY = 900;
+const DEFAULT_CLIFF_DURATION = 3600;
+const DEFAULT_MILESTONE_DURATION = 7200;
+
+type StreamMode = "linear" | "cliff" | "milestone";
+
+type StreamConfig = {
+    vestingType: number;
+    amount: anchor.BN;
+    startTs: anchor.BN;
+    cliffTs: anchor.BN;
+    endTs: anchor.BN;
+    milestoneInputs: { amount: anchor.BN }[];
+};
+
 // =====================================================
 // LOAD WALLET
 // =====================================================
@@ -43,11 +60,108 @@ function loadWallet(path: string) {
     );
 }
 
+function parseMode(raw: string | undefined): StreamMode {
+    const value = (raw || "linear").toLowerCase();
+
+    if (value === "0") return "linear";
+    if (value === "1") return "cliff";
+    if (value === "2") return "milestone";
+    if (value === "linear" || value === "cliff" || value === "milestone") return value;
+
+    throw new Error(`Unknown mode "${raw}". Use linear, cliff, milestone, 0, 1, or 2.`);
+}
+
+function parseAmount(value: string | undefined, fallback: anchor.BN): anchor.BN {
+    return new anchor.BN(value ?? fallback.toString());
+}
+
+function parseMilestones(csv: string | undefined): anchor.BN[] {
+    const raw = csv || "150000000,150000000,200000000";
+    const parts = raw
+        .split(",")
+        .map((value) => value.trim())
+        .filter(Boolean);
+
+    if (parts.length === 0) {
+        throw new Error("Milestone stream requires at least one milestone amount.");
+    }
+
+    return parts.map((value) => new anchor.BN(value));
+}
+
+function sumAmounts(values: anchor.BN[]): anchor.BN {
+    return values.reduce((sum, value) => sum.add(value), new anchor.BN(0));
+}
+
+function buildStreamConfig(mode: StreamMode, args: string[]): StreamConfig {
+    const now = Math.floor(Date.now() / 1000);
+    const startTs = new anchor.BN(now + 10);
+
+    if (mode === "linear") {
+        const durationSecs = Number(args[0] || DEFAULT_LINEAR_DURATION);
+        const amount = parseAmount(args[1], DEFAULT_AMOUNT);
+        const endTs = new anchor.BN(startTs.toNumber() + durationSecs);
+
+        return {
+            vestingType: 0,
+            amount,
+            startTs,
+            cliffTs: startTs,
+            endTs,
+            milestoneInputs: [],
+        };
+    }
+
+    if (mode === "cliff") {
+        const cliffDelaySecs = Number(args[0] || DEFAULT_CLIFF_DELAY);
+        const durationSecs = Number(args[1] || DEFAULT_CLIFF_DURATION);
+        const amount = parseAmount(args[2], DEFAULT_AMOUNT);
+
+        const endTs = new anchor.BN(startTs.toNumber() + durationSecs);
+        const cliffTs = new anchor.BN(startTs.toNumber() + cliffDelaySecs);
+
+        return {
+            vestingType: 1,
+            amount,
+            startTs,
+            cliffTs,
+            endTs,
+            milestoneInputs: [],
+        };
+    }
+
+    const milestoneAmounts = parseMilestones(args[0]);
+    const amount = args[1]
+        ? new anchor.BN(args[1])
+        : sumAmounts(milestoneAmounts);
+    const totalMilestoneAmount = sumAmounts(milestoneAmounts);
+
+    if (!amount.eq(totalMilestoneAmount)) {
+        throw new Error(
+            `Milestone total ${totalMilestoneAmount.toString()} must equal stream amount ${amount.toString()}.`
+        );
+    }
+
+    return {
+        vestingType: 2,
+        amount,
+        startTs,
+        cliffTs: startTs,
+        endTs: new anchor.BN(startTs.toNumber() + DEFAULT_MILESTONE_DURATION),
+        milestoneInputs: milestoneAmounts.map((milestoneAmount) => ({
+            amount: milestoneAmount,
+        })),
+    };
+}
+
 // =====================================================
 // MAIN
 // =====================================================
 
 async function main() {
+    const [modeArg, ...args] = process.argv.slice(2);
+    const mode = parseMode(modeArg);
+
     // =====================================================
     // WALLET
     // =====================================================
@@ -59,6 +173,10 @@ async function main() {
 
     const recipient = Keypair.generate();
 
+    const nonce = new anchor.BN(Date.now());
+
+    console.log("Mode:", mode);
+    console.log("Nonce:", nonce.toString());
     console.log(
         "Creator:",
         creator.publicKey.toBase58()
@@ -158,24 +276,22 @@ async function main() {
     // MINT TOKENS
     // =====================================================
 
+    const streamConfig = buildStreamConfig(mode, args);
+
     await mintTo(
         connection,
         creator,
         mint,
         creatorAta.address,
         creator,
-        1_000_000_000
+        Number(streamConfig.amount.toString())
     );
 
-    console.log("Minted tokens");
+    console.log("Minted tokens:", streamConfig.amount.toString());
 
     // =====================================================
     // STREAM PDA
     // =====================================================
-
-    const nonce = new anchor.BN(
-        Date.now()
-    );
 
     const [streamPda] =
         PublicKey.findProgramAddressSync(
@@ -186,7 +302,7 @@ async function main() {
 
                 recipient.publicKey.toBuffer(),
 
-                nonce.toArrayLike(
+                streamConfig.endTs.toArrayLike(
                     Buffer,
                     "le",
                     8
@@ -220,37 +336,34 @@ async function main() {
     // STREAM PARAMS
     // =====================================================
 
-    const now = Math.floor(
-        Date.now() / 1000
-    );
+    console.log("Stream config:", {
+        vestingType: streamConfig.vestingType,
+        amount: streamConfig.amount.toString(),
+        startTs: streamConfig.startTs.toString(),
+        cliffTs: streamConfig.cliffTs.toString(),
+        endTs: streamConfig.endTs.toString(),
+        milestoneInputs: streamConfig.milestoneInputs.map((m) => m.amount.toString()),
+    });
 
-    const startTs =
-        new anchor.BN(now);
+    const remainingAccounts =
+            streamConfig.vestingType === 2
+            ? streamConfig.milestoneInputs.map((_, index) => {
+                const [milestonePda] = PublicKey.findProgramAddressSync(
+                    [
+                        Buffer.from("milestone"),
+                        streamPda.toBuffer(),
+                        Buffer.from([index]),
+                    ],
+                    PROGRAM_ID
+                );
 
-    const endTs = new anchor.BN(
-        now + 3600
-    );
-
-    const totalAmount =
-        new anchor.BN(500_000_000);
-
-    // =====================================================
-    // DEBUG IDL
-    // =====================================================
-
-    const instruction =
-        program.idl.instructions.find(
-            (x) => x.name === "createStream"
-        );
-
-    console.log(
-        "Instruction:",
-        JSON.stringify(
-            instruction,
-            null,
-            2
-        )
-    );
+                return {
+                    pubkey: milestonePda,
+                    isWritable: true,
+                    isSigner: false,
+                };
+            })
+            : [];
 
     // =====================================================
     // CREATE STREAM
@@ -258,9 +371,12 @@ async function main() {
 
     const tx = await program.methods
         .createStream(
-            totalAmount,
-            startTs,
-            endTs,
+            streamConfig.amount,
+            streamConfig.startTs,
+            streamConfig.cliffTs,
+            streamConfig.endTs,
+            streamConfig.vestingType,
+            streamConfig.milestoneInputs,
             nonce
         )
         .accounts({
@@ -280,20 +396,16 @@ async function main() {
             creatorTokenAccount:
                 creatorAta.address,
 
-            recipientTokenAccount:
-                recipientAta.address,
-
             tokenProgram:
                 TOKEN_PROGRAM_ID,
 
             associatedTokenProgram:
                 ASSOCIATED_TOKEN_PROGRAM_ID,
 
-            rent: SYSVAR_RENT_PUBKEY,
-
             systemProgram:
                 SystemProgram.programId,
         })
+        .remainingAccounts(remainingAccounts)
         .signers([creator])
         .rpc();
 
@@ -311,11 +423,17 @@ async function main() {
 main().catch((err) => {
     console.error(err);
 
-    if ("logs" in err) {
+    if (err instanceof Error) {
+        console.error(err.message);
+    }
+
+    if ("logs" in (err as any)) {
         console.log(
             "Transaction Logs:"
         );
 
-        console.log(err.logs);
+        console.log((err as any).logs);
     }
+
+    process.exit(1);
 });

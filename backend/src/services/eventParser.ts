@@ -15,3 +15,18 @@ export const eventParser =
         PROGRAM_ID,
         coder
     );
+
+export function parseEventsSafely(logs: string[]) {
+    const events: Array<{ name: string; data: any }> = [];
+
+    try {
+        for (const event of eventParser.parseLogs(logs)) {
+            events.push(event);
+        }
+    } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        console.warn("Skipping unparsable program logs:", message);
+    }
+
+    return events;
+}

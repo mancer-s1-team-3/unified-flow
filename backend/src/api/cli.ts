@@ -246,7 +246,7 @@ ${C_BLUE}${C_BOLD}🌊 Vesting Stream Details:${C_RESET}
                         Buffer.from("stream"),
                         signer.publicKey.toBuffer(),
                         recipientPubkey.toBuffer(),
-                        finalNonce.toArrayLike(Buffer, "le", 8),
+                        new anchor.BN(endTs).toArrayLike(Buffer, "le", 8),
                     ],
                     PROGRAM_ID
                 );
