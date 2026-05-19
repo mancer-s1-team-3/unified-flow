@@ -1,28 +1,36 @@
-import fs from "node:fs/promises";
-import path from "node:path";
 import Link from "next/link";
 import { ArrowLeft, BookOpen, FileText, Shield, Sparkles } from "lucide-react";
 
-async function readSkillDoc() {
-  const candidates = [
-    path.resolve(process.cwd(), "..", "backend", "skill.md"),
-    path.resolve(process.cwd(), "backend", "skill.md"),
-  ];
+type SkillPayload = {
+  content: string;
+  source?: string;
+};
 
-  for (const filePath of candidates) {
-    try {
-      const content = await fs.readFile(filePath, "utf8");
-      return { content };
-    } catch {
-      // Try the next known location
+async function fetchSkillDoc(): Promise<SkillPayload> {
+  const baseUrl = process.env.NEXT_PUBLIC_API || process.env.API_URL || "http://localhost:3000";
+
+  try {
+    const res = await fetch(new URL("/skills", baseUrl).toString(), {
+      cache: "no-store",
+    });
+
+    if (!res.ok) {
+      throw new Error(`Skills endpoint returned ${res.status}`);
     }
-  }
 
-  throw new Error("Unable to read backend/skill.md from the workspace.");
+    return await res.json();
+  } catch {
+    return {
+      content:
+        "Unable to load backend skill documentation. Set NEXT_PUBLIC_API to your backend base URL and ensure GET /skills is available.",
+      source: "backend/skill.md",
+    };
+  }
 }
 
 export default async function SkillsPage() {
-  const { content } = await readSkillDoc();
+  const { content, source } = await fetchSkillDoc();
+  const isFallback = content.startsWith("Unable to load backend skill documentation.");
 
   return (
     <main className="min-h-screen bg-zinc-950 text-zinc-50 relative overflow-hidden">
@@ -54,24 +62,24 @@ export default async function SkillsPage() {
               <div>
                 <div className="inline-flex items-center gap-2 rounded-full border border-indigo-500/20 bg-indigo-500/10 px-3 py-1 text-[11px] font-semibold text-indigo-300 mb-3">
                   <Sparkles className="w-3.5 h-3.5" />
-                  Live skill route
+                  Backend-powered skill route
                 </div>
                 <h1 className="text-3xl font-black tracking-tight">AI Agent Skills</h1>
                 <p className="mt-2 text-sm text-zinc-400">
-                  Rendered directly from the backend skill specification so the frontend always shows the latest agent capabilities.
+                  Rendered from the backend API so the frontend always shows the latest agent capabilities.
                 </p>
               </div>
 
               <div className="hidden sm:flex items-center gap-2 rounded-2xl border border-zinc-800 bg-zinc-950/60 px-4 py-3 text-xs text-zinc-400">
                 <FileText className="w-4 h-4 text-indigo-400" />
-                <span className="font-mono">backend/skill.md</span>
+                <span className="font-mono">{source || "backend/skill.md"}</span>
               </div>
             </div>
 
             <div className="px-6 py-5 border-b border-zinc-800/70 text-xs text-zinc-500 flex flex-wrap gap-x-6 gap-y-2">
-              <span>Source: <span className="font-mono text-zinc-300">backend/skill.md</span></span>
+              <span>Source: <span className="font-mono text-zinc-300">{source || "backend/skill.md"}</span></span>
               <span>Format: Markdown</span>
-              <span>No env values exposed</span>
+              <span>{isFallback ? "Fallback content shown" : "Loaded from backend API"}</span>
             </div>
 
             <div className="max-h-[72vh] overflow-auto p-6">
@@ -88,9 +96,9 @@ export default async function SkillsPage() {
                 Route Notes
               </h2>
               <ul className="mt-4 space-y-3 text-sm text-zinc-400 leading-relaxed list-disc list-inside">
-                <li>Reads the markdown file from the backend workspace at request time.</li>
-                <li>Does not render secrets or environment variables.</li>
-                <li>Works as a dedicated route for quick agent capability review.</li>
+                <li>Fetches the markdown from `GET /skills` on the backend.</li>
+                <li>Does not read files directly from the frontend workspace anymore.</li>
+                <li>Falls back gracefully if the backend URL is not configured.</li>
               </ul>
             </div>
 
