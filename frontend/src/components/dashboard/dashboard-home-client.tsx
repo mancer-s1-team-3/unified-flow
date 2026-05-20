@@ -4,11 +4,14 @@ import dynamic from "next/dynamic";
 import { useState, useEffect, useRef, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import { api } from "@/lib/api";
+import { useClusterState, useWalletConnection } from "@solana/react-hooks";
 import { DashboardSidebar } from "@/components/dashboard/dashboard-sidebar";
 import { NotificationBanner } from "@/components/dashboard/notification-banner";
 import { StreamDetailsDrawer } from "@/components/dashboard/stream-details-drawer";
 import { DashboardStreamsPanel } from "@/components/dashboard/dashboard-streams-panel";
 import type { TabId } from "@/components/dashboard/types";
+import { createStreamOnChain } from "@/lib/solana/create-stream";
+import { withdrawFromStreamOnChain } from "@/lib/solana/withdraw";
 
 type Props = {
   initialStreams?: any[];
@@ -21,8 +24,12 @@ const DashboardActionPanels = dynamic(
 
 export default function Home({ initialStreams = [] }: Props) {
   const router = useRouter();
+  const { wallet, connected } = useWalletConnection();
+  const { endpoint } = useClusterState();
   const [activeTab, setActiveTab] = useState<TabId>("streams");
+  const [nowTs, setNowTs] = useState(() => Math.floor(Date.now() / 1000));
   const [streams, setStreams] = useState<any[]>(initialStreams);
+  const [filteredStreamsCount, setFilteredStreamsCount] = useState(initialStreams.length);
   const [loading, setLoading] = useState(initialStreams.length === 0);
   const [copiedId, setCopiedId] = useState<string | null>(null);
   
@@ -71,6 +78,7 @@ export default function Home({ initialStreams = [] }: Props) {
     type: "success" | "error" | "info" | null;
     message: string;
   }>({ type: null, message: "" });
+  const connectedWalletAddress = connected && wallet?.account.address ? String(wallet.account.address) : null;
 
   const showNotification = useCallback((type: "success" | "error" | "info", message: string) => {
     setNotification({ type, message });
@@ -204,6 +212,14 @@ export default function Home({ initialStreams = [] }: Props) {
     };
   }, []);
 
+  useEffect(() => {
+    const interval = setInterval(() => {
+      setNowTs(Math.floor(Date.now() / 1000));
+    }, 1000);
+
+    return () => clearInterval(interval);
+  }, []);
+
   const handleMilestoneCountChange = useCallback((val: string) => {
     setCreateForm((prev) => ({ ...prev, milestoneCount: val }));
 
@@ -307,7 +323,7 @@ export default function Home({ initialStreams = [] }: Props) {
 
   // Simulators / Submit Handlers
   const handleAction = async (actionName: string, data: any) => {
-    if (useMultisig) {
+    if (useMultisig && !["create_stream", "withdraw"].includes(actionName)) {
       showNotification("success", `Squads Multisig proposal created successfully! Redirecting you to Streams page...`);
       setTimeout(() => {
         router.push("/streams");
@@ -317,25 +333,58 @@ export default function Home({ initialStreams = [] }: Props) {
 
     // Direct Manual Deploy
     if (actionName === "create_stream") {
+      if (!wallet) {
+        showNotification("error", "Connect a Solana wallet before creating a stream.");
+        return;
+      }
+
       try {
-        let payload = { ...data };
-        if (data.type === "2") {
-          const sum = milestoneAmounts.reduce((acc, curr) => acc + Number(curr || 0), 0);
-          if (sum !== Number(data.amount)) {
-            showNotification("error", `Total milestone sum (${sum}) must exactly equal total amount (${data.amount})!`);
-            return;
-          }
-          payload = {
-            ...payload,
-            milestones: milestoneAmounts.map(amt => ({ amount: amt }))
-          };
-        }
-        await api.post("/streams", payload);
-        showNotification("success", `Vesting stream deployed and indexed successfully!`);
+        const result = await createStreamOnChain({
+          wallet,
+          endpoint,
+          input: {
+            recipient: data.recipient,
+            amount: data.amount,
+            mint: data.mint,
+            type: data.type,
+            duration: data.duration,
+            cliffDuration: data.cliffDuration,
+            milestoneCount: data.milestoneCount,
+            milestoneAmounts,
+            cancelable: data.cancelable,
+          },
+        });
+
+        showNotification("success", `Stream created on-chain. Signature: ${result.signature.slice(0, 8)}...`);
         fetchStreams();
         setActiveTab("streams");
       } catch (err: any) {
-        showNotification("error", err.response?.data?.error || "Deployment failed.");
+        showNotification("error", err?.message || "Deployment failed.");
+      }
+      return;
+    }
+
+    if (actionName === "withdraw") {
+      if (!wallet) {
+        showNotification("error", "Connect the recipient wallet before claiming tokens.");
+        return;
+      }
+
+      try {
+        const result = await withdrawFromStreamOnChain({
+          wallet,
+          endpoint,
+          input: {
+            streamAddress: data.streamId,
+            amount: data.amount,
+          },
+        });
+
+        showNotification("success", `Tokens withdrawn on-chain. Signature: ${result.signature.slice(0, 8)}...`);
+        fetchStreams();
+        setActiveTab("streams");
+      } catch (err: any) {
+        showNotification("error", err?.message || "Withdraw failed.");
       }
       return;
     }
@@ -448,7 +497,7 @@ export default function Home({ initialStreams = [] }: Props) {
       {/* Main Workspace Dashboard Grid */}
       <div className="max-w-7xl mx-auto w-full px-4 py-4 sm:px-6 sm:py-8 flex-grow flex flex-col md:flex-row gap-4 md:gap-8 relative z-10">
         
-        <DashboardSidebar activeTab={activeTab} setActiveTab={setActiveTab} streamsCount={streams.length} />
+        <DashboardSidebar activeTab={activeTab} setActiveTab={setActiveTab} streamsCount={filteredStreamsCount} />
 
         {/* WORKSPACE AREA */}
         <section className="flex-grow min-w-0 bg-zinc-900/25 border border-zinc-800/80 rounded-3xl p-4 sm:p-6 md:backdrop-blur-sm md:shadow-2xl shadow-none flex flex-col justify-between relative">
@@ -459,10 +508,12 @@ export default function Home({ initialStreams = [] }: Props) {
               <DashboardStreamsPanel
                 streams={streams}
                 loading={loading}
-                nowTs={Math.floor(Date.now() / 1000)}
-                fetchStreams={fetchStreams}
-                fetchStreamDetails={fetchStreamDetails}
-              />
+                nowTs={nowTs}
+              fetchStreams={fetchStreams}
+              fetchStreamDetails={fetchStreamDetails}
+              connectedWalletAddress={connectedWalletAddress}
+              onFilteredCountChange={setFilteredStreamsCount}
+            />
             )}
 
             {activeTab !== "streams" && (
@@ -521,6 +572,7 @@ export default function Home({ initialStreams = [] }: Props) {
               setActiveTab={setActiveTab}
               setCsvEditText={setCsvEditText}
               setSelectedStream={setSelectedStream}
+              connectedWalletAddress={connectedWalletAddress}
             />
 
           </div>

@@ -1,4 +1,10 @@
 import "./globals.css";
+import { Providers } from "@/components/wallet/provider";
+import type { CSSProperties, ReactNode } from "react";
+
+const htmlStyle = {
+  "--font-sans": "ui-sans-serif, system-ui, sans-serif",
+} as CSSProperties;
 
 const siteName = "Unified Flow";
 const siteDescription =
@@ -9,15 +15,13 @@ const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || "http://localhost:3000";
 export default function RootLayout({
   children,
 }: {
-  children: React.ReactNode;
+  children: ReactNode;
 }) {
   return (
     <html
       lang="en"
       className="font-sans"
-      style={{
-        ["--font-sans" as any]: "ui-sans-serif, system-ui, sans-serif",
-      }}
+      style={htmlStyle}
     >
       <head>
         <script
@@ -61,7 +65,7 @@ export default function RootLayout({
         <link rel="apple-touch-icon" href="/icon-192.svg" />
       </head>
       <body>
-        {children}
+        <Providers>{children}</Providers>
       </body>
     </html>
   );

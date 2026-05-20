@@ -4,17 +4,16 @@ import { useState, useEffect } from "react";
 import { api } from "@/lib/api";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useWallet } from "@solana/wallet-adapter-react";
+import { useWalletConnection } from "@solana/react-hooks";
 import { WalletPickerButton } from "@/components/wallet/wallet-picker-button";
-import { Providers } from "@/components/wallet/provider";
 import { 
-  Sparkles, Layers, ChevronRight, Copy, Check, X, Info, 
+  Layers, ChevronRight, Copy, Check, X, Info, 
   History, Calendar, RefreshCw, ArrowDownRight, XCircle, 
   Unlock, Settings, ArrowLeft, ArrowUpRight, Search, Users, BookOpen
 } from "lucide-react";
 
 export default function StreamsPage() {
-  const wallet = useWallet();
+  const { wallet } = useWalletConnection();
   const router = useRouter();
   const [streams, setStreams] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
@@ -22,8 +21,14 @@ export default function StreamsPage() {
 
   // Search & Filter States
   const [searchQuery, setSearchQuery] = useState("");
-  const [filterSquadsAddress, setFilterSquadsAddress] = useState("");
-  const [showOnlySquads, setShowOnlySquads] = useState(false);
+  const [filterSquadsAddress, setFilterSquadsAddress] = useState(() => {
+    if (typeof window === "undefined") return "";
+    return localStorage.getItem("squads_multisig_address") ?? "";
+  });
+  const [showOnlySquads, setShowOnlySquads] = useState(() => {
+    if (typeof window === "undefined") return false;
+    return localStorage.getItem("squads_multisig_enabled") === "true";
+  });
 
   // Drawer details state
   const [selectedStream, setSelectedStream] = useState<any | null>(null);
@@ -33,9 +38,18 @@ export default function StreamsPage() {
   const [currentPage, setCurrentPage] = useState(1);
   const itemsPerPage = 8;
 
-  useEffect(() => {
+  const handleSearchQueryChange = (val: string) => {
+    setSearchQuery(val);
     setCurrentPage(1);
-  }, [searchQuery, showOnlySquads]);
+  };
+
+  const handleShowOnlySquadsChange = (checked: boolean) => {
+    setShowOnlySquads(checked);
+    setCurrentPage(1);
+    if (typeof window !== "undefined") {
+      localStorage.setItem("squads_multisig_enabled", String(checked));
+    }
+  };
 
   const fetchStreams = async () => {
     setLoading(true);
@@ -71,13 +85,27 @@ export default function StreamsPage() {
       if (savedSquads) {
         setFilterSquadsAddress(savedSquads);
       }
+
+      const savedSquadsEnabled = localStorage.getItem("squads_multisig_enabled");
+      if (savedSquadsEnabled !== null) {
+        setShowOnlySquads(savedSquadsEnabled === "true");
+      }
     }
 
     return () => clearInterval(interval);
   }, []);
 
+  const connectedWalletAddress = wallet?.account.address ? String(wallet.account.address) : null;
+  const isRecipientWallet =
+    connectedWalletAddress !== null &&
+    selectedStream?.recipient?.toLowerCase() === connectedWalletAddress.toLowerCase();
+  const isCreatorWallet =
+    connectedWalletAddress !== null &&
+    selectedStream?.creator?.toLowerCase() === connectedWalletAddress.toLowerCase();
+
   const handleSquadsAddressChange = (val: string) => {
     setFilterSquadsAddress(val);
+    setCurrentPage(1);
     if (typeof window !== "undefined") {
       localStorage.setItem("squads_multisig_address", val);
     }
@@ -102,24 +130,22 @@ export default function StreamsPage() {
 
     if (showOnlySquads && filterSquadsAddress.trim() !== "") {
       const isSquadsAssociated =
-        stream.creator.toLowerCase() === filterSquadsAddress.toLowerCase() ||
-        stream.recipient.toLowerCase() === filterSquadsAddress.toLowerCase();
+        stream.creator === filterSquadsAddress.trim() ||
+        stream.recipient === filterSquadsAddress.trim();
       return matchesSearch && isSquadsAssociated;
     }
 
-    if (wallet.connected && wallet.publicKey) {
-      const walletAddr = wallet.publicKey.toString().toLowerCase();
-      const isWalletAssociated =
-        stream.creator.toLowerCase() === walletAddr ||
-        stream.recipient.toLowerCase() === walletAddr;
-      return matchesSearch && isWalletAssociated;
+    if (connectedWalletAddress) {
+      const isWalletRelated =
+        stream.creator === connectedWalletAddress ||
+        stream.recipient === connectedWalletAddress;
+      return matchesSearch && isWalletRelated;
     }
 
-    return matchesSearch;
+    return false;
   });
 
   return (
-    <Providers>
     <main className="min-h-screen bg-zinc-950 text-zinc-50 font-sans relative overflow-hidden flex flex-col justify-between selection:bg-indigo-500/30 selection:text-indigo-200">
       
       {/* Glow backgrounds */}
@@ -184,7 +210,7 @@ export default function StreamsPage() {
             <input
               type="text"
               value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
+              onChange={(e) => handleSearchQueryChange(e.target.value)}
               placeholder="Search by Creator, Recipient, Mint, or PDA ID..."
               className="w-full bg-zinc-950 border border-zinc-800 rounded-xl pl-9 pr-4 py-2.5 text-xs text-zinc-200 placeholder-zinc-500 focus:outline-none focus:border-indigo-500 font-mono"
             />
@@ -197,7 +223,7 @@ export default function StreamsPage() {
                 type="checkbox"
                 id="squads-filter-toggle-p"
                 checked={showOnlySquads}
-                onChange={(e) => setShowOnlySquads(e.target.checked)}
+                onChange={(e) => handleShowOnlySquadsChange(e.target.checked)}
                 className="w-4 h-4 rounded border-zinc-805 text-indigo-600 bg-zinc-950 focus:ring-0 focus:ring-offset-0 cursor-pointer"
               />
               <label htmlFor="squads-filter-toggle-p" className="text-xs font-bold text-zinc-350 cursor-pointer select-none flex items-center gap-1.5">
@@ -689,15 +715,17 @@ export default function StreamsPage() {
               <div className="border-t border-zinc-900 pt-4 flex flex-col gap-2">
                 <div className="text-[10px] text-zinc-500 font-bold uppercase tracking-widest">Execute Operations</div>
                 <div className="grid grid-cols-2 gap-2 text-xs font-semibold">
-                  <Link
-                    href={`/?tab=withdraw&streamId=${selectedStream.id}`}
-                    className="flex items-center justify-center gap-1.5 bg-indigo-600 hover:bg-indigo-700 text-zinc-50 py-2.5 rounded-xl transition-all"
-                  >
-                    <ArrowDownRight className="w-3.5 h-3.5" />
-                    Claim Tokens
-                  </Link>
+                  {isRecipientWallet && (
+                    <Link
+                      href={`/?tab=withdraw&streamId=${selectedStream.id}`}
+                      className="flex items-center justify-center gap-1.5 bg-indigo-600 hover:bg-indigo-700 text-zinc-50 py-2.5 rounded-xl transition-all"
+                    >
+                      <ArrowDownRight className="w-3.5 h-3.5" />
+                      Claim Tokens
+                    </Link>
+                  )}
 
-                  {selectedStream.cancelable && (
+                  {isCreatorWallet && selectedStream.cancelable && (
                     <Link
                       href={`/?tab=cancel&streamId=${selectedStream.id}`}
                       className="flex items-center justify-center gap-1.5 bg-zinc-900 hover:bg-zinc-800 text-red-400 hover:text-red-300 border border-zinc-800 hover:border-zinc-700 py-2.5 rounded-xl transition-all"
@@ -707,7 +735,7 @@ export default function StreamsPage() {
                     </Link>
                   )}
 
-                  {selectedStream.vestingType === 2 && (
+                  {isCreatorWallet && selectedStream.vestingType === 2 && (
                     <Link
                       href={`/?tab=unlock_milestone&streamId=${selectedStream.id}`}
                       className="col-span-2 flex items-center justify-center gap-1.5 bg-zinc-900 hover:bg-zinc-800 text-indigo-400 hover:text-indigo-300 border border-zinc-800 hover:border-zinc-700 py-2.5 rounded-xl transition-all"
@@ -717,13 +745,15 @@ export default function StreamsPage() {
                     </Link>
                   )}
 
-                  <Link
-                    href={`/?tab=${selectedStream.vestingType === 0 ? "edit_linear" : selectedStream.vestingType === 1 ? "edit_cliff" : "edit_milestone"}&streamId=${selectedStream.id}`}
-                    className="col-span-2 flex items-center justify-center gap-1.5 bg-zinc-900 hover:bg-zinc-800 text-zinc-400 hover:text-zinc-200 border border-zinc-855 hover:border-zinc-750 py-2.5 rounded-xl transition-all"
-                  >
-                    <Settings className="w-3.5 h-3.5" />
-                    Modify Vesting Structure
-                  </Link>
+                  {isCreatorWallet && (
+                    <Link
+                      href={`/?tab=${selectedStream.vestingType === 0 ? "edit_linear" : selectedStream.vestingType === 1 ? "edit_cliff" : "edit_milestone"}&streamId=${selectedStream.id}`}
+                      className="col-span-2 flex items-center justify-center gap-1.5 bg-zinc-900 hover:bg-zinc-800 text-zinc-400 hover:text-zinc-200 border border-zinc-855 hover:border-zinc-750 py-2.5 rounded-xl transition-all"
+                    >
+                      <Settings className="w-3.5 h-3.5" />
+                      Modify Vesting Structure
+                    </Link>
+                  )}
                 </div>
               </div>
             )}
@@ -752,6 +782,5 @@ export default function StreamsPage() {
         </div>
       </footer>
     </main>
-    </Providers>
   );
 }
