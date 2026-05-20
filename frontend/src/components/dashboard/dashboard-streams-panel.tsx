@@ -1,7 +1,6 @@
 "use client";
 
-import type { Dispatch, SetStateAction } from "react";
-import { useCallback, useDeferredValue, useMemo, useState } from "react";
+import { useCallback, useDeferredValue, useEffect, useMemo, useState } from "react";
 import { FileOutput, Layers, RefreshCw, Search, Users } from "lucide-react";
 import { StreamCard } from "@/components/dashboard/stream-card";
 
@@ -11,6 +10,8 @@ type Props = {
   nowTs: number;
   fetchStreams: () => void;
   fetchStreamDetails: (id: string) => void;
+  connectedWalletAddress: string | null;
+  onFilteredCountChange?: (count: number) => void;
 };
 
 export function DashboardStreamsPanel({
@@ -19,12 +20,35 @@ export function DashboardStreamsPanel({
   nowTs,
   fetchStreams,
   fetchStreamDetails,
+  connectedWalletAddress,
+  onFilteredCountChange,
 }: Props) {
   const [searchQuery, setSearchQuery] = useState("");
-  const [filterSquadsAddress, setFilterSquadsAddress] = useState("");
-  const [showOnlySquads, setShowOnlySquads] = useState(false);
+  const [filterSquadsAddress, setFilterSquadsAddress] = useState(() => {
+    if (typeof window === "undefined") return "";
+    return localStorage.getItem("squads_multisig_address") ?? "";
+  });
+  const [showOnlySquads, setShowOnlySquads] = useState(() => {
+    if (typeof window === "undefined") return false;
+    return localStorage.getItem("squads_multisig_enabled") === "true";
+  });
   const [currentPage, setCurrentPage] = useState(1);
   const itemsPerPage = 5;
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+
+    const savedAddress = localStorage.getItem("squads_multisig_address");
+    const savedEnabled = localStorage.getItem("squads_multisig_enabled");
+
+    if (savedAddress) {
+      setFilterSquadsAddress(savedAddress);
+    }
+
+    if (savedEnabled !== null) {
+      setShowOnlySquads(savedEnabled === "true");
+    }
+  }, []);
 
   const deferredSearchQuery = useDeferredValue(searchQuery);
   const deferredFilterSquadsAddress = useDeferredValue(filterSquadsAddress);
@@ -45,6 +69,9 @@ export function DashboardStreamsPanel({
   const handleShowOnlySquadsChange = useCallback((checked: boolean) => {
     setShowOnlySquads(checked);
     setCurrentPage(1);
+    if (typeof window !== "undefined") {
+      localStorage.setItem("squads_multisig_enabled", String(checked));
+    }
   }, []);
 
   const exportStreamsToCsv = useCallback(() => {
@@ -69,6 +96,7 @@ export function DashboardStreamsPanel({
   const filteredStreams = useMemo(() => {
     const query = deferredSearchQuery.trim().toLowerCase();
     const squadsAddress = deferredFilterSquadsAddress.trim().toLowerCase();
+    const creatorAddress = connectedWalletAddress?.trim() ?? null;
     return streams.filter((stream) => {
       const matchesSearch =
         query === "" ||
@@ -79,18 +107,29 @@ export function DashboardStreamsPanel({
 
       if (showOnlySquads && squadsAddress !== "") {
         const isSquadsAssociated =
-          stream.creator.toLowerCase() === squadsAddress ||
-          stream.recipient.toLowerCase() === squadsAddress;
+          stream.creator === squadsAddress ||
+          stream.recipient === squadsAddress;
         return matchesSearch && isSquadsAssociated;
       }
 
-      return matchesSearch;
+      if (creatorAddress) {
+        const isWalletRelated =
+          stream.creator === creatorAddress ||
+          stream.recipient === creatorAddress;
+        return matchesSearch && isWalletRelated;
+      }
+
+      return false;
     });
-  }, [deferredSearchQuery, deferredFilterSquadsAddress, showOnlySquads, streams]);
+  }, [connectedWalletAddress, deferredSearchQuery, deferredFilterSquadsAddress, showOnlySquads, streams]);
 
   const totalPages = useMemo(() => Math.ceil(filteredStreams.length / itemsPerPage), [filteredStreams.length]);
   const safeCurrentPage = Math.min(currentPage, Math.max(totalPages, 1));
   const paginatedStreams = useMemo(() => filteredStreams.slice((safeCurrentPage - 1) * itemsPerPage, safeCurrentPage * itemsPerPage), [filteredStreams, safeCurrentPage]);
+
+  useEffect(() => {
+    onFilteredCountChange?.(filteredStreams.length);
+  }, [filteredStreams.length, onFilteredCountChange]);
 
   return (
     <div className="animate-in fade-in-30 duration-200">
@@ -171,7 +210,11 @@ export function DashboardStreamsPanel({
         <div className="flex flex-col items-center justify-center py-20 text-zinc-400 border-2 border-dashed border-zinc-900 rounded-2xl">
           <Layers className="w-10 h-10 text-zinc-700 mb-3" />
           <span className="text-xs font-bold text-zinc-300">No matching streams indexed</span>
-          <span className="text-[10px] text-zinc-500 max-w-xs text-center mt-1">Adjust your search query or verify that the correct Squads Multisig address has been inputted.</span>
+          <span className="text-[10px] text-zinc-500 max-w-xs text-center mt-1">
+            {connectedWalletAddress
+              ? "Only streams created or received by your connected wallet are shown here unless Squads View is enabled."
+              : "Connect a wallet to show your created streams, or enable Squads View and paste a Squads multisig address."}
+          </span>
         </div>
       ) : (
         <div className="flex flex-col gap-6">

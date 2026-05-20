@@ -13,6 +13,7 @@ export const StreamDetailsDrawer = memo(function StreamDetailsDrawer({
   setActiveTab,
   setCsvEditText,
   setSelectedStream,
+  connectedWalletAddress,
 }: {
   selectedStream: any;
   loadingDetails: boolean;
@@ -22,8 +23,15 @@ export const StreamDetailsDrawer = memo(function StreamDetailsDrawer({
   setActiveTab: (tab: any) => void;
   setCsvEditText: (value: string) => void;
   setSelectedStream: (value: any) => void;
+  connectedWalletAddress: string | null;
 }) {
   if (!selectedStream) return null;
+  const isRecipientWallet =
+    connectedWalletAddress !== null &&
+    selectedStream.recipient?.toLowerCase() === connectedWalletAddress.toLowerCase();
+  const isCreatorWallet =
+    connectedWalletAddress !== null &&
+    selectedStream.creator?.toLowerCase() === connectedWalletAddress.toLowerCase();
 
   return (
     <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-md flex justify-end animate-in fade-in duration-200">
@@ -229,19 +237,21 @@ export const StreamDetailsDrawer = memo(function StreamDetailsDrawer({
           <div className="border-t border-zinc-900 pt-4 flex flex-col gap-2">
             <div className="text-[10px] text-zinc-500 font-bold uppercase tracking-widest">Instant Action Shortcuts</div>
             <div className="grid grid-cols-2 gap-2 text-xs font-semibold">
-              <button onClick={() => prefillAction("withdraw", selectedStream.id)} className="flex items-center justify-center gap-1.5 bg-indigo-600 hover:bg-indigo-700 text-zinc-50 py-2.5 rounded-xl transition-all">
-                <ArrowDownRight className="w-3.5 h-3.5" />
-                Claim Tokens
-              </button>
+              {isRecipientWallet && (
+                <button onClick={() => prefillAction("withdraw", selectedStream.id)} className="flex items-center justify-center gap-1.5 bg-indigo-600 hover:bg-indigo-700 text-zinc-50 py-2.5 rounded-xl transition-all">
+                  <ArrowDownRight className="w-3.5 h-3.5" />
+                  Claim Tokens
+                </button>
+              )}
 
-              {selectedStream.cancelable && (
+              {isCreatorWallet && selectedStream.cancelable && (
                 <button onClick={() => prefillAction("cancel", selectedStream.id)} className="flex items-center justify-center gap-1.5 bg-zinc-900 hover:bg-zinc-800 text-red-400 hover:text-red-300 border border-zinc-800 hover:border-zinc-700 py-2.5 rounded-xl transition-all">
                   <XCircle className="w-3.5 h-3.5" />
                   Cancel Stream
                 </button>
               )}
 
-              {selectedStream.isCsvCreated ? (
+              {isCreatorWallet && selectedStream.isCsvCreated ? (
                 <button
                   onClick={() => {
                     setActiveTab("edit_csv");
@@ -253,7 +263,7 @@ export const StreamDetailsDrawer = memo(function StreamDetailsDrawer({
                   <FileText className="w-3.5 h-3.5" />
                   Edit via CSV Console
                 </button>
-              ) : (
+              ) : isCreatorWallet ? (
                 <>
                   {selectedStream.vestingType === 2 && (
                     <button onClick={() => prefillAction("unlock_milestone", selectedStream.id)} className="col-span-2 flex items-center justify-center gap-1.5 bg-zinc-900 hover:bg-zinc-800 text-indigo-400 hover:text-indigo-300 border border-zinc-800 hover:border-zinc-700 py-2.5 rounded-xl transition-all">
@@ -273,7 +283,7 @@ export const StreamDetailsDrawer = memo(function StreamDetailsDrawer({
                     Modify Vesting Structure
                   </button>
                 </>
-              )}
+              ) : null}
             </div>
           </div>
         )}
