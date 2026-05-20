@@ -2,7 +2,7 @@
 
 import { memo } from "react";
 import { ChevronRight } from "lucide-react";
-import { formatDate, shorten } from "./utils";
+import { formatDate, formatTokenAmount, getAmountUnitLabel, shorten } from "./utils";
 
 export const StreamCard = memo(function StreamCard({
   stream,
@@ -20,6 +20,8 @@ export const StreamCard = memo(function StreamCard({
   const total = Number(stream.totalAmount);
   const withdrawn = Number(stream.withdrawn);
   const unlocked = Number(stream.unlockedAmount || 0);
+  const mintDecimals = typeof stream.mintDecimals === "number" ? stream.mintDecimals : null;
+  const amountLabel = getAmountUnitLabel(stream.mint);
 
   let vested = 0;
   let progress = 0;
@@ -103,15 +105,15 @@ export const StreamCard = memo(function StreamCard({
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 bg-zinc-900/35 border border-zinc-900/60 rounded-xl p-3.5 text-xs">
         <div>
           <div className="text-zinc-500 font-medium">Total Amount</div>
-          <div className="font-bold text-zinc-200">{total.toLocaleString()} tokens</div>
+          <div className="font-bold text-zinc-200">{formatTokenAmount(stream.totalAmount, mintDecimals)} {amountLabel}</div>
         </div>
         <div>
           <div className="text-zinc-500 font-medium">Claimable</div>
-          <div className="font-bold text-indigo-400">{claimable.toLocaleString()} tokens</div>
+          <div className="font-bold text-indigo-400">{formatTokenAmount(claimable, mintDecimals)} {amountLabel}</div>
         </div>
         <div>
           <div className="text-zinc-500 font-medium">Withdrawn</div>
-          <div className="font-bold text-zinc-200">{withdrawn.toLocaleString()} tokens</div>
+          <div className="font-bold text-zinc-200">{formatTokenAmount(withdrawn, mintDecimals)} {amountLabel}</div>
         </div>
         <div>
           <div className="text-zinc-500 font-medium">Type</div>

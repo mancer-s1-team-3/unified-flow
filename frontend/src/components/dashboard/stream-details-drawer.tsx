@@ -2,7 +2,7 @@
 
 import { memo } from "react";
 import { ArrowDownRight, ArrowUpRight, Calendar, Check, Copy, FileText, History, Settings, Unlock, XCircle } from "lucide-react";
-import { formatDate, shorten } from "./utils";
+import { formatDate, formatTokenAmount, getAmountUnitLabel, shorten } from "./utils";
 
 export const StreamDetailsDrawer = memo(function StreamDetailsDrawer({
   selectedStream,
@@ -32,6 +32,8 @@ export const StreamDetailsDrawer = memo(function StreamDetailsDrawer({
   const isCreatorWallet =
     connectedWalletAddress !== null &&
     selectedStream.creator?.toLowerCase() === connectedWalletAddress.toLowerCase();
+  const mintDecimals = typeof selectedStream.mintDecimals === "number" ? selectedStream.mintDecimals : null;
+  const amountLabel = getAmountUnitLabel(selectedStream.mint);
 
   return (
     <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-md flex justify-end animate-in fade-in duration-200">
@@ -62,18 +64,20 @@ export const StreamDetailsDrawer = memo(function StreamDetailsDrawer({
                   {selectedStream.vestingType === 2 ? "Milestone Unlock Progress" : "Claim Completeness Index"}
                 </div>
                 <div className="flex justify-between items-end mb-2">
-                  <span className="text-xl font-black font-mono bg-gradient-to-r from-indigo-400 to-purple-400 bg-clip-text text-transparent">
-                    {(() => {
-                      const total = Number(selectedStream.totalAmount);
-                      const withdrawn = Number(selectedStream.withdrawn);
-                      const unlocked = Number(selectedStream.unlockedAmount || 0);
+                    <span className="text-xl font-black font-mono bg-gradient-to-r from-indigo-400 to-purple-400 bg-clip-text text-transparent">
+                      {(() => {
+                        const total = Number(selectedStream.totalAmount);
+                        const withdrawn = Number(selectedStream.withdrawn);
+                        const unlocked = Number(selectedStream.unlockedAmount || 0);
                       const value = selectedStream.vestingType === 2 ? unlocked : withdrawn;
                       return ((value / total) * 100).toFixed(1);
                     })()}%
                   </span>
-                  <span className="text-[10px] text-zinc-400 font-mono">
-                    {selectedStream.vestingType === 2 ? `${Number(selectedStream.unlockedAmount || 0).toLocaleString()} / ${Number(selectedStream.totalAmount).toLocaleString()} Unlocked` : `${Number(selectedStream.withdrawn).toLocaleString()} / ${Number(selectedStream.totalAmount).toLocaleString()} Claimed`}
-                  </span>
+                    <span className="text-[10px] text-zinc-400 font-mono">
+                    {selectedStream.vestingType === 2
+                      ? `${formatTokenAmount(selectedStream.unlockedAmount || 0, mintDecimals)} / ${formatTokenAmount(selectedStream.totalAmount, mintDecimals)} ${amountLabel} Unlocked`
+                      : `${formatTokenAmount(selectedStream.withdrawn, mintDecimals)} / ${formatTokenAmount(selectedStream.totalAmount, mintDecimals)} ${amountLabel} Claimed`}
+                    </span>
                 </div>
                 <div className="h-2 w-full bg-zinc-950 rounded-full overflow-hidden border border-zinc-850">
                   <div
@@ -132,11 +136,11 @@ export const StreamDetailsDrawer = memo(function StreamDetailsDrawer({
                     <div className="grid grid-cols-2 gap-4 border-t border-zinc-900/60 pt-3">
                       <div>
                         <span className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest block mb-0.5">Unlocked Amount</span>
-                        <span className="font-semibold text-emerald-400 font-mono">{Number(selectedStream.unlockedAmount || 0).toLocaleString()} tokens</span>
+                        <span className="font-semibold text-emerald-400 font-mono">{formatTokenAmount(selectedStream.unlockedAmount || 0, mintDecimals)} {amountLabel}</span>
                       </div>
                       <div>
                         <span className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest block mb-0.5">Claimable Remaining</span>
-                        <span className="font-semibold text-indigo-400 font-mono">{Math.max(Number(selectedStream.unlockedAmount || 0) - Number(selectedStream.withdrawn), 0).toLocaleString()} tokens</span>
+                        <span className="font-semibold text-indigo-400 font-mono">{formatTokenAmount(Math.max(Number(selectedStream.unlockedAmount || 0) - Number(selectedStream.withdrawn), 0), mintDecimals)} {amountLabel}</span>
                       </div>
                     </div>
 
@@ -162,7 +166,7 @@ export const StreamDetailsDrawer = memo(function StreamDetailsDrawer({
                                   <span className="font-extrabold">Milestone #{idx}</span>
                                 </div>
                                 <div className="flex items-center gap-3">
-                                  <span className="text-zinc-400 font-bold">{amt.toLocaleString()} tokens</span>
+                                  <span className="text-zinc-400 font-bold">{formatTokenAmount(amt, mintDecimals)} {amountLabel}</span>
                                   <span className={`text-[9px] px-2 py-0.5 rounded font-black uppercase ${isUnlocked ? "bg-emerald-500/10 text-emerald-400 border border-emerald-500/20" : "bg-zinc-900 text-zinc-600 border border-zinc-850"}`}>
                                     {isUnlocked ? "Unlocked" : "Locked"}
                                   </span>
