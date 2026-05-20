@@ -6,6 +6,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useWalletConnection } from "@solana/react-hooks";
 import { WalletPickerButton } from "@/components/wallet/wallet-picker-button";
+import { BrandMark } from "@/components/brand/brand-mark";
 import { formatTokenAmount, getAmountUnitLabel } from "@/components/dashboard/utils";
 import { 
   Layers, ChevronRight, Copy, Check, X, Info, 
@@ -158,6 +159,7 @@ export default function StreamsPage() {
       {/* Header */}
       <header className="max-w-7xl mx-auto w-full px-6 py-5 border-b border-zinc-900/80 flex justify-between items-center relative z-20 backdrop-blur-md bg-zinc-950/40">
         <div className="flex items-center gap-3">
+          <BrandMark size={40} />
           <button
             type="button"
             onClick={() => router.push("/")}

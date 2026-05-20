@@ -1,12 +1,14 @@
-const CACHE_VERSION = "unified-flow-v2";
+const CACHE_VERSION = "unified-flow-v3";
 const STATIC_CACHE = `static-${CACHE_VERSION}`;
 const RUNTIME_CACHE = `runtime-${CACHE_VERSION}`;
 
 const STATIC_ASSETS = [
   "/",
   "/manifest.webmanifest",
-  "/icon-192.svg",
-  "/icon-512.svg",
+  "/favicon.ico",
+  "/logo.jpg",
+  "/logo-192.png",
+  "/logo-512.png",
 ];
 
 self.addEventListener("install", (event) => {
