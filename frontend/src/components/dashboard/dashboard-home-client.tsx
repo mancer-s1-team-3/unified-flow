@@ -12,6 +12,7 @@ import { DashboardStreamsPanel } from "@/components/dashboard/dashboard-streams-
 import type { TabId } from "@/components/dashboard/types";
 import { createStreamOnChain } from "@/lib/solana/create-stream";
 import { withdrawFromStreamOnChain } from "@/lib/solana/withdraw";
+import { cancelStreamOnChain } from "@/lib/solana/cancel";
 
 type Props = {
   initialStreams?: any[];
@@ -385,6 +386,30 @@ export default function Home({ initialStreams = [] }: Props) {
         setActiveTab("streams");
       } catch (err: any) {
         showNotification("error", err?.message || "Withdraw failed.");
+      }
+      return;
+    }
+
+    if (actionName === "cancel") {
+      if (!wallet) {
+        showNotification("error", "Connect the creator wallet before cancelling a stream.");
+        return;
+      }
+
+      try {
+        const result = await cancelStreamOnChain({
+          wallet,
+          endpoint,
+          input: {
+            streamAddress: data.streamId,
+          },
+        });
+
+        showNotification("success", `Stream cancelled on-chain. Signature: ${result.signature.slice(0, 8)}...`);
+        fetchStreams();
+        setActiveTab("streams");
+      } catch (err: any) {
+        showNotification("error", err?.message || "Cancel failed.");
       }
       return;
     }
