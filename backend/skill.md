@@ -45,7 +45,7 @@ When speaking to an AI client, these tools are exposed natively. The agent can i
 
 | Tool Name | Operation Type | Key Inputs | Description |
 | :--- | :--- | :--- | :--- |
-| `get_streams` | DB Query | `creator`, `recipient`, `status`, `limit` | Fetch indexed streams from Prisma PostgreSQL database. |
+| `get_streams` | Indexed API Query | `creator`, `recipient`, `status`, `vestingType`, `limit` | Fetch indexed streams from the backend API. |
 | `get_stream_details` | On-Chain Read | `streamAddress` | Read live, raw on-chain state & all derived milestone PDAs. |
 | `get_protocol_config` | On-Chain Read | None | Get global protocol setup, admin permissions, and withdraw fees. |
 | `create_stream` | Transaction | `recipient`, `mint`, `amount`, `vestingType`, `milestones`, `nonce` | Construct, sign, and broadcast a new vesting stream transaction. |
