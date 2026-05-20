@@ -15,6 +15,7 @@ function TabButton({
   label,
   highlight,
   count,
+  badge,
 }: {
   active: boolean;
   onClick: () => void;
@@ -22,6 +23,7 @@ function TabButton({
   label: string;
   highlight?: string;
   count?: number;
+  badge?: string;
 }) {
   return (
     <button
@@ -35,6 +37,11 @@ function TabButton({
       <div className="flex items-center gap-3 min-w-0 flex-1">
         {icon}
         <span className={`text-xs truncate ${highlight || ""}`}>{label}</span>
+        {badge && (
+          <span className="ml-2 inline-flex items-center rounded-full border border-amber-500/30 bg-amber-500/10 px-1.5 py-0.5 text-[9px] font-black uppercase tracking-wider text-amber-300">
+            {badge}
+          </span>
+        )}
       </div>
       {typeof count === "number" && (
         <span className="ml-3 inline-flex min-w-6 items-center justify-center rounded-full bg-zinc-800/80 px-1.5 py-0.5 text-[10px] font-mono text-zinc-400 shrink-0 tabular-nums">
@@ -94,6 +101,7 @@ export const DashboardSidebar = memo(function DashboardSidebar({
         onClick={() => setActiveTab("unlock_milestone")}
         icon={<Unlock className="w-4 h-4" />}
         label="Unlock Milestone"
+        badge="WIP"
       />
 
       <TabButton
@@ -102,6 +110,7 @@ export const DashboardSidebar = memo(function DashboardSidebar({
         icon={<FileText className="w-4 h-4 text-emerald-400" />}
         label="Bulk Edit CSV"
         highlight="font-bold text-emerald-400"
+        badge="WIP"
       />
 
       <TabButton
@@ -109,6 +118,7 @@ export const DashboardSidebar = memo(function DashboardSidebar({
         onClick={() => setActiveTab("edit_milestone")}
         icon={<Settings className="w-4 h-4" />}
         label="Edit Milestone Struct"
+        badge="WIP"
       />
 
       <TabButton
@@ -116,6 +126,7 @@ export const DashboardSidebar = memo(function DashboardSidebar({
         onClick={() => setActiveTab("edit_linear")}
         icon={<Clock className="w-4 h-4" />}
         label="Edit Linear Timeline"
+        badge="WIP"
       />
 
       <TabButton
@@ -123,6 +134,7 @@ export const DashboardSidebar = memo(function DashboardSidebar({
         onClick={() => setActiveTab("edit_cliff")}
         icon={<Shield className="w-4 h-4" />}
         label="Edit Cliff Conditions"
+        badge="WIP"
       />
     </aside>
   );
