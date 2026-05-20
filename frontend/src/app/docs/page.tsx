@@ -48,7 +48,7 @@ const API_ENDPOINTS = [
   {
     method: "GET",
     path: "/streams/:id",
-    desc: "Retrieve exhaustive details of a single indexed stream using its database record identifier.",
+    desc: "Retrieve exhaustive details of a single indexed stream using its indexed record identifier.",
     response: `{
   "id": "cm0a1b2c3d4e5f6g7h8i9j0k",
   "creator": "8M5yieUh7pxwUi1YBByDF82nqoorZwaKi8dBoMVpurFa",
@@ -70,13 +70,14 @@ const API_ENDPOINTS = [
 const MCP_TOOLS = [
   {
     name: "get_streams",
-    category: "DB Query",
-    desc: "Query the backend PostgreSQL database for streams. Supports paging & filtering by creator, recipient, status, type.",
+    category: "Indexed API",
+    desc: "Query the backend API for indexed streams. Supports filtering by creator, recipient, status, vesting type, and limit.",
     params: [
       { name: "creator", type: "string (optional)", desc: "Filter by creator public key" },
       { name: "recipient", type: "string (optional)", desc: "Filter by recipient public key" },
       { name: "status", type: "number (optional)", desc: "1 = Active, 2 = Completed, 3 = Cancelled" },
-      { name: "vestingType", type: "number (optional)", desc: "0 = Linear, 1 = Cliff, 2 = Milestone" }
+      { name: "vestingType", type: "number (optional)", desc: "0 = Linear, 1 = Cliff, 2 = Milestone" },
+      { name: "limit", type: "number (optional)", desc: "Maximum number of streams to return" }
     ]
   },
   {
@@ -202,6 +203,23 @@ export default function DocsPage() {
             <ArrowLeft className="w-4 h-4 group-hover:-translate-x-1 transition-transform" />
             Back to App Dashboard
           </button>
+        </div>
+
+        <div className="mb-8 flex flex-wrap gap-3">
+          <Link
+            href="/guide"
+            className="inline-flex items-center gap-2 rounded-xl border border-zinc-800 bg-zinc-900/50 px-4 py-2 text-xs font-semibold text-zinc-300 hover:text-cyan-300 hover:border-zinc-700 transition-colors"
+          >
+            <BookOpen className="w-3.5 h-3.5" />
+            User Guide
+          </Link>
+          <Link
+            href="/skills"
+            className="inline-flex items-center gap-2 rounded-xl border border-zinc-800 bg-zinc-900/50 px-4 py-2 text-xs font-semibold text-zinc-300 hover:text-indigo-300 hover:border-zinc-700 transition-colors"
+          >
+            <Terminal className="w-3.5 h-3.5" />
+            AI Skills
+          </Link>
         </div>
 
         {/* HERO TITLE */}
@@ -422,14 +440,14 @@ export default function DocsPage() {
         "RPC_HTTP": "<YOUR_RPC_HTTP>",
         "RPC_WS": "<YOUR_RPC_WS>",
         "PROGRAM_ID": "<YOUR_PROGRAM_ID>",
-        "DATABASE_URL": "<YOUR_DATABASE_URL>",
+        "API_BASE_URL": "<YOUR_API_BASE_URL>",
         "WALLET_PATH": "<YOUR_WALLET_PATH>"
       }
     }
   }
 }`} />
                   <p className="mt-3 text-xs text-zinc-500 leading-relaxed">
-                    Replace the placeholders with your local values. Keep secrets in your local environment or `.env` file, not in docs.
+                    Replace the placeholders with your local values. The MCP server reads indexed data from the backend API, so it does not need direct database access.
                   </p>
                 </div>
 

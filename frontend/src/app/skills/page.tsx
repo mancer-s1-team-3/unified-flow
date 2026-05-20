@@ -106,6 +106,12 @@ export default async function SkillsPage() {
               <h2 className="text-sm font-semibold text-zinc-100">Useful Links</h2>
               <div className="mt-4 space-y-3">
                 <Link
+                  href="/guide"
+                  className="block rounded-2xl border border-zinc-800 bg-zinc-950/40 px-4 py-3 text-sm text-zinc-300 hover:text-white hover:border-zinc-700 transition-colors"
+                >
+                  Open user guide
+                </Link>
+                <Link
                   href="/docs"
                   className="block rounded-2xl border border-zinc-800 bg-zinc-950/40 px-4 py-3 text-sm text-zinc-300 hover:text-white hover:border-zinc-700 transition-colors"
                 >

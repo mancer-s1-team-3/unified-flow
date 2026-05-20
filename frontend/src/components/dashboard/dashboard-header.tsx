@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { BookOpen } from "lucide-react";
+import { BookOpen, GraduationCap } from "lucide-react";
 import { DashboardHeaderWallet } from "@/components/dashboard/dashboard-header-wallet";
 import { BrandMark } from "@/components/brand/brand-mark";
 
@@ -17,6 +17,13 @@ export function DashboardHeader() {
       </div>
 
       <div className="flex items-center gap-4">
+        <Link
+          href="/guide"
+          className="hidden md:flex items-center gap-1.5 text-xs text-zinc-400 hover:text-cyan-400 font-medium transition-colors border border-zinc-800 hover:border-zinc-700 bg-zinc-900/50 px-3.5 py-2 rounded-xl"
+        >
+          <GraduationCap className="w-3.5 h-3.5" />
+          User Guide
+        </Link>
         <Link
           href="/docs"
           className="hidden md:flex items-center gap-1.5 text-xs text-zinc-400 hover:text-indigo-400 font-medium transition-colors border border-zinc-800 hover:border-zinc-700 bg-zinc-900/50 px-3.5 py-2 rounded-xl"

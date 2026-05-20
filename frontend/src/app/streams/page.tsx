@@ -178,6 +178,13 @@ export default function StreamsPage() {
         
         <div className="flex items-center gap-4">
           <Link
+            href="/guide"
+            className="flex items-center gap-1.5 text-xs text-zinc-400 hover:text-cyan-400 font-medium transition-colors border border-zinc-800 hover:border-zinc-700 bg-zinc-900/50 px-3.5 py-2 rounded-xl"
+          >
+            <BookOpen className="w-3.5 h-3.5" />
+            User Guide
+          </Link>
+          <Link
             href="/docs"
             className="flex items-center gap-1.5 text-xs text-zinc-400 hover:text-indigo-400 font-medium transition-colors border border-zinc-800 hover:border-zinc-700 bg-zinc-900/50 px-3.5 py-2 rounded-xl"
           >
@@ -769,6 +776,10 @@ export default function StreamsPage() {
           &copy; {new Date().getFullYear()} Unified Flow Protocol. Built for Solana Devnet.
         </div>
         <div className="flex gap-4">
+          <Link href="/guide" className="hover:text-cyan-400 transition-colors">
+            User Guide
+          </Link>
+          <span>&middot;</span>
           <Link href="/docs" className="hover:text-indigo-400 transition-colors">
             API Reference
           </Link>
