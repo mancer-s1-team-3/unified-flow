@@ -6,6 +6,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useWalletConnection } from "@solana/react-hooks";
 import { WalletPickerButton } from "@/components/wallet/wallet-picker-button";
+import { formatTokenAmount, getAmountUnitLabel } from "@/components/dashboard/utils";
 import { 
   Layers, ChevronRight, Copy, Check, X, Info, 
   History, Calendar, RefreshCw, ArrowDownRight, XCircle, 
@@ -102,6 +103,8 @@ export default function StreamsPage() {
   const isCreatorWallet =
     connectedWalletAddress !== null &&
     selectedStream?.creator?.toLowerCase() === connectedWalletAddress.toLowerCase();
+  const selectedMintDecimals = typeof selectedStream?.mintDecimals === "number" ? selectedStream.mintDecimals : null;
+  const selectedAmountLabel = getAmountUnitLabel(selectedStream?.mint);
 
   const handleSquadsAddressChange = (val: string) => {
     setFilterSquadsAddress(val);
@@ -274,6 +277,8 @@ export default function StreamsPage() {
                   const total = Number(stream.totalAmount);
                   const withdrawn = Number(stream.withdrawn);
                   const unlocked = Number(stream.unlockedAmount || 0);
+                  const mintDecimals = typeof stream.mintDecimals === "number" ? stream.mintDecimals : null;
+                  const amountLabel = getAmountUnitLabel(stream.mint);
 
                   let vested = 0;
                   let progress = 0;
@@ -374,16 +379,16 @@ export default function StreamsPage() {
                       {/* Data Grid */}
                       <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 bg-zinc-950/20 border border-zinc-900/60 rounded-xl p-3.5 text-xs">
                         <div>
-                          <div className="text-zinc-500 font-medium">Total Amount</div>
-                          <div className="font-bold text-zinc-200">{total.toLocaleString()} tokens</div>
+                        <div className="text-zinc-500 font-medium">Total Amount</div>
+                          <div className="font-bold text-zinc-200">{formatTokenAmount(stream.totalAmount, mintDecimals)} {amountLabel}</div>
                         </div>
                         <div>
                           <div className="text-zinc-500 font-medium">Claimable</div>
-                          <div className="font-bold text-indigo-400">{claimable.toLocaleString()} tokens</div>
+                          <div className="font-bold text-indigo-400">{formatTokenAmount(claimable, mintDecimals)} {amountLabel}</div>
                         </div>
                         <div>
                           <div className="text-zinc-500 font-medium">Withdrawn</div>
-                          <div className="font-bold text-zinc-200">{withdrawn.toLocaleString()} tokens</div>
+                          <div className="font-bold text-zinc-200">{formatTokenAmount(withdrawn, mintDecimals)} {amountLabel}</div>
                         </div>
                         <div>
                           <div className="text-zinc-500 font-medium">Type</div>
@@ -510,11 +515,9 @@ export default function StreamsPage() {
                         })()}%
                       </span>
                       <span className="text-[10px] text-zinc-400 font-mono">
-                        {selectedStream.vestingType === 2 ? (
-                          `${Number(selectedStream.unlockedAmount || 0).toLocaleString()} / ${Number(selectedStream.totalAmount).toLocaleString()} Unlocked`
-                        ) : (
-                          `${Number(selectedStream.withdrawn).toLocaleString()} / ${Number(selectedStream.totalAmount).toLocaleString()} Claimed`
-                        )}
+                        {selectedStream.vestingType === 2
+                          ? `${formatTokenAmount(selectedStream.unlockedAmount || 0, selectedMintDecimals)} / ${formatTokenAmount(selectedStream.totalAmount, selectedMintDecimals)} ${selectedAmountLabel} Unlocked`
+                          : `${formatTokenAmount(selectedStream.withdrawn, selectedMintDecimals)} / ${formatTokenAmount(selectedStream.totalAmount, selectedMintDecimals)} ${selectedAmountLabel} Claimed`}
                       </span>
                     </div>
                     <div className="h-2 w-full bg-zinc-950 rounded-full overflow-hidden border border-zinc-850">
@@ -583,15 +586,11 @@ export default function StreamsPage() {
                         <div className="grid grid-cols-2 gap-4 border-t border-zinc-900/60 pt-3">
                           <div>
                             <span className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest block mb-0.5">Unlocked Amount</span>
-                            <span className="font-semibold text-emerald-400 font-mono">
-                              {Number(selectedStream.unlockedAmount || 0).toLocaleString()} tokens
-                            </span>
+                            <span className="font-semibold text-emerald-400 font-mono">{formatTokenAmount(selectedStream.unlockedAmount || 0, selectedMintDecimals)} {selectedAmountLabel}</span>
                           </div>
                           <div>
                             <span className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest block mb-0.5">Claimable Remaining</span>
-                            <span className="font-semibold text-indigo-400 font-mono">
-                              {Math.max(Number(selectedStream.unlockedAmount || 0) - Number(selectedStream.withdrawn), 0).toLocaleString()} tokens
-                            </span>
+                            <span className="font-semibold text-indigo-400 font-mono">{formatTokenAmount(Math.max(Number(selectedStream.unlockedAmount || 0) - Number(selectedStream.withdrawn), 0), selectedMintDecimals)} {selectedAmountLabel}</span>
                           </div>
                         </div>
 
@@ -620,7 +619,7 @@ export default function StreamsPage() {
                                       <span className="font-extrabold">Milestone #{idx}</span>
                                     </div>
                                     <div className="flex items-center gap-3">
-                                      <span className="text-zinc-400 font-bold">{amt.toLocaleString()} tokens</span>
+                                      <span className="text-zinc-400 font-bold">{formatTokenAmount(amt, selectedMintDecimals)} {selectedAmountLabel}</span>
                                       <span className={`text-[9px] px-2 py-0.5 rounded font-black uppercase ${
                                         isUnlocked 
                                           ? "bg-emerald-500/10 text-emerald-400 border border-emerald-500/20" 
