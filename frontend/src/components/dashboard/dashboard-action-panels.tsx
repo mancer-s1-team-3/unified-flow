@@ -4,6 +4,7 @@ import type { ChangeEvent, RefObject } from "react";
 import { useMemo } from "react";
 import { Shield, Download, Layers, Lock, RefreshCw, Terminal, Upload } from "lucide-react";
 import { CsvDiffPanel } from "@/components/dashboard/csv-diff-panel";
+import { isWipFeature } from "./feature-flags";
 
 type Props = {
   activeTab: string;
@@ -140,7 +141,10 @@ export function DashboardActionPanels(props: Props) {
             </div>
             <div className="flex bg-zinc-950 border border-zinc-800 p-1 rounded-xl">
               <button onClick={() => setCreateMode("manual")} className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${createMode === "manual" ? "bg-indigo-600 text-white" : "text-zinc-400 hover:text-zinc-200"}`}>Manual Form</button>
-              <button onClick={() => setCreateMode("csv")} className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${createMode === "csv" ? "bg-indigo-600 text-white" : "text-zinc-400 hover:text-zinc-200"}`}>CSV Bulk Import</button>
+              <button onClick={() => setCreateMode("csv")} className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 ${createMode === "csv" ? "bg-indigo-600 text-white" : "text-zinc-400 hover:text-zinc-200"}`}>
+                CSV Bulk Import
+                {isWipFeature("csvBulkCreate") && <span className="inline-flex rounded-full border border-amber-500/30 bg-amber-500/10 px-1.5 py-0.5 text-[9px] font-black uppercase tracking-wider text-amber-300">WIP</span>}
+              </button>
             </div>
           </div>
 
@@ -330,7 +334,7 @@ export function DashboardActionPanels(props: Props) {
 
       {activeTab === "edit_cliff" && (
         <div className="animate-in fade-in-30 duration-200">
-          <div className="border-b border-zinc-900 pb-4 mb-6"><h2 className="text-2xl font-extrabold tracking-tight">Edit Cliff Conditions</h2><p className="text-xs text-zinc-400">Modify cliff release durations or shift lockup parameters</p></div>
+          <div className="border-b border-zinc-900 pb-4 mb-6"><div className="flex items-center gap-2"><h2 className="text-2xl font-extrabold tracking-tight">Edit Cliff Conditions</h2>{isWipFeature("editCliff") && <span className="inline-flex rounded-full border border-amber-500/30 bg-amber-500/10 px-2 py-0.5 text-[9px] font-black uppercase tracking-wider text-amber-300">WIP</span>}</div><p className="text-xs text-zinc-400">Modify cliff release durations or shift lockup parameters</p></div>
           {isStreamCsvCreated(editCliffForm.streamId) ? <div className="bg-red-950/45 border border-red-500/30 rounded-2xl p-5 text-red-300 flex items-start gap-4 mb-6"><Lock className="w-6 h-6 text-red-400 shrink-0 mt-0.5" /><div><h4 className="text-sm font-extrabold">Manual Edit Locked!</h4><p className="text-xs text-red-400/80 mt-1 leading-relaxed">This stream was created via CSV Import. To comply with consistency requirements, CSV-created streams must be edited exclusively using the Bulk Edit CSV console.</p></div></div> : <div className="grid gap-4"><div><label className="block text-xs font-semibold text-zinc-400 uppercase tracking-wider mb-1.5">Stream ID (PDA Address)</label><input type="text" value={editCliffForm.streamId} onChange={(e) => setEditCliffForm({ ...editCliffForm, streamId: e.target.value })} className="w-full bg-zinc-950 border border-zinc-800 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:border-indigo-500 font-mono" /></div><div><label className="block text-xs font-semibold text-zinc-400 uppercase tracking-wider mb-1.5">New Cliff Unlock Timestamp (Seconds)</label><input type="number" value={editCliffForm.newCliffTs} onChange={(e) => setEditCliffForm({ ...editCliffForm, newCliffTs: e.target.value })} className="w-full bg-zinc-950 border border-zinc-800 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:border-indigo-500 font-mono" /></div></div>}
           <button disabled={isStreamCsvCreated(editCliffForm.streamId)} onClick={() => handleAction("edit_cliff", editCliffForm)} className={`w-full mt-6 text-white font-bold text-xs py-3 rounded-xl transition-all shadow-lg ${isStreamCsvCreated(editCliffForm.streamId) ? "bg-zinc-850 border border-zinc-800 text-zinc-550 cursor-not-allowed opacity-50" : "bg-indigo-600 hover:bg-indigo-700 hover:shadow-indigo-500/20"}`}>Adjust Cliff Timestamp</button>
         </div>
