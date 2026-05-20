@@ -30,6 +30,42 @@ export default function sitemap(): MetadataRoute.Sitemap {
       priority: 0.7,
     },
     {
+      url: `${siteUrl}/guide/what-is-vesting`,
+      lastModified,
+      changeFrequency: "weekly",
+      priority: 0.65,
+    },
+    {
+      url: `${siteUrl}/guide/connect-wallet`,
+      lastModified,
+      changeFrequency: "weekly",
+      priority: 0.65,
+    },
+    {
+      url: `${siteUrl}/guide/create-stream`,
+      lastModified,
+      changeFrequency: "weekly",
+      priority: 0.65,
+    },
+    {
+      url: `${siteUrl}/guide/receive-tokens`,
+      lastModified,
+      changeFrequency: "weekly",
+      priority: 0.65,
+    },
+    {
+      url: `${siteUrl}/guide/manage-streams`,
+      lastModified,
+      changeFrequency: "weekly",
+      priority: 0.65,
+    },
+    {
+      url: `${siteUrl}/guide/faq`,
+      lastModified,
+      changeFrequency: "weekly",
+      priority: 0.65,
+    },
+    {
       url: `${siteUrl}/skills`,
       lastModified,
       changeFrequency: "weekly",
