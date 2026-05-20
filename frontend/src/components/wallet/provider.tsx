@@ -1,69 +1,26 @@
 "use client";
 
-import {
-  ConnectionProvider,
-  WalletProvider,
-} from "@solana/wallet-adapter-react";
-
-import {
-  PhantomWalletAdapter,
-} from "@solana/wallet-adapter-phantom";
-
-import {
-  SolflareWalletAdapter,
-} from "@solana/wallet-adapter-solflare";
-
-import {
-  WalletAdapterNetwork,
-} from "@solana/wallet-adapter-base";
-
-import {
-  WalletConnectWalletAdapter,
-} from "@walletconnect/solana-adapter";
-
-
-
-import {
-  useMemo,
-} from "react";
+import { useMemo } from "react";
+import { autoDiscover, filterByNames } from "@solana/client";
+import { SolanaProvider } from "@solana/react-hooks";
 
 export function Providers({
   children,
 }: {
   children: React.ReactNode;
 }) {
-  const endpoint =
-    process.env
-      .NEXT_PUBLIC_RPC!;
+  const config = useMemo(() => {
+    const endpoint = process.env.NEXT_PUBLIC_RPC ?? "https://api.devnet.solana.com";
+    const websocketEndpoint = process.env.NEXT_PUBLIC_WS_RPC;
 
-  const wallets = useMemo(
-    () => [
-      new PhantomWalletAdapter(),
-      new SolflareWalletAdapter({ network: WalletAdapterNetwork.Devnet }),
-      ...(process.env.NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID
-        ? [
-            new WalletConnectWalletAdapter({
-              network: WalletAdapterNetwork.Devnet,
-              options: {
-                projectId: process.env.NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID,
-              },
-            }),
-          ]
-        : []),
-    ],
-    []
-  );
+    return {
+      endpoint,
+      ...(websocketEndpoint ? { websocketEndpoint } : {}),
+      walletConnectors: autoDiscover({
+        filter: filterByNames("phantom", "solflare", "backpack"),
+      }),
+    };
+  }, []);
 
-  return (
-    <ConnectionProvider
-      endpoint={endpoint}
-    >
-      <WalletProvider
-        wallets={wallets}
-        autoConnect
-      >
-        {children}
-      </WalletProvider>
-    </ConnectionProvider>
-  );
+  return <SolanaProvider config={config}>{children}</SolanaProvider>;
 }
