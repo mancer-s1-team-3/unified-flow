@@ -2,8 +2,10 @@ import express from "express";
 import cors from "cors";
 import fs from "node:fs/promises";
 import path from "node:path";
+import { PublicKey } from "@solana/web3.js";
 
 import prisma from "../db/prisma";
+import { connection } from "../services/rpc";
 import { parseCsvText, computeCsvDiff, mapCsvRowsToStreams } from "../services/csvDiff";
 
 const app = express();
@@ -30,6 +32,43 @@ function bigintReplacer(
         : value;
 }
 
+const mintDecimalsCache = new Map<string, number | null>();
+
+async function getMintDecimals(mint: string): Promise<number | null> {
+    const cached = mintDecimalsCache.get(mint);
+    if (cached !== undefined) {
+        return cached;
+    }
+
+    try {
+        const mintPubkey = new PublicKey(mint);
+        const mintInfo = await connection.getParsedAccountInfo(mintPubkey);
+        const parsedMintData = mintInfo.value?.data as { parsed?: { info?: { decimals?: number } } } | undefined;
+        const decimals = typeof parsedMintData?.parsed?.info?.decimals === "number"
+            ? parsedMintData.parsed.info.decimals
+            : null;
+
+        mintDecimalsCache.set(mint, decimals);
+        return decimals;
+    } catch {
+        mintDecimalsCache.set(mint, null);
+        return null;
+    }
+}
+
+async function enrichStreamsWithDecimals(streams: any[]) {
+    const uniqueMints = [...new Set(streams.map((stream) => stream.mint).filter(Boolean))];
+    const mintDecimalEntries = await Promise.all(
+        uniqueMints.map(async (mint) => [mint, await getMintDecimals(mint)] as const)
+    );
+    const mintDecimalsByMint = new Map(mintDecimalEntries);
+
+    return streams.map((stream) => ({
+        ...stream,
+        mintDecimals: mintDecimalsByMint.get(stream.mint) ?? null,
+    }));
+}
+
 app.get("/streams", async (_, res) => {
     const streams = await prisma.stream.findMany({
         orderBy: {
@@ -37,9 +76,11 @@ app.get("/streams", async (_, res) => {
         },
     });
 
+    const enrichedStreams = await enrichStreamsWithDecimals(streams);
+
     res.send(
         JSON.stringify(
-            streams,
+            enrichedStreams,
             bigintReplacer
         )
     );
@@ -59,9 +100,16 @@ app.get("/streams/:id", async (req, res) => {
         },
     });
 
+    const enrichedStream = stream
+        ? {
+            ...stream,
+            mintDecimals: await getMintDecimals(stream.mint),
+        }
+        : stream;
+
     res.send(
         JSON.stringify(
-            stream,
+            enrichedStream,
             bigintReplacer
         )
     );
