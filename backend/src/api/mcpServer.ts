@@ -19,7 +19,6 @@ import fs from "fs";
 import dotenv from "dotenv";
 import path from "path";
 
-import prisma from "../db/prisma";
 import { connection } from "../services/rpc";
 import idl from "../idl/solana_program.json";
 
@@ -32,6 +31,7 @@ dotenv.config();
 const PROGRAM_ID = new PublicKey(
     process.env.PROGRAM_ID || "8M5yieUh7pxwUi1YBByDF82nqoorZwaKi8dBoMVpurFa"
 );
+const API_BASE_URL = (process.env.API_BASE_URL || "http://localhost:3000").replace(/\/$/, "");
 
 function loadWallet(filePath: string): Keypair {
     const resolvedPath = path.resolve(filePath.replace(/^~/, process.env.HOME || ""));
@@ -71,6 +71,16 @@ function getAnchorProgram(signer: Keypair) {
     return new anchor.Program(idl as anchor.Idl, provider);
 }
 
+async function fetchIndexedStreams() {
+    const response = await fetch(`${API_BASE_URL}/streams`);
+
+    if (!response.ok) {
+        throw new Error(`Failed to fetch indexed streams from API (${response.status} ${response.statusText})`);
+    }
+
+    return response.json();
+}
+
 // Convert BigInt values to string representation recursively for JSON safe transfer
 function serializeBigInt(obj: any): any {
     if (obj === null || obj === undefined) return obj;
@@ -96,11 +106,11 @@ const server = new McpServer({
 });
 
 // ============================================================================
-// 1. GET STREAMS (DATABASE QUERY)
+// 1. GET STREAMS (INDEXED API QUERY)
 // ============================================================================
 server.tool(
     "get_streams",
-    "Fetch vesting/token distribution streams from the indexed database with filtering options.",
+    "Fetch vesting/token distribution streams from the indexed API with filtering options.",
     {
         creator: z.string().optional().describe("Filter streams created by this public key"),
         recipient: z.string().optional().describe("Filter streams intended for this recipient public key"),
@@ -110,29 +120,28 @@ server.tool(
     },
     async ({ creator, recipient, status, vestingType, limit }) => {
         try {
-            const where: any = {};
-            if (creator) where.creator = creator;
-            if (recipient) where.recipient = recipient;
-            if (status !== undefined) where.status = status;
-            if (vestingType !== undefined) where.vestingType = vestingType;
-
-            const streams = await prisma.stream.findMany({
-                where,
-                orderBy: { createdAt: "desc" },
-                take: limit || 50,
-            });
+            const streams = await fetchIndexedStreams();
+            const filtered = streams
+                .filter((stream: any) => {
+                    if (creator && stream.creator !== creator) return false;
+                    if (recipient && stream.recipient !== recipient) return false;
+                    if (status !== undefined && stream.status !== status) return false;
+                    if (vestingType !== undefined && stream.vestingType !== vestingType) return false;
+                    return true;
+                })
+                .slice(0, limit || 50);
 
             return {
                 content: [{
                     type: "text",
-                    text: JSON.stringify(serializeBigInt(streams), null, 2),
+                    text: JSON.stringify(serializeBigInt(filtered), null, 2),
                 }],
             };
         } catch (error: any) {
             return {
                 content: [{
                     type: "text",
-                    text: `Error fetching streams from database: ${error.message || error}`,
+                    text: `Error fetching streams from API: ${error.message || error}`,
                 }],
                 isError: true,
             };
