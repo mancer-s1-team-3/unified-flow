@@ -3,6 +3,11 @@ import { PublicKey } from "@solana/web3.js";
 import { connection } from "./rpc";
 import prisma from "../db/prisma";
 import { parseEventsSafely } from "./eventParser";
+import {
+    normalizeMilestoneUnlocked,
+    normalizeStreamCreated,
+    normalizeTokensClaimed,
+} from "./eventNormalizer";
 
 dotenv.config();
 
@@ -92,27 +97,33 @@ async function handleStreamCreated(
 ) {
     console.log("STREAM CREATED (BACKFILL):", event);
 
-    const streamId = event.stream.toString();
+    const normalized = normalizeStreamCreated(event);
+    if (!normalized) {
+        console.warn("Skipping StreamCreated event with missing fields:", event);
+        return;
+    }
+
+    const streamId = normalized.stream;
 
     await prisma.stream.upsert({
         where: { id: streamId },
         update: {},
         create: {
             id: streamId,
-            creator: event.creator.toString(),
-            recipient: event.recipient.toString(),
-            mint: event.mint.toString(),
-            vault: event.vault.toString(),
-            totalAmount: BigInt(event.total_amount.toString()),
+            creator: normalized.creator,
+            recipient: normalized.recipient,
+            mint: normalized.mint,
+            vault: normalized.vault,
+            totalAmount: normalized.totalAmount,
             withdrawn: BigInt(0),
-            startTs: BigInt(event.start_ts.toString()),
-            cliffTs: BigInt(event.cliff_ts.toString()),
-            endTs: BigInt(event.end_ts.toString()),
-            vestingType: Number(event.vesting_type),
+            startTs: normalized.startTs,
+            cliffTs: normalized.cliffTs,
+            endTs: normalized.endTs,
+            vestingType: normalized.vestingType,
             status: 1, // ACTIVE
-            cancelable: Boolean(event.cancelable),
-            milestoneCount: Number(event.milestone_count),
-            nonce: BigInt(event.nonce.toString()),
+            cancelable: normalized.cancelable,
+            milestoneCount: normalized.milestoneCount,
+            nonce: normalized.nonce,
             bump: 0,
         }
     });
@@ -140,8 +151,14 @@ async function handleTokensClaimed(
 ) {
     console.log("TOKENS CLAIMED (BACKFILL):", event);
 
-    const streamId = event.stream.toString();
-    const withdrawnTotal = BigInt(event.withdrawn_total.toString());
+    const normalized = normalizeTokensClaimed(event);
+    if (!normalized) {
+        console.warn("Skipping TokensClaimed event with missing fields:", event);
+        return;
+    }
+
+    const streamId = normalized.stream;
+    const withdrawnTotal = normalized.withdrawnTotal;
 
     // Fetch stream totalAmount to check if it's completed
     const stream = await prisma.stream.findUnique({
@@ -178,7 +195,7 @@ async function handleTokensClaimed(
         }
     });
 
-    console.log(`Backfilled withdrawal for stream ${streamId}: ${event.claimable.toString()} tokens`);
+    console.log(`Backfilled withdrawal for stream ${streamId}: ${normalized.claimable.toString()} tokens`);
 }
 
 async function handleMilestoneUnlocked(
@@ -188,8 +205,14 @@ async function handleMilestoneUnlocked(
 ) {
     console.log("MILESTONE UNLOCKED (BACKFILL):", event);
 
-    const streamId = event.stream.toString();
-    const milestoneAmount = BigInt(event.amount.toString());
+    const normalized = normalizeMilestoneUnlocked(event);
+    if (!normalized) {
+        console.warn("Skipping MilestoneUnlocked event with missing fields:", event);
+        return;
+    }
+
+    const streamId = normalized.stream;
+    const milestoneAmount = normalized.amount;
 
     // Fetch stream to update its unlockedAmount
     const stream = await prisma.stream.findUnique({
