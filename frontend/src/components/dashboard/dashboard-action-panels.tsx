@@ -205,7 +205,7 @@ export function DashboardActionPanels(props: Props) {
               </div>
               <div className="min-w-0 max-w-full">
                 <label className="block text-[10px] sm:text-xs font-semibold text-zinc-400 uppercase tracking-wider mb-1.5">Mint</label>
-                <div ref={mintPickerRef} className="relative min-w-0 max-w-full overflow-hidden">
+                <div ref={mintPickerRef} className="relative min-w-0 max-w-full overflow-visible">
                   <button
                     type="button"
                     onClick={() => setMintMenuOpen((open) => !open)}
@@ -242,7 +242,7 @@ export function DashboardActionPanels(props: Props) {
                   </button>
 
                   {mintMenuOpen && (
-                    <div className="absolute left-0 right-0 z-20 mt-2 w-full max-w-full rounded-2xl border border-zinc-800 bg-zinc-950 shadow-2xl shadow-black/40 overflow-hidden max-h-[72vh]">
+                    <div className="absolute left-0 right-0 top-full z-20 mt-2 w-full max-w-full rounded-2xl border border-zinc-800 bg-zinc-950 shadow-2xl shadow-black/40 overflow-hidden max-h-[72vh]">
                       <div className="flex items-center justify-between gap-3 px-4 py-3 border-b border-zinc-900 bg-zinc-950/95">
                         <div>
                           <div className="text-[10px] font-black uppercase tracking-[0.24em] text-zinc-500">Known mints for {clusterLabel}</div>
