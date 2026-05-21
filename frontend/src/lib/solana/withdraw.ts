@@ -2,7 +2,11 @@
 
 import * as anchor from "@coral-xyz/anchor";
 import idl from "../../../../backend/src/idl/solana_program.json";
-import { ASSOCIATED_TOKEN_PROGRAM_ADDRESS, TOKEN_PROGRAM_ADDRESS } from "@solana-program/token";
+import {
+  ASSOCIATED_TOKEN_PROGRAM_ADDRESS,
+  TOKEN_PROGRAM_ADDRESS,
+  getCreateAssociatedTokenIdempotentInstruction,
+} from "@solana-program/token";
 import { Buffer } from "buffer";
 import { createWalletTransactionSigner, transactionToBase64 } from "@solana/client";
 import {
@@ -191,6 +195,15 @@ export async function withdrawFromStreamOnChain({
 
   const { blockhash, lastValidBlockHeight } = await connection.getLatestBlockhash(commitment);
 
+  const createRecipientAtaInstruction = await getCreateAssociatedTokenIdempotentInstruction({
+    payer: walletSigner as any,
+    ata: recipientAta.toBase58() as any,
+    owner: recipient.toBase58() as any,
+    mint: mint.toBase58() as any,
+    systemProgram: SystemProgram.programId.toBase58() as any,
+    tokenProgram: TOKEN_PROGRAM_ID.toBase58() as any,
+  } as any);
+
   const anchorInstruction = await program.methods
     .withdraw(requestedAmount)
     .accounts({
@@ -228,9 +241,12 @@ export async function withdrawFromStreamOnChain({
     { blockhash: blockhash as any, lastValidBlockHeight: BigInt(lastValidBlockHeight) },
     appendTransactionMessageInstruction(
       kitInstruction,
-      setTransactionMessageFeePayerSigner(
-        kitSigner,
-        createTransactionMessage({ version: 0 })
+      appendTransactionMessageInstruction(
+        createRecipientAtaInstruction as any,
+        setTransactionMessageFeePayerSigner(
+          kitSigner,
+          createTransactionMessage({ version: 0 })
+        )
       )
     )
   );
