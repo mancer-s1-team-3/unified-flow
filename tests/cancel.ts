@@ -604,8 +604,16 @@ describe("cancel", () => {
 
     await doCancel(streamPda, creatorAta, recipientAta);
 
-    // Advance clock so bankrun generates a different blockhash for the second tx
-    await setTime(BASE_NOW + 1);
+    // Process a dummy tx to advance the slot and get a fresh blockhash in bankrun.
+    // setTime alone does not advance the slot, so the second cancel would be
+    // treated as a duplicate transaction without this.
+    await sendIx(creator, [
+      SystemProgram.transfer({
+        fromPubkey: creator.publicKey,
+        toPubkey: admin.publicKey,
+        lamports: 1,
+      }),
+    ]);
 
     await expectError(
       doCancel(streamPda, creatorAta, recipientAta),
