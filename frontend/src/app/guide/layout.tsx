@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { Suspense } from "react";
 import type { ReactNode } from "react";
 import { GuideLanguageToggle } from "./_components/guide-language-toggle";
 import { GuideSidebarNav } from "./_components/guide-sidebar-nav";
@@ -19,13 +20,17 @@ export default function GuideLayout({ children }: { children: ReactNode }) {
             Back to Dashboard
           </Link>
 
-          <div className="flex items-center gap-3">
-            <GuideLanguageToggle />
-          </div>
+          <Suspense fallback={<div className="h-8 w-24 rounded-full border border-zinc-800 bg-zinc-950/60" />}>
+            <div className="flex items-center gap-3">
+              <GuideLanguageToggle />
+            </div>
+          </Suspense>
         </div>
 
         <section className="grid gap-6 lg:grid-cols-[260px_minmax(0,1fr)]">
-          <GuideSidebarNav />
+          <Suspense fallback={<div className="rounded-3xl border border-zinc-800 bg-zinc-900/35 p-5 h-fit lg:sticky lg:top-6" />}>
+            <GuideSidebarNav />
+          </Suspense>
 
           <div>{children}</div>
         </section>
