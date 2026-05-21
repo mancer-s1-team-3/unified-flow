@@ -1,8 +1,9 @@
 "use client";
 
 import type { ChangeEvent, RefObject } from "react";
-import { useMemo } from "react";
-import { Shield, Download, Layers, Lock, RefreshCw, Terminal, Upload } from "lucide-react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import Image from "next/image";
+import { Check, ChevronDown, Shield, Download, Layers, Lock, RefreshCw, Terminal, Upload } from "lucide-react";
 import { CsvDiffPanel } from "@/components/dashboard/csv-diff-panel";
 import { isWipFeature } from "./feature-flags";
 import type { MintPreset } from "@/components/dashboard/token-mints";
@@ -94,10 +95,27 @@ export function DashboardActionPanels(props: Props) {
     isStreamCsvCreated,
   } = props;
 
+  const mintPickerRef = useRef<HTMLDivElement | null>(null);
+  const [mintMenuOpen, setMintMenuOpen] = useState(false);
+
   const milestoneSum = useMemo(
     () => milestoneAmounts.reduce((acc, curr) => acc + Number(curr || 0), 0),
     [milestoneAmounts]
   );
+
+  const selectedMintPreset = mintPresets.find((preset) => preset.mint === createForm.mint) ?? null;
+
+  useEffect(() => {
+    const handlePointerDown = (event: MouseEvent | PointerEvent) => {
+      if (!mintPickerRef.current) return;
+      if (!mintPickerRef.current.contains(event.target as Node)) {
+        setMintMenuOpen(false);
+      }
+    };
+
+    document.addEventListener("pointerdown", handlePointerDown);
+    return () => document.removeEventListener("pointerdown", handlePointerDown);
+  }, []);
 
   return (
     <>
@@ -156,34 +174,104 @@ export function DashboardActionPanels(props: Props) {
               </div>
               <div>
                 <label className="block text-xs font-semibold text-zinc-400 uppercase tracking-wider mb-1.5">Token Mint</label>
-                <input type="text" value={createForm.mint} onChange={(e) => setCreateForm({ ...createForm, mint: e.target.value })} className="w-full bg-zinc-950 border border-zinc-800 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:border-indigo-500 font-mono" />
-                <div className="mt-2 rounded-xl border border-zinc-900 bg-zinc-950/70 p-3">
-                  <div className="flex items-center justify-between gap-3 mb-2">
-                    <span className="text-[10px] font-black uppercase tracking-[0.24em] text-zinc-500">Known mints for {clusterLabel}</span>
-                    <span className="text-[10px] text-zinc-600">Tap a preset to fill the field</span>
-                  </div>
-                  <div className="grid gap-2 sm:grid-cols-2">
-                    {mintPresets.map((preset) => {
-                      const active = createForm.mint.trim() === preset.mint;
+                <div ref={mintPickerRef} className="relative">
+                  <button
+                    type="button"
+                    onClick={() => setMintMenuOpen((open) => !open)}
+                    className="w-full flex items-center justify-between gap-3 bg-zinc-950 border border-zinc-800 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:border-indigo-500 transition-colors"
+                  >
+                    <div className="flex items-center gap-3 min-w-0">
+                      <div
+                        className="w-9 h-9 rounded-full overflow-hidden border border-zinc-800 bg-zinc-900 flex items-center justify-center shrink-0"
+                        style={{ boxShadow: selectedMintPreset ? `0 0 0 1px ${selectedMintPreset.accent}33` : undefined }}
+                      >
+                        {selectedMintPreset ? (
+                          <Image src={selectedMintPreset.logoURI} alt={`${selectedMintPreset.label} logo`} width={36} height={36} className="w-full h-full object-cover" />
+                        ) : (
+                          <span className="text-[10px] font-black text-zinc-400">?</span>
+                        )}
+                      </div>
+                      <div className="min-w-0 text-left">
+                        <div className="flex items-center gap-2 min-w-0">
+                          <span className="font-semibold text-zinc-100 truncate">
+                            {selectedMintPreset ? selectedMintPreset.label : "Custom mint"}
+                          </span>
+                          {selectedMintPreset && (
+                            <span className="rounded-full border border-zinc-800 bg-zinc-900 px-1.5 py-0.5 text-[9px] font-black uppercase tracking-wider text-zinc-400">
+                              {selectedMintPreset.decimals} dec
+                            </span>
+                          )}
+                        </div>
+                        <div className="font-mono text-[10px] text-zinc-500 truncate">
+                          {selectedMintPreset ? selectedMintPreset.mint : createForm.mint || "Select or paste a mint address"}
+                        </div>
+                      </div>
+                    </div>
+                    <ChevronDown className={`w-4 h-4 text-zinc-500 shrink-0 transition-transform ${mintMenuOpen ? "rotate-180" : ""}`} />
+                  </button>
 
-                      return (
+                  {mintMenuOpen && (
+                    <div className="absolute z-20 mt-2 w-full rounded-2xl border border-zinc-800 bg-zinc-950 shadow-2xl shadow-black/40 overflow-hidden">
+                      <div className="flex items-center justify-between gap-3 px-4 py-3 border-b border-zinc-900 bg-zinc-950/95">
+                        <div>
+                          <div className="text-[10px] font-black uppercase tracking-[0.24em] text-zinc-500">Known mints for {clusterLabel}</div>
+                          <div className="text-[10px] text-zinc-600">Pick a preset or keep a custom mint below</div>
+                        </div>
                         <button
-                          key={preset.mint}
                           type="button"
-                          onClick={() => setCreateForm({ ...createForm, mint: preset.mint })}
-                          className={`rounded-xl border px-3 py-2 text-left transition-all ${active ? "border-indigo-500/70 bg-indigo-500/10 shadow-[0_0_0_1px_rgba(99,102,241,0.18)]" : "border-zinc-800 bg-zinc-900/40 hover:border-zinc-700 hover:bg-zinc-900/65"}`}
+                          onClick={() => setCreateForm({ ...createForm, mint: "" })}
+                          className="text-[10px] font-bold text-zinc-400 hover:text-zinc-200"
                         >
-                          <div className="flex items-center justify-between gap-2">
-                            <span className="text-xs font-extrabold text-zinc-100">{preset.label}</span>
-                            {active && <span className="rounded-full bg-indigo-500/20 px-2 py-0.5 text-[9px] font-black uppercase tracking-wider text-indigo-300">Selected</span>}
-                          </div>
-                          <div className="mt-1 text-[10px] text-zinc-500">{preset.decimals} decimals</div>
-                          <div className="mt-1 font-mono text-[10px] text-zinc-400 break-all">{preset.mint}</div>
-                          <div className="mt-1 text-[10px] text-zinc-500">{preset.note}</div>
+                          Clear
                         </button>
-                      );
-                    })}
-                  </div>
+                      </div>
+                      <div className="max-h-72 overflow-y-auto p-2">
+                        {mintPresets.map((preset) => {
+                          const active = createForm.mint.trim() === preset.mint;
+
+                          return (
+                            <button
+                              key={preset.mint}
+                              type="button"
+                              onClick={() => {
+                                setCreateForm({ ...createForm, mint: preset.mint });
+                                setMintMenuOpen(false);
+                              }}
+                              className={`w-full flex items-center justify-between gap-3 rounded-xl border px-3 py-2.5 text-left transition-all ${active ? "border-indigo-500/70 bg-indigo-500/10" : "border-transparent hover:border-zinc-800 hover:bg-zinc-900/50"}`}
+                            >
+                              <div className="flex items-center gap-3 min-w-0">
+                                <div className="w-10 h-10 rounded-full overflow-hidden border border-zinc-800 bg-zinc-900 shrink-0">
+                                  <Image src={preset.logoURI} alt={`${preset.label} logo`} width={40} height={40} className="w-full h-full object-cover" />
+                                </div>
+                                <div className="min-w-0">
+                                  <div className="flex items-center gap-2 min-w-0">
+                                    <span className="text-sm font-extrabold text-zinc-100 truncate">{preset.label}</span>
+                                    <span className="rounded-full border border-zinc-800 bg-zinc-900 px-1.5 py-0.5 text-[9px] font-black uppercase tracking-wider text-zinc-400">
+                                      {preset.decimals} dec
+                                    </span>
+                                  </div>
+                                  <div className="font-mono text-[10px] text-zinc-500 truncate">{preset.mint}</div>
+                                  <div className="text-[10px] text-zinc-600 truncate">{preset.note}</div>
+                                </div>
+                              </div>
+                              {active && <Check className="w-4 h-4 text-indigo-300 shrink-0" />}
+                            </button>
+                          );
+                        })}
+
+                        <div className="mt-2 border-t border-zinc-900 pt-2 px-1 pb-1">
+                          <div className="text-[10px] font-black uppercase tracking-[0.24em] text-zinc-500 mb-2 px-2">Custom mint</div>
+                          <input
+                            type="text"
+                            value={createForm.mint}
+                            onChange={(e) => setCreateForm({ ...createForm, mint: e.target.value })}
+                            placeholder="Paste a mint address"
+                            className="w-full bg-zinc-950 border border-zinc-800 rounded-xl px-3 py-2 text-xs focus:outline-none focus:border-indigo-500 font-mono"
+                          />
+                        </div>
+                      </div>
+                    </div>
+                  )}
                 </div>
               </div>
               <div>
