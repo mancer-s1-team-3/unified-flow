@@ -421,8 +421,88 @@ pub fn create_stream<'info>(
         Ok(())
     }
 
- pub fn cancel(_ctx: Context<Cancel>) -> Result<()> {
-   Ok(())
+ pub fn cancel(ctx: Context<Cancel>) -> Result<()> {
+    let now = Clock::get()?.unix_timestamp;
+
+    require!(!ctx.accounts.stream.cancelled, ErrorCode::AlreadyCancelled);
+
+    let vested = vested_amount(&ctx.accounts.stream, now)?;
+    require!(vested < ctx.accounts.stream.total_amount, ErrorCode::FullyVested);
+
+    let claimable_for_recipient = vested
+        .checked_sub(ctx.accounts.stream.withdrawn)
+        .ok_or(ErrorCode::MathOverflow)?;
+
+    let remaining_for_creator = ctx.accounts.stream.total_amount
+        .checked_sub(vested)
+        .ok_or(ErrorCode::MathOverflow)?;
+
+    let (creator_key, recipient_key, nonce_bytes, bump_bytes, stream_key) = {
+        let stream = &mut ctx.accounts.stream;
+        stream.cancelled = true;
+        stream.status = STREAM_STATUS_CANCELLED;
+        (
+            stream.creator,
+            stream.recipient,
+            stream.nonce.to_le_bytes(),
+            [stream.bump],
+            stream.key(),
+        )
+    };
+
+    let signer_seeds: &[&[&[u8]]] = &[&[
+        b"stream",
+        creator_key.as_ref(),
+        recipient_key.as_ref(),
+        &nonce_bytes,
+        &bump_bytes,
+    ]];
+
+    if claimable_for_recipient > 0 {
+        transfer_checked(
+            CpiContext::new_with_signer(
+                ctx.accounts.token_program.to_account_info(),
+                TransferChecked {
+                    from: ctx.accounts.vault.to_account_info(),
+                    to: ctx.accounts.recipient_token_account.to_account_info(),
+                    authority: ctx.accounts.stream.to_account_info(),
+                    mint: ctx.accounts.mint.to_account_info(),
+                },
+                signer_seeds,
+            ),
+            claimable_for_recipient,
+            ctx.accounts.mint.decimals,
+        )?;
+    }
+
+    if remaining_for_creator > 0 {
+        transfer_checked(
+            CpiContext::new_with_signer(
+                ctx.accounts.token_program.to_account_info(),
+                TransferChecked {
+                    from: ctx.accounts.vault.to_account_info(),
+                    to: ctx.accounts.creator_token_account.to_account_info(),
+                    authority: ctx.accounts.stream.to_account_info(),
+                    mint: ctx.accounts.mint.to_account_info(),
+                },
+                signer_seeds,
+            ),
+            remaining_for_creator,
+            ctx.accounts.mint.decimals,
+        )?;
+    }
+
+    emit!(StreamCancelled {
+        stream: stream_key,
+        creator: creator_key,
+        recipient: recipient_key,
+        vested_amount: vested,
+        returned_to_creator: remaining_for_creator,
+        claimable_for_recipient,
+        timestamp: now,
+    });
+
+    Ok(())
 }
 pub fn unlock_milestone(ctx: Context<UnlockMilestone>) -> Result<()> {
     let stream = &mut ctx.accounts.stream;
@@ -872,8 +952,6 @@ pub struct Cancel<'info> {
         bump = stream.bump,
         has_one = creator,
         has_one = mint,
-        constraint = stream.status == STREAM_STATUS_ACTIVE
-            @ ErrorCode::StreamNotActive,
         constraint = stream.cancelable
             @ ErrorCode::StreamNotCancelable,
     )]
@@ -1373,5 +1451,15 @@ pub struct CliffEdited {
     pub stream: Pubkey,
     pub old_cliff_ts: i64,
     pub new_cliff_ts: i64,
+    pub timestamp: i64,
+}
+#[event]
+pub struct StreamCancelled {
+    pub stream: Pubkey,
+    pub creator: Pubkey,
+    pub recipient: Pubkey,
+    pub vested_amount: u64,
+    pub returned_to_creator: u64,
+    pub claimable_for_recipient: u64,
     pub timestamp: i64,
 }
