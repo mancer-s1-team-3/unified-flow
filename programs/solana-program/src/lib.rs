@@ -1156,6 +1156,9 @@ pub struct MilestoneAccount {
 }
 
 fn vested_amount(stream: &StreamAccount, now: i64) -> Result<u64> {
+     if stream.vesting_type == VESTING_TYPE_MILESTONE {
+        return Ok(stream.unlocked_milestone_amount);
+    }
     if now < stream.start_ts {
         return Ok(0);
     }
