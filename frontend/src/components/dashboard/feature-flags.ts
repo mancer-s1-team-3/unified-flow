@@ -1,7 +1,6 @@
 export const FEATURE_FLAGS = {
   csvBulkCreate: true,
   csvBulkEdit: true,
-  unlockMilestone: true,
   editMilestone: true,
   editLinear: true,
   editCliff: true,
@@ -10,4 +9,3 @@ export const FEATURE_FLAGS = {
 export function isWipFeature(flag: keyof typeof FEATURE_FLAGS) {
   return FEATURE_FLAGS[flag];
 }
-

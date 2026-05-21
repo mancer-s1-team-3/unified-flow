@@ -103,6 +103,10 @@ export function DashboardActionPanels(props: Props) {
     [milestoneAmounts]
   );
 
+  const durationSeconds = Number(createForm.duration || 0);
+  const cliffDurationSeconds = Number(createForm.cliffDuration || 0);
+  const cliffExceedsDuration = createForm.type === "1" && cliffDurationSeconds > durationSeconds;
+
   const selectedMintPreset = mintPresets.find((preset) => preset.mint === createForm.mint) ?? null;
 
   useEffect(() => {
@@ -282,15 +286,22 @@ export function DashboardActionPanels(props: Props) {
                   <option value="2">Milestone-Based Vesting</option>
                 </select>
               </div>
-              <div>
-                <label className="block text-xs font-semibold text-zinc-400 uppercase tracking-wider mb-1.5">Duration (Seconds)</label>
-                <input type="number" value={createForm.duration} onChange={(e) => setCreateForm({ ...createForm, duration: e.target.value })} className="w-full bg-zinc-950 border border-zinc-800 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:border-indigo-500 font-mono" />
-              </div>
+              {createForm.type !== "2" && (
+                <div>
+                  <label className="block text-xs font-semibold text-zinc-400 uppercase tracking-wider mb-1.5">Duration (Seconds)</label>
+                  <input type="number" value={createForm.duration} onChange={(e) => setCreateForm({ ...createForm, duration: e.target.value })} className="w-full bg-zinc-950 border border-zinc-800 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:border-indigo-500 font-mono" />
+                </div>
+              )}
 
               {createForm.type === "1" && (
                 <div>
                   <label className="block text-xs font-semibold text-zinc-400 uppercase tracking-wider mb-1.5">Cliff Duration (Seconds)</label>
                   <input type="number" value={createForm.cliffDuration} onChange={(e) => setCreateForm({ ...createForm, cliffDuration: e.target.value })} className="w-full bg-zinc-950 border border-zinc-800 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:border-indigo-500 font-mono" />
+                  {cliffExceedsDuration && (
+                    <div className="mt-2 text-[10px] font-semibold text-amber-400">
+                      Cliff duration must be less than or equal to the stream duration.
+                    </div>
+                  )}
                 </div>
               )}
 
@@ -423,7 +434,7 @@ export function DashboardActionPanels(props: Props) {
       {activeTab === "unlock_milestone" && (
         <div className="animate-in fade-in-30 duration-200">
           <div className="border-b border-zinc-900 pb-4 mb-6"><h2 className="text-2xl font-extrabold tracking-tight">Unlock Milestone</h2><p className="text-xs text-zinc-400">Release milestone allocations sequentially based on milestones attained</p></div>
-          <div className="grid gap-4"><div><label className="block text-xs font-semibold text-zinc-400 uppercase tracking-wider mb-1.5">Stream ID (PDA Address)</label><input type="text" value={unlockForm.streamId} onChange={(e) => setUnlockForm({ ...unlockForm, streamId: e.target.value })} className="w-full bg-zinc-950 border border-zinc-800 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:border-indigo-500 font-mono" /></div><div><label className="block text-xs font-semibold text-zinc-400 uppercase tracking-wider mb-1.5">Milestone Index</label><input type="number" value={unlockForm.milestoneIndex} onChange={(e) => setUnlockForm({ ...unlockForm, milestoneIndex: e.target.value })} className="w-full bg-zinc-950 border border-zinc-800 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:border-indigo-500 font-mono" /></div></div>
+          <div><label className="block text-xs font-semibold text-zinc-400 uppercase tracking-wider mb-1.5">Stream ID (PDA Address)</label><input type="text" value={unlockForm.streamId} onChange={(e) => setUnlockForm({ ...unlockForm, streamId: e.target.value })} className="w-full bg-zinc-950 border border-zinc-800 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:border-indigo-500 font-mono" /></div>
           <button onClick={() => handleAction("unlock_milestone", unlockForm)} className="w-full mt-6 bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs py-3 rounded-xl transition-all shadow-lg hover:shadow-indigo-500/20">Unlock Milestone</button>
         </div>
       )}
@@ -455,7 +466,7 @@ export function DashboardActionPanels(props: Props) {
       <div className="mt-12 bg-zinc-950 border border-zinc-900 rounded-2xl p-4 font-mono text-[11px] relative overflow-hidden">
         <div className="absolute top-0 right-0 p-3 flex gap-2"><span className="w-2.5 h-2.5 rounded-full bg-red-500/60" /><span className="w-2.5 h-2.5 rounded-full bg-amber-500/60" /><span className="w-2.5 h-2.5 rounded-full bg-green-500/60" /></div>
         <div className="flex items-center gap-2 text-indigo-400 font-bold mb-2"><Terminal className="w-4 h-4 shrink-0" /><span>Equivalent CLI / Agent Skill Call</span></div>
-        <div className="text-zinc-400 select-all overflow-x-auto whitespace-nowrap scrollbar-none py-1">{activeTab === "create_streams" && <span>{createMode === "manual" ? `$ unified-flow create-stream --recipient ${createForm.recipient || "<address>"} --amount ${createForm.amount} --type ${createForm.type === "0" ? "linear" : createForm.type === "1" ? "milestone" : "cliff"} --duration ${createForm.duration}` : `$ unified-flow create-bulk --csv ./vesting_list.csv --endpoint devnet`}</span>}{activeTab === "edit_csv" && <span>$ unified-flow edit-bulk --csv ./vesting_edits.csv --endpoint devnet</span>}{activeTab === "withdraw" && <span>$ unified-flow claim-tokens --stream {withdrawForm.streamId || "<stream_pda>"} {withdrawForm.amount ? `--amount ${withdrawForm.amount}` : ""}</span>}{activeTab === "cancel" && <span>$ unified-flow cancel-stream --stream {cancelForm.streamId || "<stream_pda>"}</span>}{activeTab === "unlock_milestone" && <span>$ unified-flow unlock-milestone --stream {unlockForm.streamId || "<stream_pda>"} --index {unlockForm.milestoneIndex}</span>}{activeTab === "edit_milestone" && <span>$ unified-flow edit-milestone --stream {editMilestoneForm.streamId || "<stream_pda>"} --index {editMilestoneForm.index} --amount {editMilestoneForm.newAmount}</span>}{activeTab === "edit_linear" && <span>$ unified-flow edit-linear --stream {editLinearForm.streamId || "<stream_pda>"} {editLinearForm.newEndTs ? `--end-ts ${editLinearForm.newEndTs}` : ""} {editLinearForm.topupAmount ? `--topup ${editLinearForm.topupAmount}` : ""}</span>}{activeTab === "edit_cliff" && <span>$ unified-flow edit-cliff --stream {editCliffForm.streamId || "<stream_pda>"} --cliff-ts {editCliffForm.newCliffTs || "<timestamp>"}</span>}</div>
+        <div className="text-zinc-400 select-all overflow-x-auto whitespace-nowrap scrollbar-none py-1">{activeTab === "create_streams" && <span>{createMode === "manual" ? `$ unified-flow create-stream --recipient ${createForm.recipient || "<address>"} --amount ${createForm.amount} --type ${createForm.type === "0" ? "linear" : createForm.type === "1" ? "milestone" : "cliff"} --duration ${createForm.duration}` : `$ unified-flow create-bulk --csv ./vesting_list.csv --endpoint devnet`}</span>}{activeTab === "edit_csv" && <span>$ unified-flow edit-bulk --csv ./vesting_edits.csv --endpoint devnet</span>}{activeTab === "withdraw" && <span>$ unified-flow claim-tokens --stream {withdrawForm.streamId || "<stream_pda>"} {withdrawForm.amount ? `--amount ${withdrawForm.amount}` : ""}</span>}{activeTab === "cancel" && <span>$ unified-flow cancel-stream --stream {cancelForm.streamId || "<stream_pda>"}</span>}{activeTab === "unlock_milestone" && <span>$ unified-flow unlock-milestone --stream {unlockForm.streamId || "<stream_pda>"}</span>}{activeTab === "edit_milestone" && <span>$ unified-flow edit-milestone --stream {editMilestoneForm.streamId || "<stream_pda>"} --index {editMilestoneForm.index} --amount {editMilestoneForm.newAmount}</span>}{activeTab === "edit_linear" && <span>$ unified-flow edit-linear --stream {editLinearForm.streamId || "<stream_pda>"} {editLinearForm.newEndTs ? `--end-ts ${editLinearForm.newEndTs}` : ""} {editLinearForm.topupAmount ? `--topup ${editLinearForm.topupAmount}` : ""}</span>}{activeTab === "edit_cliff" && <span>$ unified-flow edit-cliff --stream {editCliffForm.streamId || "<stream_pda>"} --cliff-ts {editCliffForm.newCliffTs || "<timestamp>"}</span>}</div>
       </div>
     </>
   );
