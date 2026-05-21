@@ -249,7 +249,7 @@ export default function DocsPage() {
             <BookOpen className="w-4.5 h-4.5" />
             Vesting Models
           </button>
-          
+
           <button
             onClick={() => setActiveTab("api")}
             className={`flex items-center gap-2 px-5 py-2.5 rounded-xl font-medium text-sm border transition-all ${
