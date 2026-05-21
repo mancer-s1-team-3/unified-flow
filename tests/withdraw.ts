@@ -179,6 +179,7 @@ describe("withdraw", () => {
 
   let mint: PublicKey;
   let configPda: PublicKey;
+  let feeVaultPda: PublicKey;
 
   // Fixed timestamp so create_stream's `start_ts >= now` always holds
   const BASE_NOW = 1_700_000_000;
@@ -229,6 +230,11 @@ describe("withdraw", () => {
 
     [configPda] = PublicKey.findProgramAddressSync(
       [Buffer.from("config")],
+      program.programId
+    );
+
+    [feeVaultPda] = PublicKey.findProgramAddressSync(
+      [Buffer.from("fee_vault")],
       program.programId
     );
 
@@ -312,14 +318,12 @@ describe("withdraw", () => {
     opts: {
       signer?: Keypair;
       feedAccount?: PublicKey;
-      feeReceiver?: PublicKey;
+      feeVaultOverride?: PublicKey;
     } = {}
   ): Promise<string> {
     const signer = opts.signer ?? recipient;
     const feedAccount = opts.feedAccount ?? SOL_USD_FEED;
-    const feeReceiver =
-      opts.feeReceiver ??
-      (await program.account.configAccount.fetch(configPda)).feeAuthority;
+    const feeVault = opts.feeVaultOverride ?? feeVaultPda;
 
     // `stream` is typed as auto-resolved (circular PDA seeds) but must be supplied at runtime.
     // Unique counter in _amount_to_withdraw (ignored by program) avoids duplicate tx signatures.
@@ -329,7 +333,7 @@ describe("withdraw", () => {
         recipient: signer.publicKey,
         stream: streamPda,
         recipientAta,
-        feeReceiver,
+        feeVault,
         chainlinkFeed: feedAccount,
         tokenProgram: TOKEN_PROGRAM_ID,
       } as any)
@@ -376,8 +380,7 @@ describe("withdraw", () => {
     await setTime(context, midTs);
     updateFeed(PRICE_RAW, PRICE_DECIMALS, midTs);
 
-    const feeAuthority = (await program.account.configAccount.fetch(configPda)).feeAuthority;
-    const feeBalanceBefore = await getSolBalance(context, feeAuthority);
+    const feeBalanceBefore = await getSolBalance(context, feeVaultPda);
     const solBalanceBefore = await getSolBalance(context, recipient.publicKey);
 
     const tokenBefore = await getTokenBalance(context, recipientAta);
@@ -389,7 +392,7 @@ describe("withdraw", () => {
     expect(Number(tokenAfter - tokenBefore)).to.be.closeTo(expectedRaw, 1);
 
     // Fee in SOL
-    const feeBalanceAfter = await getSolBalance(context, feeAuthority);
+    const feeBalanceAfter = await getSolBalance(context, feeVaultPda);
     expect(Number(feeBalanceAfter - feeBalanceBefore)).to.equal(EXPECTED_FEE_LAMPORTS);
 
     // Recipient's SOL decreased by at least the fee
@@ -512,10 +515,9 @@ describe("withdraw", () => {
     await setTime(context, endTs + 1);
     updateFeed(highPrice, PRICE_DECIMALS, endTs + 1);
 
-    const feeAuthority = (await program.account.configAccount.fetch(configPda)).feeAuthority;
-    const before = await getSolBalance(context, feeAuthority);
+    const before = await getSolBalance(context, feeVaultPda);
     await doWithdraw(streamPda, recipientAta);
-    const feeReceived = Number((await getSolBalance(context, feeAuthority)) - before);
+    const feeReceived = Number((await getSolBalance(context, feeVaultPda)) - before);
 
     const expectedFee = computeFee(highPrice, PRICE_DECIMALS);
     expect(feeReceived).to.equal(expectedFee);
@@ -741,7 +743,7 @@ describe("withdraw", () => {
   // Wrong fee receiver
   // ══════════════════════════════════════════════════════════════════════════
 
-  it("fails with InvalidFeeReceiver when fee_receiver != config.fee_authority", async () => {
+  it("fails with ConstraintSeeds when wrong fee_vault address is passed", async () => {
     await setTime(context, BASE_NOW);
     const { streamPda, recipientAta, endTs } = await setupStream();
 
@@ -750,8 +752,8 @@ describe("withdraw", () => {
     updateFeed(PRICE_RAW, PRICE_DECIMALS, now);
 
     await expectError(
-      doWithdraw(streamPda, recipientAta, { feeReceiver: stranger.publicKey }),
-      "InvalidFeeReceiver"
+      doWithdraw(streamPda, recipientAta, { feeVaultOverride: stranger.publicKey }),
+      "ConstraintSeeds"
     );
   });
 
