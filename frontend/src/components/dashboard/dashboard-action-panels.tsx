@@ -119,6 +119,7 @@ export function DashboardActionPanels(props: Props) {
   const cliffExceedsDuration = createForm.type === "1" && cliffDurationSeconds > durationSeconds;
 
   const selectedMintPreset = mintPresets.find((preset) => preset.mint === createForm.mint) ?? null;
+  const mobileNarrowFormClass = "mx-auto w-full max-w-[22rem] sm:max-w-none sm:mx-0";
 
   useEffect(() => {
     const handlePointerDown = (event: MouseEvent | PointerEvent) => {
@@ -163,12 +164,12 @@ export function DashboardActionPanels(props: Props) {
 
       {activeTab === "create_streams" && (
         <div className="animate-in fade-in-30 duration-200 overflow-x-hidden max-w-full">
-          <div className="flex flex-col gap-4 border-b border-zinc-900 pb-4 mb-6 sm:flex-row sm:items-center sm:justify-between">
-            <div className="min-w-0">
+          <div className="flex flex-col gap-4 border-b border-zinc-900 pb-4 mb-6 sm:flex-row sm:items-center sm:justify-between max-w-full min-w-0">
+            <div className="min-w-0 max-w-full">
               <h2 className="text-2xl font-extrabold tracking-tight">Create Stream</h2>
               <p className="text-xs text-zinc-400">Deploy a manual stream or deploy multiple streams via CSV</p>
             </div>
-            <div className="flex w-full flex-col gap-2 rounded-2xl border border-zinc-800 bg-zinc-950 p-1 sm:w-auto sm:flex-row">
+            <div className={`flex w-full max-w-full min-w-0 flex-col gap-2 rounded-2xl border border-zinc-800 bg-zinc-950 p-1 sm:w-auto sm:flex-row ${mobileNarrowFormClass}`}>
               <button
                 onClick={() => setCreateMode("manual")}
                 className={`w-full px-3 py-2 rounded-xl text-xs font-bold transition-all sm:w-auto ${createMode === "manual" ? "bg-indigo-600 text-white" : "text-zinc-400 hover:text-zinc-200"}`}
@@ -186,12 +187,12 @@ export function DashboardActionPanels(props: Props) {
           </div>
 
           {createMode === "manual" ? (
-            <div className="grid min-w-0 gap-4 md:grid-cols-2 max-w-full">
-              <div className="md:col-span-2">
+            <div className={`grid min-w-0 gap-4 md:grid-cols-2 max-w-full ${mobileNarrowFormClass}`}>
+              <div className="md:col-span-2 min-w-0 max-w-full">
                 <label className="block text-[10px] sm:text-xs font-semibold text-zinc-400 uppercase tracking-wider mb-1.5">Recipient</label>
-                <input type="text" value={createForm.recipient} onChange={(e) => setCreateForm({ ...createForm, recipient: e.target.value })} className="w-full min-w-0 bg-zinc-950 border border-zinc-800 rounded-xl px-3.5 py-2.5 sm:px-4 sm:py-3 text-sm focus:outline-none focus:border-indigo-500 font-mono" />
+                <input type="text" value={createForm.recipient} onChange={(e) => setCreateForm({ ...createForm, recipient: e.target.value })} className="block w-full max-w-full min-w-0 bg-zinc-950 border border-zinc-800 rounded-xl px-3.5 py-2.5 sm:px-4 sm:py-3 text-sm focus:outline-none focus:border-indigo-500 font-mono" />
               </div>
-              <div>
+              <div className="min-w-0 max-w-full">
                 <label className="block text-[10px] sm:text-xs font-semibold text-zinc-400 uppercase tracking-wider mb-1.5">Amount</label>
                 <input
                   type="text"
@@ -199,16 +200,16 @@ export function DashboardActionPanels(props: Props) {
                   lang="en"
                   value={createForm.amount}
                   onChange={(e) => setCreateForm({ ...createForm, amount: normalizeDecimalInput(e.target.value) })}
-                  className="w-full min-w-0 bg-zinc-950 border border-zinc-800 rounded-xl px-3.5 py-2.5 sm:px-4 sm:py-3 text-sm focus:outline-none focus:border-indigo-500"
+                  className="block w-full max-w-full min-w-0 bg-zinc-950 border border-zinc-800 rounded-xl px-3.5 py-2.5 sm:px-4 sm:py-3 text-sm focus:outline-none focus:border-indigo-500"
                 />
               </div>
-              <div>
+              <div className="min-w-0 max-w-full">
                 <label className="block text-[10px] sm:text-xs font-semibold text-zinc-400 uppercase tracking-wider mb-1.5">Mint</label>
-                <div ref={mintPickerRef} className="relative min-w-0 max-w-full">
+                <div ref={mintPickerRef} className="relative min-w-0 max-w-full overflow-hidden">
                   <button
                     type="button"
                     onClick={() => setMintMenuOpen((open) => !open)}
-                    className="w-full flex items-center justify-between gap-3 bg-zinc-950 border border-zinc-800 rounded-xl px-3.5 py-2.5 sm:px-4 sm:py-3 text-sm focus:outline-none focus:border-indigo-500 transition-colors min-w-0"
+                    className="flex w-full max-w-full min-w-0 items-center justify-between gap-3 overflow-hidden bg-zinc-950 border border-zinc-800 rounded-xl px-3.5 py-2.5 sm:px-4 sm:py-3 text-sm focus:outline-none focus:border-indigo-500 transition-colors"
                   >
                     <div className="flex items-center gap-3 min-w-0">
                       <div
@@ -221,7 +222,7 @@ export function DashboardActionPanels(props: Props) {
                           <span className="text-[10px] font-black text-zinc-400">?</span>
                         )}
                       </div>
-                      <div className="min-w-0 text-left">
+                      <div className="min-w-0 flex-1 text-left">
                         <div className="flex items-center gap-2 min-w-0">
                           <span className="font-semibold text-zinc-100 truncate">
                             {selectedMintPreset ? selectedMintPreset.label : "Custom mint"}
@@ -232,7 +233,7 @@ export function DashboardActionPanels(props: Props) {
                             </span>
                           )}
                         </div>
-                        <div className="font-mono text-[10px] text-zinc-500 truncate">
+                        <div className="hidden sm:block font-mono text-[10px] text-zinc-500 truncate">
                           {selectedMintPreset ? selectedMintPreset.mint : createForm.mint || "Select or paste a mint address"}
                         </div>
                       </div>
@@ -267,21 +268,21 @@ export function DashboardActionPanels(props: Props) {
                                 setCreateForm({ ...createForm, mint: preset.mint });
                                 setMintMenuOpen(false);
                               }}
-                              className={`w-full flex items-center justify-between gap-3 rounded-xl border px-3 py-2.5 text-left transition-all ${active ? "border-indigo-500/70 bg-indigo-500/10" : "border-transparent hover:border-zinc-800 hover:bg-zinc-900/50"}`}
+                              className={`w-full max-w-full flex items-center justify-between gap-3 rounded-xl border px-3 py-2.5 text-left transition-all overflow-hidden ${active ? "border-indigo-500/70 bg-indigo-500/10" : "border-transparent hover:border-zinc-800 hover:bg-zinc-900/50"}`}
                             >
-                              <div className="flex items-center gap-3 min-w-0">
+                              <div className="flex min-w-0 flex-1 items-center gap-3 overflow-hidden">
                                 <div className="w-10 h-10 rounded-full overflow-hidden border border-zinc-800 bg-zinc-900 shrink-0">
                                   <Image src={preset.logoURI} alt={`${preset.label} logo`} width={40} height={40} className="w-full h-full object-cover" />
                                 </div>
-                                <div className="min-w-0">
-                                  <div className="flex items-center gap-2 min-w-0">
+                                <div className="min-w-0 flex-1">
+                                  <div className="flex min-w-0 items-center gap-2">
                                     <span className="text-sm font-extrabold text-zinc-100 truncate">{preset.label}</span>
                                     <span className="rounded-full border border-zinc-800 bg-zinc-900 px-1.5 py-0.5 text-[9px] font-black uppercase tracking-wider text-zinc-400">
                                       {preset.decimals} dec
                                     </span>
                                   </div>
-                                  <div className="font-mono text-[10px] text-zinc-500 truncate">{preset.mint}</div>
-                                  <div className="text-[10px] text-zinc-600 truncate">{preset.note}</div>
+                                  <div className="hidden sm:block font-mono text-[10px] text-zinc-500 truncate">{preset.mint}</div>
+                                  <div className="hidden sm:block text-[10px] text-zinc-600 truncate">{preset.note}</div>
                                 </div>
                               </div>
                               {active && <Check className="w-4 h-4 text-indigo-300 shrink-0" />}
@@ -296,7 +297,7 @@ export function DashboardActionPanels(props: Props) {
                             value={createForm.mint}
                             onChange={(e) => setCreateForm({ ...createForm, mint: e.target.value })}
                             placeholder="Paste a mint address"
-                            className="w-full min-w-0 bg-zinc-950 border border-zinc-800 rounded-xl px-3 py-2.5 text-xs focus:outline-none focus:border-indigo-500 font-mono"
+                            className="block w-full max-w-full min-w-0 bg-zinc-950 border border-zinc-800 rounded-xl px-3 py-2.5 text-xs focus:outline-none focus:border-indigo-500 font-mono"
                           />
                         </div>
                       </div>
@@ -304,25 +305,25 @@ export function DashboardActionPanels(props: Props) {
                   )}
                 </div>
               </div>
-              <div>
+              <div className="min-w-0 max-w-full">
                 <label className="block text-[10px] sm:text-xs font-semibold text-zinc-400 uppercase tracking-wider mb-1.5">Type</label>
-                <select value={createForm.type} onChange={(e) => setCreateForm({ ...createForm, type: e.target.value })} className="w-full min-w-0 bg-zinc-950 border border-zinc-800 rounded-xl px-3.5 py-2.5 sm:px-4 sm:py-3 text-sm focus:outline-none focus:border-indigo-500 font-medium">
+                <select value={createForm.type} onChange={(e) => setCreateForm({ ...createForm, type: e.target.value })} className="block w-full max-w-full min-w-0 bg-zinc-950 border border-zinc-800 rounded-xl px-3.5 py-2.5 sm:px-4 sm:py-3 text-sm focus:outline-none focus:border-indigo-500 font-medium">
                   <option value="0">Linear Vesting</option>
                   <option value="1">Cliff Vesting</option>
                   <option value="2">Milestone-Based Vesting</option>
                 </select>
               </div>
               {createForm.type !== "2" && (
-                <div>
+                <div className="min-w-0 max-w-full">
                   <label className="block text-[10px] sm:text-xs font-semibold text-zinc-400 uppercase tracking-wider mb-1.5">Duration</label>
-                  <input type="number" value={createForm.duration} onChange={(e) => setCreateForm({ ...createForm, duration: e.target.value })} className="w-full min-w-0 bg-zinc-950 border border-zinc-800 rounded-xl px-3.5 py-2.5 sm:px-4 sm:py-3 text-sm focus:outline-none focus:border-indigo-500 font-mono" />
+                  <input type="number" value={createForm.duration} onChange={(e) => setCreateForm({ ...createForm, duration: e.target.value })} className="block w-full max-w-full min-w-0 bg-zinc-950 border border-zinc-800 rounded-xl px-3.5 py-2.5 sm:px-4 sm:py-3 text-sm focus:outline-none focus:border-indigo-500 font-mono" />
                 </div>
               )}
 
               {createForm.type === "1" && (
-                <div>
+                <div className="min-w-0 max-w-full">
                   <label className="block text-[10px] sm:text-xs font-semibold text-zinc-400 uppercase tracking-wider mb-1.5">Cliff</label>
-                  <input type="number" value={createForm.cliffDuration} onChange={(e) => setCreateForm({ ...createForm, cliffDuration: e.target.value })} className="w-full min-w-0 bg-zinc-950 border border-zinc-800 rounded-xl px-3.5 py-2.5 sm:px-4 sm:py-3 text-sm focus:outline-none focus:border-indigo-500 font-mono" />
+                  <input type="number" value={createForm.cliffDuration} onChange={(e) => setCreateForm({ ...createForm, cliffDuration: e.target.value })} className="block w-full max-w-full min-w-0 bg-zinc-950 border border-zinc-800 rounded-xl px-3.5 py-2.5 sm:px-4 sm:py-3 text-sm focus:outline-none focus:border-indigo-500 font-mono" />
                   {cliffExceedsDuration && (
                     <div className="mt-2 text-[10px] font-semibold text-amber-400">
                       Cliff duration must be less than or equal to the stream duration.
@@ -332,16 +333,16 @@ export function DashboardActionPanels(props: Props) {
               )}
 
               {createForm.type === "2" && (
-                <div className="md:col-span-2 grid gap-4 bg-zinc-900/30 border border-zinc-900 p-4 rounded-xl">
-                  <div>
+                <div className="md:col-span-2 grid min-w-0 gap-4 bg-zinc-900/30 border border-zinc-900 p-4 rounded-xl max-w-full overflow-hidden">
+                  <div className="min-w-0 max-w-full">
                     <label className="block text-[10px] sm:text-xs font-semibold text-zinc-400 uppercase tracking-wider mb-1.5">Count</label>
-                    <input type="number" value={createForm.milestoneCount} onChange={(e) => setCreateForm({ ...createForm, milestoneCount: e.target.value })} className="w-full min-w-0 bg-zinc-950 border border-zinc-800 rounded-xl px-3.5 py-2.5 sm:px-4 sm:py-3 text-sm focus:outline-none focus:border-indigo-500 font-mono" />
+                    <input type="number" value={createForm.milestoneCount} onChange={(e) => setCreateForm({ ...createForm, milestoneCount: e.target.value })} className="block w-full max-w-full min-w-0 bg-zinc-950 border border-zinc-800 rounded-xl px-3.5 py-2.5 sm:px-4 sm:py-3 text-sm focus:outline-none focus:border-indigo-500 font-mono" />
                   </div>
                   <div className="border-t border-zinc-900/60 pt-3">
                     <label className="block text-[10px] font-bold text-zinc-500 uppercase tracking-widest mb-2">Milestones</label>
                     <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                       {milestoneAmounts.map((amt, idx) => (
-                        <div key={idx} className="flex flex-col gap-1">
+                        <div key={idx} className="flex min-w-0 flex-col gap-1">
                           <span className="text-[10px] text-zinc-400 font-mono font-bold">#{idx}</span>
                           <input
                             type="text"
@@ -353,7 +354,7 @@ export function DashboardActionPanels(props: Props) {
                               next[idx] = normalizeDecimalInput(e.target.value);
                               setMilestoneAmounts(next);
                             }}
-                            className="w-full min-w-0 bg-zinc-950 border border-zinc-800 rounded-xl px-3 py-2.5 text-xs focus:outline-none focus:border-indigo-500 font-mono"
+                            className="block w-full max-w-full min-w-0 bg-zinc-950 border border-zinc-800 rounded-xl px-3 py-2.5 text-xs focus:outline-none focus:border-indigo-500 font-mono"
                             placeholder="0"
                           />
                         </div>
@@ -368,7 +369,7 @@ export function DashboardActionPanels(props: Props) {
                 </div>
               )}
 
-              <div className="md:col-span-2 flex items-start gap-3 mt-2">
+              <div className="md:col-span-2 flex min-w-0 items-start gap-3 mt-2">
                 <input type="checkbox" id="cancelable" checked={createForm.cancelable} onChange={(e) => setCreateForm({ ...createForm, cancelable: e.target.checked })} className="w-4 h-4 rounded border-zinc-800 text-indigo-600 bg-zinc-950 focus:ring-0 focus:ring-offset-0" />
                 <label htmlFor="cancelable" className="text-xs leading-5 font-semibold text-zinc-350 cursor-pointer select-none">Stream is cancelable by creator</label>
               </div>
@@ -376,7 +377,7 @@ export function DashboardActionPanels(props: Props) {
               <button onClick={() => handleAction("create_stream", createForm)} className="md:col-span-2 w-full mt-4 bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs py-3 rounded-xl transition-all shadow-lg hover:shadow-indigo-500/20">Simulate / Deploy Stream</button>
             </div>
           ) : (
-            <div className="grid min-w-0 gap-4 max-w-full">
+            <div className={`grid min-w-0 gap-4 max-w-full overflow-hidden ${mobileNarrowFormClass}`}>
               <div className="flex flex-col gap-3 rounded-2xl border border-zinc-900 bg-zinc-950 p-4 sm:flex-row sm:items-center sm:justify-between">
                 <div className="flex min-w-0 flex-col gap-2 sm:flex-row sm:items-center">
                   <button onClick={() => downloadTemplate("create")} className="flex w-full items-center justify-center gap-1.5 px-3 py-2 border border-zinc-800 hover:border-zinc-700 bg-zinc-900/50 rounded-xl text-xs font-semibold text-zinc-350 transition-all sm:w-auto"><Download className="w-3.5 h-3.5 text-indigo-400" />Template</button>
@@ -497,10 +498,10 @@ export function DashboardActionPanels(props: Props) {
         </div>
       )}
 
-      <div className="mt-12 bg-zinc-950 border border-zinc-900 rounded-2xl p-4 font-mono text-[11px] relative overflow-hidden">
+      <div className={`mt-12 bg-zinc-950 border border-zinc-900 rounded-2xl p-4 font-mono text-[11px] relative overflow-hidden ${mobileNarrowFormClass}`}>
         <div className="absolute top-0 right-0 p-3 flex gap-2"><span className="w-2.5 h-2.5 rounded-full bg-red-500/60" /><span className="w-2.5 h-2.5 rounded-full bg-amber-500/60" /><span className="w-2.5 h-2.5 rounded-full bg-green-500/60" /></div>
         <div className="flex items-center gap-2 text-indigo-400 font-bold mb-2"><Terminal className="w-4 h-4 shrink-0" /><span>Equivalent CLI / Agent Skill Call</span></div>
-        <div className="text-zinc-400 select-all overflow-x-auto whitespace-nowrap scrollbar-none py-1">{activeTab === "create_streams" && <span>{createMode === "manual" ? `$ unified-flow create-stream --recipient ${createForm.recipient || "<address>"} --amount ${createForm.amount} --type ${createForm.type === "0" ? "linear" : createForm.type === "1" ? "milestone" : "cliff"} --duration ${createForm.duration}` : `$ unified-flow create-bulk --csv ./vesting_list.csv --endpoint devnet`}</span>}{activeTab === "edit_csv" && <span>$ unified-flow edit-bulk --csv ./vesting_edits.csv --endpoint devnet</span>}{activeTab === "withdraw" && <span>$ unified-flow claim-tokens --stream {withdrawForm.streamId || "<stream_pda>"}</span>}{activeTab === "cancel" && <span>$ unified-flow cancel-stream --stream {cancelForm.streamId || "<stream_pda>"}</span>}{activeTab === "unlock_milestone" && <span>$ unified-flow unlock-milestone --stream {unlockForm.streamId || "<stream_pda>"}</span>}{activeTab === "edit_milestone" && <span>$ unified-flow edit-milestone --stream {editMilestoneForm.streamId || "<stream_pda>"} --index {editMilestoneForm.index} --amount {editMilestoneForm.newAmount}</span>}{activeTab === "edit_linear" && <span>$ unified-flow edit-linear --stream {editLinearForm.streamId || "<stream_pda>"} {editLinearForm.newEndTs ? `--end-ts ${editLinearForm.newEndTs}` : ""} {editLinearForm.topupAmount ? `--topup ${editLinearForm.topupAmount}` : ""}</span>}{activeTab === "edit_cliff" && <span>$ unified-flow edit-cliff --stream {editCliffForm.streamId || "<stream_pda>"} --cliff-ts {editCliffForm.newCliffTs || "<timestamp>"}</span>}</div>
+        <div className="text-zinc-400 select-all overflow-hidden whitespace-normal break-words py-1 sm:overflow-x-auto sm:whitespace-nowrap sm:break-normal">{activeTab === "create_streams" && <span>{createMode === "manual" ? `$ unified-flow create-stream --recipient ${createForm.recipient || "<address>"} --amount ${createForm.amount} --type ${createForm.type === "0" ? "linear" : createForm.type === "1" ? "milestone" : "cliff"} --duration ${createForm.duration}` : `$ unified-flow create-bulk --csv ./vesting_list.csv --endpoint devnet`}</span>}{activeTab === "edit_csv" && <span>$ unified-flow edit-bulk --csv ./vesting_edits.csv --endpoint devnet</span>}{activeTab === "withdraw" && <span>$ unified-flow claim-tokens --stream {withdrawForm.streamId || "<stream_pda>"}</span>}{activeTab === "cancel" && <span>$ unified-flow cancel-stream --stream {cancelForm.streamId || "<stream_pda>"}</span>}{activeTab === "unlock_milestone" && <span>$ unified-flow unlock-milestone --stream {unlockForm.streamId || "<stream_pda>"}</span>}{activeTab === "edit_milestone" && <span>$ unified-flow edit-milestone --stream {editMilestoneForm.streamId || "<stream_pda>"} --index {editMilestoneForm.index} --amount {editMilestoneForm.newAmount}</span>}{activeTab === "edit_linear" && <span>$ unified-flow edit-linear --stream {editLinearForm.streamId || "<stream_pda>"} {editLinearForm.newEndTs ? `--end-ts ${editLinearForm.newEndTs}` : ""} {editLinearForm.topupAmount ? `--topup ${editLinearForm.topupAmount}` : ""}</span>}{activeTab === "edit_cliff" && <span>$ unified-flow edit-cliff --stream {editCliffForm.streamId || "<stream_pda>"} --cliff-ts {editCliffForm.newCliffTs || "<timestamp>"}</span>}</div>
       </div>
     </>
   );
