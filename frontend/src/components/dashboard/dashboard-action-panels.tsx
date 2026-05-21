@@ -8,6 +8,17 @@ import { CsvDiffPanel } from "@/components/dashboard/csv-diff-panel";
 import { isWipFeature } from "./feature-flags";
 import type { MintPreset } from "@/components/dashboard/token-mints";
 
+function normalizeDecimalInput(value: string) {
+  const replaced = value.replace(/,/g, ".");
+  const parts = replaced.split(".");
+
+  if (parts.length <= 2) {
+    return replaced;
+  }
+
+  return `${parts[0]}.${parts.slice(1).join("")}`;
+}
+
 type Props = {
   activeTab: string;
   useMultisig: boolean;
@@ -151,7 +162,7 @@ export function DashboardActionPanels(props: Props) {
       )}
 
       {activeTab === "create_streams" && (
-        <div className="animate-in fade-in-30 duration-200">
+        <div className="animate-in fade-in-30 duration-200 overflow-x-hidden max-w-full">
           <div className="flex flex-col gap-4 border-b border-zinc-900 pb-4 mb-6 sm:flex-row sm:items-center sm:justify-between">
             <div className="min-w-0">
               <h2 className="text-2xl font-extrabold tracking-tight">Create Stream</h2>
@@ -175,18 +186,25 @@ export function DashboardActionPanels(props: Props) {
           </div>
 
           {createMode === "manual" ? (
-            <div className="grid gap-4 md:grid-cols-2">
+            <div className="grid min-w-0 gap-4 md:grid-cols-2 max-w-full">
               <div className="md:col-span-2">
                 <label className="block text-[10px] sm:text-xs font-semibold text-zinc-400 uppercase tracking-wider mb-1.5">Recipient</label>
                 <input type="text" value={createForm.recipient} onChange={(e) => setCreateForm({ ...createForm, recipient: e.target.value })} className="w-full min-w-0 bg-zinc-950 border border-zinc-800 rounded-xl px-3.5 py-2.5 sm:px-4 sm:py-3 text-sm focus:outline-none focus:border-indigo-500 font-mono" />
               </div>
               <div>
                 <label className="block text-[10px] sm:text-xs font-semibold text-zinc-400 uppercase tracking-wider mb-1.5">Amount</label>
-                <input type="text" inputMode="decimal" value={createForm.amount} onChange={(e) => setCreateForm({ ...createForm, amount: e.target.value })} className="w-full min-w-0 bg-zinc-950 border border-zinc-800 rounded-xl px-3.5 py-2.5 sm:px-4 sm:py-3 text-sm focus:outline-none focus:border-indigo-500" />
+                <input
+                  type="text"
+                  inputMode="decimal"
+                  lang="en"
+                  value={createForm.amount}
+                  onChange={(e) => setCreateForm({ ...createForm, amount: normalizeDecimalInput(e.target.value) })}
+                  className="w-full min-w-0 bg-zinc-950 border border-zinc-800 rounded-xl px-3.5 py-2.5 sm:px-4 sm:py-3 text-sm focus:outline-none focus:border-indigo-500"
+                />
               </div>
               <div>
                 <label className="block text-[10px] sm:text-xs font-semibold text-zinc-400 uppercase tracking-wider mb-1.5">Mint</label>
-                <div ref={mintPickerRef} className="relative">
+                <div ref={mintPickerRef} className="relative min-w-0 max-w-full">
                   <button
                     type="button"
                     onClick={() => setMintMenuOpen((open) => !open)}
@@ -223,7 +241,7 @@ export function DashboardActionPanels(props: Props) {
                   </button>
 
                   {mintMenuOpen && (
-                    <div className="absolute z-20 mt-2 w-full rounded-2xl border border-zinc-800 bg-zinc-950 shadow-2xl shadow-black/40 overflow-hidden max-h-[72vh]">
+                    <div className="absolute left-0 right-0 z-20 mt-2 w-full max-w-full rounded-2xl border border-zinc-800 bg-zinc-950 shadow-2xl shadow-black/40 overflow-hidden max-h-[72vh]">
                       <div className="flex items-center justify-between gap-3 px-4 py-3 border-b border-zinc-900 bg-zinc-950/95">
                         <div>
                           <div className="text-[10px] font-black uppercase tracking-[0.24em] text-zinc-500">Known mints for {clusterLabel}</div>
@@ -325,11 +343,19 @@ export function DashboardActionPanels(props: Props) {
                       {milestoneAmounts.map((amt, idx) => (
                         <div key={idx} className="flex flex-col gap-1">
                           <span className="text-[10px] text-zinc-400 font-mono font-bold">#{idx}</span>
-                          <input type="text" inputMode="decimal" value={amt} onChange={(e) => {
-                            const next = [...milestoneAmounts];
-                            next[idx] = e.target.value;
-                            setMilestoneAmounts(next);
-                          }} className="w-full min-w-0 bg-zinc-950 border border-zinc-800 rounded-xl px-3 py-2.5 text-xs focus:outline-none focus:border-indigo-500 font-mono" placeholder="0" />
+                          <input
+                            type="text"
+                            inputMode="decimal"
+                            lang="en"
+                            value={amt}
+                            onChange={(e) => {
+                              const next = [...milestoneAmounts];
+                              next[idx] = normalizeDecimalInput(e.target.value);
+                              setMilestoneAmounts(next);
+                            }}
+                            className="w-full min-w-0 bg-zinc-950 border border-zinc-800 rounded-xl px-3 py-2.5 text-xs focus:outline-none focus:border-indigo-500 font-mono"
+                            placeholder="0"
+                          />
                         </div>
                       ))}
                     </div>
@@ -350,15 +376,15 @@ export function DashboardActionPanels(props: Props) {
               <button onClick={() => handleAction("create_stream", createForm)} className="md:col-span-2 w-full mt-4 bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs py-3 rounded-xl transition-all shadow-lg hover:shadow-indigo-500/20">Simulate / Deploy Stream</button>
             </div>
           ) : (
-            <div className="grid gap-4">
+            <div className="grid min-w-0 gap-4 max-w-full">
               <div className="flex flex-col gap-3 rounded-2xl border border-zinc-900 bg-zinc-950 p-4 sm:flex-row sm:items-center sm:justify-between">
-                <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+                <div className="flex min-w-0 flex-col gap-2 sm:flex-row sm:items-center">
                   <button onClick={() => downloadTemplate("create")} className="flex w-full items-center justify-center gap-1.5 px-3 py-2 border border-zinc-800 hover:border-zinc-700 bg-zinc-900/50 rounded-xl text-xs font-semibold text-zinc-350 transition-all sm:w-auto"><Download className="w-3.5 h-3.5 text-indigo-400" />Template</button>
                   <button onClick={() => fileInputCreateRef.current?.click()} className="flex w-full items-center justify-center gap-1.5 px-3 py-2 border border-indigo-900/60 bg-indigo-950/20 hover:bg-indigo-950/40 text-indigo-450 rounded-xl text-xs font-semibold transition-all sm:w-auto"><Upload className="w-3.5 h-3.5" />Upload CSV</button>
                   <input type="file" accept=".csv" ref={fileInputCreateRef} onChange={(e) => handleCsvUpload(e, "create")} className="hidden" />
                 </div>
-                <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
-                  <div className="flex flex-wrap items-center gap-2">
+                <div className="flex min-w-0 flex-col gap-3 sm:flex-row sm:items-center">
+                  <div className="flex min-w-0 flex-wrap items-center gap-2">
                     <span className="text-[9px] text-zinc-500 font-black uppercase tracking-wider">Baseline:</span>
                     <select value={compareVersionSelected} onChange={(e) => setCompareVersionSelected(e.target.value)} className="min-w-0 bg-zinc-900 border border-zinc-805 rounded-xl px-2.5 py-2 text-[10px] text-zinc-300 font-extrabold focus:outline-none focus:border-indigo-500">
                       <option value="0">Live Active DB</option>
