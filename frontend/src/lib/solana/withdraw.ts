@@ -156,8 +156,7 @@ export async function withdrawFromStreamOnChain({
 
   const mint = streamState.mint as PublicKey;
   const [configPda] = PublicKey.findProgramAddressSync([Buffer.from("config")], PROGRAM_ID);
-  const configState: any = await programAny.account.configAccount.fetch(configPda);
-  const feeReceiver = configState.feeAuthority as PublicKey;
+  const feeReceiver = PublicKey.findProgramAddressSync([Buffer.from("fee_vault")], PROGRAM_ID)[0];
   const recipientAta = PublicKey.findProgramAddressSync(
     [recipient.toBuffer(), TOKEN_PROGRAM_ID.toBuffer(), mint.toBuffer()],
     ASSOCIATED_TOKEN_PROGRAM_ID

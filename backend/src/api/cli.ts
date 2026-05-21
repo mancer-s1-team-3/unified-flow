@@ -312,8 +312,7 @@ ${C_BLUE}${C_BOLD}🌊 Vesting Stream Details:${C_RESET}
                 const recipientAta = await getAssociatedTokenAddress(mint, signer.publicKey, true);
 
                 const [configPda] = PublicKey.findProgramAddressSync([Buffer.from("config")], PROGRAM_ID);
-                const configState: any = await programAccount.configAccount.fetch(configPda);
-                const feeReceiver = configState.feeAuthority;
+                const feeReceiver = PublicKey.findProgramAddressSync([Buffer.from("fee_vault")], PROGRAM_ID)[0];
 
                 const chainlinkFeed = new PublicKey("99B2bTijsU6f1GCT73HmdR7HCFFjGMBcPZY6jZ96ynrR");
                 const seqNumber = new anchor.BN(Math.floor(Math.random() * 100000));
