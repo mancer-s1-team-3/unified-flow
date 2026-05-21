@@ -1,6 +1,7 @@
 "use client";
 
 import { memo, useEffect } from "react";
+import { createPortal } from "react-dom";
 import { ArrowDownRight, ArrowUpRight, Calendar, Check, Copy, FileText, History, Settings, Unlock, XCircle } from "lucide-react";
 import { formatDate, formatTokenAmount, getAmountUnitLabel, shorten } from "./utils";
 
@@ -47,7 +48,7 @@ export const StreamDetailsDrawer = memo(function StreamDetailsDrawer({
   const mintDecimals = typeof selectedStream.mintDecimals === "number" ? selectedStream.mintDecimals : null;
   const amountLabel = getAmountUnitLabel(selectedStream.mint);
 
-  return (
+  const drawer = (
     <div className="fixed inset-0 z-50 bg-zinc-950/95 sm:bg-black/60 backdrop-blur-md flex justify-end animate-in fade-in duration-200">
       <div className="w-full max-w-md bg-zinc-950 border-l border-zinc-800 h-[100dvh] sm:h-full rounded-none sm:rounded-r-3xl flex flex-col justify-between p-5 sm:p-6 shadow-2xl relative animate-in slide-in-from-right duration-350">
         <div className="overflow-y-auto max-h-[85%] pr-1">
@@ -311,4 +312,10 @@ export const StreamDetailsDrawer = memo(function StreamDetailsDrawer({
       </div>
     </div>
   );
+
+  if (typeof document === "undefined") {
+    return drawer;
+  }
+
+  return createPortal(drawer, document.body);
 });
