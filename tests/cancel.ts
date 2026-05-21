@@ -647,9 +647,7 @@ describe("cancel", () => {
 
   it("fails with Unauthorized when non-creator (recipient) tries to cancel", async () => {
     await setTime(BASE_NOW);
-    const { streamPda, creatorAta, recipientAta } = await setupLinearStream();
-
-    const recipientAta2 = await createAta(mint, recipient.publicKey);
+    const { streamPda, recipientAta } = await setupLinearStream();
 
     await expectError(
       program.methods
@@ -659,13 +657,13 @@ describe("cancel", () => {
           mint,
           stream: streamPda,
           vault: getAssociatedTokenAddressSync(mint, streamPda, true, TOKEN_PROGRAM_ID),
-          creatorTokenAccount: creatorAta,
+          creatorTokenAccount: recipientAta,
           recipientTokenAccount: recipientAta,
           tokenProgram: TOKEN_PROGRAM_ID,
         })
         .signers([recipient])
         .rpc(),
-      "ConstraintHasOne"
+      "Unauthorized"
     );
   });
 
@@ -689,7 +687,7 @@ describe("cancel", () => {
         })
         .signers([stranger])
         .rpc(),
-      "ConstraintHasOne"
+      "Unauthorized"
     );
   });
 
