@@ -32,6 +32,7 @@ const PROGRAM_ID = new PublicKey(
 const TOKEN_PROGRAM_ID = new PublicKey(TOKEN_PROGRAM_ADDRESS);
 const ASSOCIATED_TOKEN_PROGRAM_ID = new PublicKey(ASSOCIATED_TOKEN_PROGRAM_ADDRESS);
 const WRAPPED_SOL_MINT = "So11111111111111111111111111111111111111112";
+const TOKEN_ACCOUNT_SIZE = 165;
 
 const CREATE_STREAM_IDL = {
   address: PROGRAM_ID.toBase58(),
@@ -267,6 +268,8 @@ export async function createStreamOnChain({
     ASSOCIATED_TOKEN_PROGRAM_ID
   );
 
+  const creatorSolBalance = await connection.getBalance(creator, commitment);
+
   try {
     const balance = await connection.getTokenAccountBalance(creatorTokenAccount, commitment);
     const availableAmount = new anchor.BN(balance.value.amount);
@@ -305,6 +308,7 @@ export async function createStreamOnChain({
 
   if (isWrappedSolMint(mint)) {
     let existingAmount = new anchor.BN(0);
+    let creatorAtaExists = true;
 
     try {
       const balance = await connection.getTokenAccountBalance(creatorTokenAccount, commitment);
@@ -316,9 +320,22 @@ export async function createStreamOnChain({
       if (!notFound) {
         throw balanceError;
       }
+
+      creatorAtaExists = false;
     }
 
     const topUpAmount = amountBn.sub(existingAmount);
+
+    if (topUpAmount.gt(new anchor.BN(0))) {
+      const rentLamports = creatorAtaExists ? 0 : await connection.getMinimumBalanceForRentExemption(TOKEN_ACCOUNT_SIZE, commitment);
+      const requiredLamports = topUpAmount.add(new anchor.BN(String(rentLamports)));
+
+      if (new anchor.BN(String(creatorSolBalance)).lt(requiredLamports)) {
+        throw new Error(
+          `Insufficient SOL balance to wrap ${formatTokenAmountFromBaseUnits(topUpAmount, mintDecimals)} WSOL${creatorAtaExists ? "" : " and create the token account"}. Available ${formatTokenAmountFromBaseUnits(String(creatorSolBalance), 9)} SOL, need at least ${formatTokenAmountFromBaseUnits(requiredLamports, 9)} SOL.`
+        );
+      }
+    }
 
     if (topUpAmount.gt(new anchor.BN(0))) {
       preInstructions.push(
