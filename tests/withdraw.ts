@@ -309,6 +309,77 @@ describe("withdraw", () => {
   }
 
   /**
+   * Sets up a milestone stream with four equal unlocks.
+   * Returns the stream PDA, recipient ATA, and milestone PDAs.
+   */
+  async function setupMilestoneStream(): Promise<{
+    streamPda: PublicKey;
+    recipientAta: PublicKey;
+    milestonePdas: PublicKey[];
+    amount: number;
+  }> {
+    const nonce = BigInt(nonceCounter++);
+    const startTs = BASE_NOW;
+    const endTs = BASE_NOW + STREAM_DURATION;
+    const amount = TOKEN_AMOUNT;
+    const milestoneAmount = Math.floor(amount / 4);
+
+    const [streamPda] = PublicKey.findProgramAddressSync(
+      [
+        Buffer.from("stream"),
+        creator.publicKey.toBuffer(),
+        recipient.publicKey.toBuffer(),
+        Buffer.from(new BN(nonce.toString()).toArrayLike(Buffer, "le", 8)),
+      ],
+      program.programId
+    );
+
+    const milestonePdas = [] as PublicKey[];
+    const remainingAccounts = [] as { pubkey: PublicKey; isWritable: boolean; isSigner: boolean }[];
+    for (let i = 0; i < 4; i++) {
+      const [milestonePda] = PublicKey.findProgramAddressSync(
+        [Buffer.from("milestone"), streamPda.toBuffer(), Buffer.from([i])],
+        program.programId
+      );
+      milestonePdas.push(milestonePda);
+      remainingAccounts.push({ pubkey: milestonePda, isWritable: true, isSigner: false });
+    }
+
+    const creatorAta = await createAta(context, admin, mint, creator.publicKey);
+    await mintTokens(context, admin, mint, creatorAta, admin, amount);
+
+    const recipientAta = await createAta(context, admin, mint, recipient.publicKey);
+
+    await program.methods
+      .createStream(
+        new BN(amount),
+        new BN(startTs),
+        new BN(startTs),
+        new BN(endTs),
+        2,
+        [
+          { amount: new BN(milestoneAmount) },
+          { amount: new BN(milestoneAmount) },
+          { amount: new BN(milestoneAmount) },
+          { amount: new BN(milestoneAmount) },
+        ],
+        new BN(nonce.toString())
+      )
+      .accounts({
+        creator: creator.publicKey,
+        recipient: recipient.publicKey,
+        mint,
+        creatorTokenAccount: creatorAta,
+        tokenProgram: TOKEN_PROGRAM_ID,
+      })
+      .remainingAccounts(remainingAccounts)
+      .signers([creator])
+      .rpc();
+
+    return { streamPda, recipientAta, milestonePdas, amount };
+  }
+
+  /**
    * Calls withdraw with the given accounts.
    * Auto-resolved: mint (has_one stream), config (PDA), vault (ATA), systemProgram.
    */
@@ -611,8 +682,35 @@ describe("withdraw", () => {
     // Second call must fail
     await expectError(
       doWithdraw(streamPda, recipientAta),
-      "StreamNotActive"
+      "NothingToWithdraw"
     );
+  });
+
+  it("allows withdraw after a milestone stream is fully unlocked and marked COMPLETED", async () => {
+    await setTime(context, BASE_NOW);
+    const { streamPda, recipientAta, milestonePdas, amount } = await setupMilestoneStream();
+
+    for (const milestonePda of milestonePdas) {
+      await program.methods
+        .unlockMilestone()
+        .accountsStrict({
+          creator: creator.publicKey,
+          stream: streamPda,
+          milestone: milestonePda,
+          systemProgram: SystemProgram.programId,
+        })
+        .signers([creator])
+        .rpc();
+    }
+
+    const stream = await program.account.streamAccount.fetch(streamPda);
+    expect(stream.status).to.equal(2); // COMPLETED
+
+    const beforeBalance = await getTokenBalance(context, recipientAta);
+    await doWithdraw(streamPda, recipientAta);
+
+    const afterBalance = await getTokenBalance(context, recipientAta);
+    expect((afterBalance - beforeBalance).toString()).to.equal(amount.toString());
   });
 
   // ══════════════════════════════════════════════════════════════════════════

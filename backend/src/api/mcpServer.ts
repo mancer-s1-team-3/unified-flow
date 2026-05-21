@@ -461,8 +461,7 @@ server.tool(
                 [Buffer.from("config")],
                 PROGRAM_ID
             );
-            const configState: any = await programAccount.configAccount.fetch(configPda);
-            const feeReceiver = configState.feeAuthority;
+            const feeReceiver = PublicKey.findProgramAddressSync([Buffer.from("fee_vault")], PROGRAM_ID)[0];
 
             // 2. Recipient ATA
             const recipientAta = await getAssociatedTokenAddress(mint, recipient.publicKey, true);

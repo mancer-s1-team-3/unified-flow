@@ -895,6 +895,7 @@ pub struct Withdraw<'info> {
         constraint = stream.recipient == recipient.key()
             @ ErrorCode::Unauthorized,
         constraint = stream.status == STREAM_STATUS_ACTIVE
+            || stream.status == STREAM_STATUS_COMPLETED
             @ ErrorCode::StreamNotActive,
         has_one = mint @ ErrorCode::InvalidMint,
     )]
