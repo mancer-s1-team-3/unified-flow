@@ -19,6 +19,18 @@ function isMobileBrowser() {
   return /Android|iPhone|iPad|iPod/i.test(userAgent) || isTouchMac;
 }
 
+function isSafariDesktop() {
+  if (typeof navigator === "undefined") {
+    return false;
+  }
+
+  const userAgent = navigator.userAgent || "";
+  const isSafari = /Safari/i.test(userAgent) && !/Chrome|Chromium|CriOS|FxiOS|EdgiOS|OPiOS/i.test(userAgent);
+  const isDesktopMac = navigator.platform === "MacIntel" && navigator.maxTouchPoints <= 1;
+
+  return isSafari && isDesktopMac;
+}
+
 function buildWalletBrowseUrl(base: string) {
   if (typeof window === "undefined") {
     return "";
@@ -32,6 +44,7 @@ export function WalletPickerButton({ className = "" }: { className?: string }) {
   const [open, setOpen] = useState(false);
   const rootRef = useRef<HTMLDivElement | null>(null);
   const mobileBrowser = useMemo(() => isMobileBrowser(), []);
+  const safariDesktop = useMemo(() => isSafariDesktop(), []);
 
   useEffect(() => {
     if (!open) {
@@ -60,6 +73,8 @@ export function WalletPickerButton({ className = "" }: { className?: string }) {
     ? connectedAddress
       ? shorten(connectedAddress)
       : "Connected Wallet"
+    : safariDesktop && connectors.length === 0
+      ? "Open in Chrome"
     : activeConnectorName
       ? `Connect ${activeConnectorName}`
       : mobileBrowser
@@ -89,7 +104,7 @@ export function WalletPickerButton({ className = "" }: { className?: string }) {
       <button
         type="button"
         onClick={handlePrimaryAction}
-        disabled={connecting || (connectors.length === 0 && !mobileBrowser)}
+        disabled={connecting}
         className="inline-flex items-center gap-2 rounded-xl border border-zinc-800 bg-zinc-900 px-3.5 py-2 text-xs font-semibold text-zinc-100 transition-all hover:border-zinc-700 hover:bg-zinc-800 disabled:cursor-not-allowed disabled:opacity-60"
       >
         {connected ? (
@@ -146,6 +161,19 @@ export function WalletPickerButton({ className = "" }: { className?: string }) {
                 <div className="flex items-center gap-2 rounded-xl border border-dashed border-zinc-800 px-3 py-4 text-xs text-zinc-500">
                   <AlertCircle className="h-4 w-4 text-zinc-600" />
                   No injected wallet found. Use the buttons above to open the site in a wallet browser.
+                </div>
+              ) : safariDesktop ? (
+                <div className="space-y-3 rounded-xl border border-amber-500/20 bg-amber-500/5 px-3 py-4 text-xs text-amber-100/90">
+                  <div className="flex items-center gap-2 font-semibold text-amber-50">
+                    <AlertCircle className="h-4 w-4 text-amber-300" />
+                    Safari desktop without extension is not supported
+                  </div>
+                  <p className="leading-relaxed text-amber-100/80">
+                    Open this app in Chrome or Brave, then install a Solana wallet extension like Phantom or Solflare.
+                  </p>
+                  <p className="leading-relaxed text-amber-100/70">
+                    If you already installed an extension, refresh the page after switching browsers.
+                  </p>
                 </div>
               ) : (
                 <div className="flex items-center gap-2 rounded-xl border border-dashed border-zinc-800 px-3 py-4 text-xs text-zinc-500">
