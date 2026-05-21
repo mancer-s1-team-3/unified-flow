@@ -26,6 +26,12 @@ export default function ConnectWalletPage() {
               The app uses your connected wallet to decide which actions are available, like creating a stream, withdrawing, or cancelling.
             </p>
           </div>
+          <div className="rounded-2xl border border-cyan-500/20 bg-cyan-500/5 p-5 md:col-span-3">
+            <h3 className="text-sm font-semibold text-cyan-100">On iPhone or Android browsers</h3>
+            <p className="mt-2 text-sm text-cyan-100/80 leading-relaxed">
+              If the wallet list is empty, open the site in your wallet app browser first. Phantom and Solflare expose the wallet more reliably there than in Safari or Chrome.
+            </p>
+          </div>
           <div className="rounded-2xl border border-zinc-800 bg-zinc-950/45 p-5 md:col-span-3">
             <ul className="space-y-3 text-sm text-zinc-400 leading-relaxed list-disc list-inside">
               <li>You can still browse without connecting.</li>
