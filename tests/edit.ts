@@ -104,6 +104,12 @@ async function mintTokensTo(
   ]);
 }
 
+async function getTokenBalance(context: ProgramTestContext, tokenAccount: PublicKey): Promise<bigint> {
+  const account = await context.banksClient.getAccount(tokenAccount);
+  if (!account) return 0n;
+  return Buffer.from(account.data).readBigUInt64LE(64);
+}
+
 async function expectError(promise: Promise<any>, fragment: string) {
   try {
     await promise;
@@ -135,6 +141,10 @@ describe("edit", () => {
     creatorAta: PublicKey;
     vaultAta: PublicKey;
     endTs: number;
+  }
+
+  interface MilestoneStreamSetup extends StreamSetup {
+    milestonePdas: PublicKey[];
   }
 
   async function setupLinearStream(opts: { startTs?: number; endTs?: number; amount?: number } = {}): Promise<StreamSetup> {
@@ -224,6 +234,65 @@ describe("edit", () => {
     return { streamPda, creatorAta, vaultAta, endTs };
   }
 
+  async function setupMilestoneStream(opts: { startTs?: number; endTs?: number; amounts?: number[] } = {}): Promise<MilestoneStreamSetup> {
+    const nonce = new BN(nonceCounter++);
+    const startTs = opts.startTs ?? BASE_NOW;
+    const endTs = opts.endTs ?? BASE_NOW + STREAM_DURATION;
+    const amounts = opts.amounts ?? [250_000, 250_000, 250_000, 250_000];
+    const total = amounts.reduce((sum, value) => sum + value, 0);
+
+    const [streamPda] = PublicKey.findProgramAddressSync(
+      [
+        Buffer.from("stream"),
+        creator.publicKey.toBuffer(),
+        recipient.publicKey.toBuffer(),
+        nonce.toArrayLike(Buffer, "le", 8),
+      ],
+      program.programId
+    );
+
+    const vaultAta = getAssociatedTokenAddressSync(mint, streamPda, true, TOKEN_PROGRAM_ID);
+    const creatorAta = await createAta(context, admin, mint, creator.publicKey);
+    await mintTokensTo(context, admin, mint, creatorAta, total);
+
+    const milestonePdas = amounts.map((_, index) => {
+      const [pda] = PublicKey.findProgramAddressSync(
+        [Buffer.from("milestone"), streamPda.toBuffer(), Buffer.from([index])],
+        program.programId
+      );
+      return pda;
+    });
+
+    const remainingAccounts = milestonePdas.map((pubkey) => ({
+      pubkey,
+      isWritable: true,
+      isSigner: false,
+    }));
+
+    await program.methods
+      .createStream(
+        new BN(total),
+        new BN(startTs),
+        new BN(startTs),
+        new BN(endTs),
+        2,
+        amounts.map((amount) => ({ amount: new BN(amount) })),
+        nonce
+      )
+      .accounts({
+        creator: creator.publicKey,
+        recipient: recipient.publicKey,
+        mint,
+        creatorTokenAccount: creatorAta,
+        tokenProgram: TOKEN_PROGRAM_ID,
+      })
+      .remainingAccounts(remainingAccounts)
+      .signers([creator])
+      .rpc();
+
+    return { streamPda, creatorAta, vaultAta, endTs, milestonePdas };
+  }
+
   before(async () => {
     admin = Keypair.generate();
     creator = Keypair.generate();
@@ -291,4 +360,63 @@ describe("edit", () => {
       "StreamExpired"
     );
   });
+
+  it("edits a linear stream before end_ts", async () => {
+    await setTime(context, BASE_NOW);
+    const { streamPda, creatorAta, vaultAta, endTs } = await setupLinearStream();
+
+    const creatorBefore = await getTokenBalance(context, creatorAta);
+    const vaultBefore = await getTokenBalance(context, vaultAta);
+
+    const newEndTs = endTs + 500;
+    const topupAmount = new BN(250_000);
+
+    await mintTokensTo(context, admin, mint, creatorAta, topupAmount.toNumber());
+    const creatorAfterMint = await getTokenBalance(context, creatorAta);
+
+    await setTime(context, BASE_NOW + 10);
+
+    await program.methods
+      .editLinear(new BN(newEndTs), topupAmount)
+      .accountsStrict({
+        creator: creator.publicKey,
+        mint,
+        stream: streamPda,
+        vault: vaultAta,
+        creatorTokenAccount: creatorAta,
+        tokenProgram: TOKEN_PROGRAM_ID,
+      })
+      .signers([creator])
+      .rpc();
+
+    const stream = await program.account.streamAccount.fetch(streamPda);
+    expect(stream.endTs.toNumber()).to.equal(newEndTs);
+    expect(stream.totalAmount.toNumber()).to.equal(TOKEN_AMOUNT + topupAmount.toNumber());
+    expect(creatorAfterMint).to.equal(creatorBefore + BigInt(topupAmount.toNumber()));
+    expect(await getTokenBalance(context, creatorAta)).to.equal(creatorAfterMint - BigInt(topupAmount.toNumber()));
+    expect(await getTokenBalance(context, vaultAta)).to.equal(vaultBefore + BigInt(topupAmount.toNumber()));
+  });
+
+  it("edits a cliff stream before end_ts", async () => {
+    await setTime(context, BASE_NOW);
+    const { streamPda, endTs } = await setupCliffStream();
+
+    const newCliffTs = endTs - 200;
+
+    await setTime(context, BASE_NOW + 10);
+
+    await program.methods
+      .editCliff(new BN(newCliffTs))
+      .accountsStrict({
+        creator: creator.publicKey,
+        stream: streamPda,
+      })
+      .signers([creator])
+      .rpc();
+
+    const stream = await program.account.streamAccount.fetch(streamPda);
+    expect(stream.cliffTs.toNumber()).to.equal(newCliffTs);
+  });
+
+
 });
