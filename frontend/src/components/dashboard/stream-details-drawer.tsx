@@ -1,6 +1,6 @@
 "use client";
 
-import { memo } from "react";
+import { memo, useEffect } from "react";
 import { ArrowDownRight, ArrowUpRight, Calendar, Check, Copy, FileText, History, Settings, Unlock, XCircle } from "lucide-react";
 import { formatDate, formatTokenAmount, getAmountUnitLabel, shorten } from "./utils";
 
@@ -25,7 +25,19 @@ export const StreamDetailsDrawer = memo(function StreamDetailsDrawer({
   setSelectedStream: (value: any) => void;
   connectedWalletAddress: string | null;
 }) {
+  useEffect(() => {
+    if (!selectedStream) return;
+
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+
+    return () => {
+      document.body.style.overflow = previousOverflow;
+    };
+  }, [selectedStream]);
+
   if (!selectedStream) return null;
+
   const isRecipientWallet =
     connectedWalletAddress !== null &&
     selectedStream.recipient?.toLowerCase() === connectedWalletAddress.toLowerCase();
@@ -36,7 +48,7 @@ export const StreamDetailsDrawer = memo(function StreamDetailsDrawer({
   const amountLabel = getAmountUnitLabel(selectedStream.mint);
 
   return (
-    <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-md flex justify-end animate-in fade-in duration-200">
+    <div className="fixed inset-0 z-50 bg-zinc-950/95 sm:bg-black/60 backdrop-blur-md flex justify-end animate-in fade-in duration-200">
       <div className="w-full max-w-md bg-zinc-950 border-l border-zinc-800 h-[100dvh] sm:h-full rounded-none sm:rounded-r-3xl flex flex-col justify-between p-5 sm:p-6 shadow-2xl relative animate-in slide-in-from-right duration-350">
         <div className="overflow-y-auto max-h-[85%] pr-1">
           <div className="flex items-center justify-between border-b border-zinc-900 pb-4 mb-5">

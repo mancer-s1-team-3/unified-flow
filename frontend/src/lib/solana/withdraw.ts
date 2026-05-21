@@ -25,6 +25,7 @@ const PROGRAM_ID = new PublicKey(process.env.NEXT_PUBLIC_PROGRAM_ID ?? "8M5yieUh
 const TOKEN_PROGRAM_ID = new PublicKey(TOKEN_PROGRAM_ADDRESS);
 const ASSOCIATED_TOKEN_PROGRAM_ID = new PublicKey(ASSOCIATED_TOKEN_PROGRAM_ADDRESS);
 const CHAINLINK_FEED = new PublicKey("99B2bTijsU6f1GCT73HmdR7HCFFjGMBcPZY6jZ96ynrR");
+const TOKEN_ACCOUNT_SIZE = 165;
 
 export type WithdrawStreamInput = Readonly<{
   streamAddress: string;
@@ -165,6 +166,9 @@ export async function withdrawFromStreamOnChain({
     [recipient.toBuffer(), TOKEN_PROGRAM_ID.toBuffer(), mint.toBuffer()],
     ASSOCIATED_TOKEN_PROGRAM_ID
   )[0];
+  const recipientSolBalance = await connection.getBalance(recipient, commitment);
+  const recipientAtaInfo = await connection.getAccountInfo(recipientAta, commitment);
+  const recipientAtaExists = recipientAtaInfo !== null;
 
   const mintInfo = await connection.getParsedAccountInfo(mint, commitment);
   const parsedMintData = mintInfo.value?.data as { parsed?: { info?: { decimals?: number } } } | undefined;
@@ -194,6 +198,16 @@ export async function withdrawFromStreamOnChain({
   }
 
   const { blockhash, lastValidBlockHeight } = await connection.getLatestBlockhash(commitment);
+
+  if (!recipientAtaExists) {
+    const requiredLamports = await connection.getMinimumBalanceForRentExemption(TOKEN_ACCOUNT_SIZE, commitment);
+
+    if (recipientSolBalance < requiredLamports) {
+      throw new Error(
+        `Insufficient SOL balance to create the recipient token account for withdrawal. Available ${formatTokenAmountFromBaseUnits(String(recipientSolBalance), 9)} SOL, need at least ${formatTokenAmountFromBaseUnits(String(requiredLamports), 9)} SOL.`
+      );
+    }
+  }
 
   const createRecipientAtaInstruction = await getCreateAssociatedTokenIdempotentInstruction({
     payer: walletSigner as any,
