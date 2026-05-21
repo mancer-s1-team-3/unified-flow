@@ -200,6 +200,9 @@ export const StreamDetailsDrawer = memo(function StreamDetailsDrawer({
                   {selectedStream.vestingType !== 2 && (
                     <span className="flex items-center gap-1"><Calendar className="w-3 h-3" /> End: {formatDate(selectedStream.endTs)}</span>
                   )}
+                  {selectedStream.vestingType === 2 && selectedStream.completedAt && (
+                    <span className="col-span-2 flex items-center gap-1 text-emerald-400 font-bold border-t border-zinc-900/40 pt-1.5 mt-1"><Calendar className="w-3 h-3" /> Completed At: {formatDate(selectedStream.completedAt)}</span>
+                  )}
                   {selectedStream.vestingType === 1 && (
                     <span className="col-span-2 flex items-center gap-1 text-amber-500 font-bold border-t border-zinc-900/40 pt-1.5 mt-1"><Calendar className="w-3 h-3" /> Cliff Unlock: {formatDate(selectedStream.cliffTs)} ({Number(selectedStream.cliffTs) - Number(selectedStream.startTs)}s duration)</span>
                   )}

@@ -129,6 +129,7 @@ export function normalizeMilestoneUnlocked(event: Record<string, unknown>) {
     const milestone = asString(firstDefined(event, ["milestone"]));
     const index = asNumber(firstDefined(event, ["index"]), 0);
     const amount = asBigInt(firstDefined(event, ["amount"]));
+    const unlockTs = asBigInt(firstDefined(event, ["unlock_ts", "unlockTs"]));
 
     if (!stream || !milestone || index === null || amount === null) {
         return null;
@@ -139,5 +140,6 @@ export function normalizeMilestoneUnlocked(event: Record<string, unknown>) {
         milestone,
         index,
         amount,
+        unlockTs,
     };
 }

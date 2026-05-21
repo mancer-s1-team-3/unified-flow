@@ -1096,6 +1096,7 @@ export namespace Prisma {
     startTs: number | null
     cliffTs: number | null
     endTs: number | null
+    completedAt: number | null
     vestingType: number | null
     status: number | null
     milestoneCount: number | null
@@ -1110,6 +1111,7 @@ export namespace Prisma {
     startTs: bigint | null
     cliffTs: bigint | null
     endTs: bigint | null
+    completedAt: bigint | null
     vestingType: number | null
     status: number | null
     milestoneCount: number | null
@@ -1129,6 +1131,7 @@ export namespace Prisma {
     startTs: bigint | null
     cliffTs: bigint | null
     endTs: bigint | null
+    completedAt: bigint | null
     vestingType: number | null
     status: number | null
     cancelable: boolean | null
@@ -1153,6 +1156,7 @@ export namespace Prisma {
     startTs: bigint | null
     cliffTs: bigint | null
     endTs: bigint | null
+    completedAt: bigint | null
     vestingType: number | null
     status: number | null
     cancelable: boolean | null
@@ -1177,6 +1181,7 @@ export namespace Prisma {
     startTs: number
     cliffTs: number
     endTs: number
+    completedAt: number
     vestingType: number
     status: number
     cancelable: number
@@ -1198,6 +1203,7 @@ export namespace Prisma {
     startTs?: true
     cliffTs?: true
     endTs?: true
+    completedAt?: true
     vestingType?: true
     status?: true
     milestoneCount?: true
@@ -1212,6 +1218,7 @@ export namespace Prisma {
     startTs?: true
     cliffTs?: true
     endTs?: true
+    completedAt?: true
     vestingType?: true
     status?: true
     milestoneCount?: true
@@ -1231,6 +1238,7 @@ export namespace Prisma {
     startTs?: true
     cliffTs?: true
     endTs?: true
+    completedAt?: true
     vestingType?: true
     status?: true
     cancelable?: true
@@ -1255,6 +1263,7 @@ export namespace Prisma {
     startTs?: true
     cliffTs?: true
     endTs?: true
+    completedAt?: true
     vestingType?: true
     status?: true
     cancelable?: true
@@ -1279,6 +1288,7 @@ export namespace Prisma {
     startTs?: true
     cliffTs?: true
     endTs?: true
+    completedAt?: true
     vestingType?: true
     status?: true
     cancelable?: true
@@ -1390,6 +1400,7 @@ export namespace Prisma {
     startTs: bigint
     cliffTs: bigint
     endTs: bigint
+    completedAt: bigint | null
     vestingType: number
     status: number
     cancelable: boolean
@@ -1433,6 +1444,7 @@ export namespace Prisma {
     startTs?: boolean
     cliffTs?: boolean
     endTs?: boolean
+    completedAt?: boolean
     vestingType?: boolean
     status?: boolean
     cancelable?: boolean
@@ -1459,6 +1471,7 @@ export namespace Prisma {
     startTs?: boolean
     cliffTs?: boolean
     endTs?: boolean
+    completedAt?: boolean
     vestingType?: boolean
     status?: boolean
     cancelable?: boolean
@@ -1483,6 +1496,7 @@ export namespace Prisma {
     startTs?: boolean
     cliffTs?: boolean
     endTs?: boolean
+    completedAt?: boolean
     vestingType?: boolean
     status?: boolean
     cancelable?: boolean
@@ -1507,6 +1521,7 @@ export namespace Prisma {
     startTs?: boolean
     cliffTs?: boolean
     endTs?: boolean
+    completedAt?: boolean
     vestingType?: boolean
     status?: boolean
     cancelable?: boolean
@@ -1520,7 +1535,7 @@ export namespace Prisma {
     updatedAt?: boolean
   }
 
-  export type StreamOmit<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = $Extensions.GetOmit<"id" | "creator" | "recipient" | "mint" | "vault" | "totalAmount" | "withdrawn" | "startTs" | "cliffTs" | "endTs" | "vestingType" | "status" | "cancelable" | "milestoneCount" | "milestones" | "unlockedAmount" | "nonce" | "bump" | "isCsvCreated" | "createdAt" | "updatedAt", ExtArgs["result"]["stream"]>
+  export type StreamOmit<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = $Extensions.GetOmit<"id" | "creator" | "recipient" | "mint" | "vault" | "totalAmount" | "withdrawn" | "startTs" | "cliffTs" | "endTs" | "completedAt" | "vestingType" | "status" | "cancelable" | "milestoneCount" | "milestones" | "unlockedAmount" | "nonce" | "bump" | "isCsvCreated" | "createdAt" | "updatedAt", ExtArgs["result"]["stream"]>
   export type StreamInclude<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
     transactions?: boolean | Stream$transactionsArgs<ExtArgs>
     _count?: boolean | StreamCountOutputTypeDefaultArgs<ExtArgs>
@@ -1544,6 +1559,7 @@ export namespace Prisma {
       startTs: bigint
       cliffTs: bigint
       endTs: bigint
+      completedAt: bigint | null
       vestingType: number
       status: number
       cancelable: boolean
@@ -1989,6 +2005,7 @@ export namespace Prisma {
     readonly startTs: FieldRef<"Stream", 'BigInt'>
     readonly cliffTs: FieldRef<"Stream", 'BigInt'>
     readonly endTs: FieldRef<"Stream", 'BigInt'>
+    readonly completedAt: FieldRef<"Stream", 'BigInt'>
     readonly vestingType: FieldRef<"Stream", 'Int'>
     readonly status: FieldRef<"Stream", 'Int'>
     readonly cancelable: FieldRef<"Stream", 'Boolean'>
@@ -4645,6 +4662,7 @@ export namespace Prisma {
     startTs: 'startTs',
     cliffTs: 'cliffTs',
     endTs: 'endTs',
+    completedAt: 'completedAt',
     vestingType: 'vestingType',
     status: 'status',
     cancelable: 'cancelable',
@@ -4709,6 +4727,14 @@ export namespace Prisma {
   export type QueryMode = (typeof QueryMode)[keyof typeof QueryMode]
 
 
+  export const NullsOrder: {
+    first: 'first',
+    last: 'last'
+  };
+
+  export type NullsOrder = (typeof NullsOrder)[keyof typeof NullsOrder]
+
+
   export const JsonNullValueFilter: {
     DbNull: typeof DbNull,
     JsonNull: typeof JsonNull,
@@ -4716,14 +4742,6 @@ export namespace Prisma {
   };
 
   export type JsonNullValueFilter = (typeof JsonNullValueFilter)[keyof typeof JsonNullValueFilter]
-
-
-  export const NullsOrder: {
-    first: 'first',
-    last: 'last'
-  };
-
-  export type NullsOrder = (typeof NullsOrder)[keyof typeof NullsOrder]
 
 
   /**
@@ -4839,6 +4857,7 @@ export namespace Prisma {
     startTs?: BigIntFilter<"Stream"> | bigint | number
     cliffTs?: BigIntFilter<"Stream"> | bigint | number
     endTs?: BigIntFilter<"Stream"> | bigint | number
+    completedAt?: BigIntNullableFilter<"Stream"> | bigint | number | null
     vestingType?: IntFilter<"Stream"> | number
     status?: IntFilter<"Stream"> | number
     cancelable?: BoolFilter<"Stream"> | boolean
@@ -4864,6 +4883,7 @@ export namespace Prisma {
     startTs?: SortOrder
     cliffTs?: SortOrder
     endTs?: SortOrder
+    completedAt?: SortOrderInput | SortOrder
     vestingType?: SortOrder
     status?: SortOrder
     cancelable?: SortOrder
@@ -4892,6 +4912,7 @@ export namespace Prisma {
     startTs?: BigIntFilter<"Stream"> | bigint | number
     cliffTs?: BigIntFilter<"Stream"> | bigint | number
     endTs?: BigIntFilter<"Stream"> | bigint | number
+    completedAt?: BigIntNullableFilter<"Stream"> | bigint | number | null
     vestingType?: IntFilter<"Stream"> | number
     status?: IntFilter<"Stream"> | number
     cancelable?: BoolFilter<"Stream"> | boolean
@@ -4917,6 +4938,7 @@ export namespace Prisma {
     startTs?: SortOrder
     cliffTs?: SortOrder
     endTs?: SortOrder
+    completedAt?: SortOrderInput | SortOrder
     vestingType?: SortOrder
     status?: SortOrder
     cancelable?: SortOrder
@@ -4949,6 +4971,7 @@ export namespace Prisma {
     startTs?: BigIntWithAggregatesFilter<"Stream"> | bigint | number
     cliffTs?: BigIntWithAggregatesFilter<"Stream"> | bigint | number
     endTs?: BigIntWithAggregatesFilter<"Stream"> | bigint | number
+    completedAt?: BigIntNullableWithAggregatesFilter<"Stream"> | bigint | number | null
     vestingType?: IntWithAggregatesFilter<"Stream"> | number
     status?: IntWithAggregatesFilter<"Stream"> | number
     cancelable?: BoolWithAggregatesFilter<"Stream"> | boolean
@@ -5099,6 +5122,7 @@ export namespace Prisma {
     startTs: bigint | number
     cliffTs: bigint | number
     endTs: bigint | number
+    completedAt?: bigint | number | null
     vestingType: number
     status: number
     cancelable: boolean
@@ -5124,6 +5148,7 @@ export namespace Prisma {
     startTs: bigint | number
     cliffTs: bigint | number
     endTs: bigint | number
+    completedAt?: bigint | number | null
     vestingType: number
     status: number
     cancelable: boolean
@@ -5149,6 +5174,7 @@ export namespace Prisma {
     startTs?: BigIntFieldUpdateOperationsInput | bigint | number
     cliffTs?: BigIntFieldUpdateOperationsInput | bigint | number
     endTs?: BigIntFieldUpdateOperationsInput | bigint | number
+    completedAt?: NullableBigIntFieldUpdateOperationsInput | bigint | number | null
     vestingType?: IntFieldUpdateOperationsInput | number
     status?: IntFieldUpdateOperationsInput | number
     cancelable?: BoolFieldUpdateOperationsInput | boolean
@@ -5174,6 +5200,7 @@ export namespace Prisma {
     startTs?: BigIntFieldUpdateOperationsInput | bigint | number
     cliffTs?: BigIntFieldUpdateOperationsInput | bigint | number
     endTs?: BigIntFieldUpdateOperationsInput | bigint | number
+    completedAt?: NullableBigIntFieldUpdateOperationsInput | bigint | number | null
     vestingType?: IntFieldUpdateOperationsInput | number
     status?: IntFieldUpdateOperationsInput | number
     cancelable?: BoolFieldUpdateOperationsInput | boolean
@@ -5199,6 +5226,7 @@ export namespace Prisma {
     startTs: bigint | number
     cliffTs: bigint | number
     endTs: bigint | number
+    completedAt?: bigint | number | null
     vestingType: number
     status: number
     cancelable: boolean
@@ -5223,6 +5251,7 @@ export namespace Prisma {
     startTs?: BigIntFieldUpdateOperationsInput | bigint | number
     cliffTs?: BigIntFieldUpdateOperationsInput | bigint | number
     endTs?: BigIntFieldUpdateOperationsInput | bigint | number
+    completedAt?: NullableBigIntFieldUpdateOperationsInput | bigint | number | null
     vestingType?: IntFieldUpdateOperationsInput | number
     status?: IntFieldUpdateOperationsInput | number
     cancelable?: BoolFieldUpdateOperationsInput | boolean
@@ -5247,6 +5276,7 @@ export namespace Prisma {
     startTs?: BigIntFieldUpdateOperationsInput | bigint | number
     cliffTs?: BigIntFieldUpdateOperationsInput | bigint | number
     endTs?: BigIntFieldUpdateOperationsInput | bigint | number
+    completedAt?: NullableBigIntFieldUpdateOperationsInput | bigint | number | null
     vestingType?: IntFieldUpdateOperationsInput | number
     status?: IntFieldUpdateOperationsInput | number
     cancelable?: BoolFieldUpdateOperationsInput | boolean
@@ -5418,6 +5448,17 @@ export namespace Prisma {
     not?: NestedBigIntFilter<$PrismaModel> | bigint | number
   }
 
+  export type BigIntNullableFilter<$PrismaModel = never> = {
+    equals?: bigint | number | BigIntFieldRefInput<$PrismaModel> | null
+    in?: bigint[] | number[] | ListBigIntFieldRefInput<$PrismaModel> | null
+    notIn?: bigint[] | number[] | ListBigIntFieldRefInput<$PrismaModel> | null
+    lt?: bigint | number | BigIntFieldRefInput<$PrismaModel>
+    lte?: bigint | number | BigIntFieldRefInput<$PrismaModel>
+    gt?: bigint | number | BigIntFieldRefInput<$PrismaModel>
+    gte?: bigint | number | BigIntFieldRefInput<$PrismaModel>
+    not?: NestedBigIntNullableFilter<$PrismaModel> | bigint | number | null
+  }
+
   export type IntFilter<$PrismaModel = never> = {
     equals?: number | IntFieldRefInput<$PrismaModel>
     in?: number[] | ListIntFieldRefInput<$PrismaModel>
@@ -5451,6 +5492,11 @@ export namespace Prisma {
     none?: TransactionWhereInput
   }
 
+  export type SortOrderInput = {
+    sort: SortOrder
+    nulls?: NullsOrder
+  }
+
   export type TransactionOrderByRelationAggregateInput = {
     _count?: SortOrder
   }
@@ -5466,6 +5512,7 @@ export namespace Prisma {
     startTs?: SortOrder
     cliffTs?: SortOrder
     endTs?: SortOrder
+    completedAt?: SortOrder
     vestingType?: SortOrder
     status?: SortOrder
     cancelable?: SortOrder
@@ -5485,6 +5532,7 @@ export namespace Prisma {
     startTs?: SortOrder
     cliffTs?: SortOrder
     endTs?: SortOrder
+    completedAt?: SortOrder
     vestingType?: SortOrder
     status?: SortOrder
     milestoneCount?: SortOrder
@@ -5504,6 +5552,7 @@ export namespace Prisma {
     startTs?: SortOrder
     cliffTs?: SortOrder
     endTs?: SortOrder
+    completedAt?: SortOrder
     vestingType?: SortOrder
     status?: SortOrder
     cancelable?: SortOrder
@@ -5528,6 +5577,7 @@ export namespace Prisma {
     startTs?: SortOrder
     cliffTs?: SortOrder
     endTs?: SortOrder
+    completedAt?: SortOrder
     vestingType?: SortOrder
     status?: SortOrder
     cancelable?: SortOrder
@@ -5547,6 +5597,7 @@ export namespace Prisma {
     startTs?: SortOrder
     cliffTs?: SortOrder
     endTs?: SortOrder
+    completedAt?: SortOrder
     vestingType?: SortOrder
     status?: SortOrder
     milestoneCount?: SortOrder
@@ -5587,6 +5638,22 @@ export namespace Prisma {
     _sum?: NestedBigIntFilter<$PrismaModel>
     _min?: NestedBigIntFilter<$PrismaModel>
     _max?: NestedBigIntFilter<$PrismaModel>
+  }
+
+  export type BigIntNullableWithAggregatesFilter<$PrismaModel = never> = {
+    equals?: bigint | number | BigIntFieldRefInput<$PrismaModel> | null
+    in?: bigint[] | number[] | ListBigIntFieldRefInput<$PrismaModel> | null
+    notIn?: bigint[] | number[] | ListBigIntFieldRefInput<$PrismaModel> | null
+    lt?: bigint | number | BigIntFieldRefInput<$PrismaModel>
+    lte?: bigint | number | BigIntFieldRefInput<$PrismaModel>
+    gt?: bigint | number | BigIntFieldRefInput<$PrismaModel>
+    gte?: bigint | number | BigIntFieldRefInput<$PrismaModel>
+    not?: NestedBigIntNullableWithAggregatesFilter<$PrismaModel> | bigint | number | null
+    _count?: NestedIntNullableFilter<$PrismaModel>
+    _avg?: NestedFloatNullableFilter<$PrismaModel>
+    _sum?: NestedBigIntNullableFilter<$PrismaModel>
+    _min?: NestedBigIntNullableFilter<$PrismaModel>
+    _max?: NestedBigIntNullableFilter<$PrismaModel>
   }
 
   export type IntWithAggregatesFilter<$PrismaModel = never> = {
@@ -5668,11 +5735,6 @@ export namespace Prisma {
   export type StreamNullableScalarRelationFilter = {
     is?: StreamWhereInput | null
     isNot?: StreamWhereInput | null
-  }
-
-  export type SortOrderInput = {
-    sort: SortOrder
-    nulls?: NullsOrder
   }
 
   export type TransactionCountOrderByAggregateInput = {
@@ -5816,6 +5878,14 @@ export namespace Prisma {
     divide?: bigint | number
   }
 
+  export type NullableBigIntFieldUpdateOperationsInput = {
+    set?: bigint | number | null
+    increment?: bigint | number
+    decrement?: bigint | number
+    multiply?: bigint | number
+    divide?: bigint | number
+  }
+
   export type IntFieldUpdateOperationsInput = {
     set?: number
     increment?: number
@@ -5905,6 +5975,17 @@ export namespace Prisma {
     not?: NestedBigIntFilter<$PrismaModel> | bigint | number
   }
 
+  export type NestedBigIntNullableFilter<$PrismaModel = never> = {
+    equals?: bigint | number | BigIntFieldRefInput<$PrismaModel> | null
+    in?: bigint[] | number[] | ListBigIntFieldRefInput<$PrismaModel> | null
+    notIn?: bigint[] | number[] | ListBigIntFieldRefInput<$PrismaModel> | null
+    lt?: bigint | number | BigIntFieldRefInput<$PrismaModel>
+    lte?: bigint | number | BigIntFieldRefInput<$PrismaModel>
+    gt?: bigint | number | BigIntFieldRefInput<$PrismaModel>
+    gte?: bigint | number | BigIntFieldRefInput<$PrismaModel>
+    not?: NestedBigIntNullableFilter<$PrismaModel> | bigint | number | null
+  }
+
   export type NestedIntFilter<$PrismaModel = never> = {
     equals?: number | IntFieldRefInput<$PrismaModel>
     in?: number[] | ListIntFieldRefInput<$PrismaModel>
@@ -5976,6 +6057,44 @@ export namespace Prisma {
     not?: NestedFloatFilter<$PrismaModel> | number
   }
 
+  export type NestedBigIntNullableWithAggregatesFilter<$PrismaModel = never> = {
+    equals?: bigint | number | BigIntFieldRefInput<$PrismaModel> | null
+    in?: bigint[] | number[] | ListBigIntFieldRefInput<$PrismaModel> | null
+    notIn?: bigint[] | number[] | ListBigIntFieldRefInput<$PrismaModel> | null
+    lt?: bigint | number | BigIntFieldRefInput<$PrismaModel>
+    lte?: bigint | number | BigIntFieldRefInput<$PrismaModel>
+    gt?: bigint | number | BigIntFieldRefInput<$PrismaModel>
+    gte?: bigint | number | BigIntFieldRefInput<$PrismaModel>
+    not?: NestedBigIntNullableWithAggregatesFilter<$PrismaModel> | bigint | number | null
+    _count?: NestedIntNullableFilter<$PrismaModel>
+    _avg?: NestedFloatNullableFilter<$PrismaModel>
+    _sum?: NestedBigIntNullableFilter<$PrismaModel>
+    _min?: NestedBigIntNullableFilter<$PrismaModel>
+    _max?: NestedBigIntNullableFilter<$PrismaModel>
+  }
+
+  export type NestedIntNullableFilter<$PrismaModel = never> = {
+    equals?: number | IntFieldRefInput<$PrismaModel> | null
+    in?: number[] | ListIntFieldRefInput<$PrismaModel> | null
+    notIn?: number[] | ListIntFieldRefInput<$PrismaModel> | null
+    lt?: number | IntFieldRefInput<$PrismaModel>
+    lte?: number | IntFieldRefInput<$PrismaModel>
+    gt?: number | IntFieldRefInput<$PrismaModel>
+    gte?: number | IntFieldRefInput<$PrismaModel>
+    not?: NestedIntNullableFilter<$PrismaModel> | number | null
+  }
+
+  export type NestedFloatNullableFilter<$PrismaModel = never> = {
+    equals?: number | FloatFieldRefInput<$PrismaModel> | null
+    in?: number[] | ListFloatFieldRefInput<$PrismaModel> | null
+    notIn?: number[] | ListFloatFieldRefInput<$PrismaModel> | null
+    lt?: number | FloatFieldRefInput<$PrismaModel>
+    lte?: number | FloatFieldRefInput<$PrismaModel>
+    gt?: number | FloatFieldRefInput<$PrismaModel>
+    gte?: number | FloatFieldRefInput<$PrismaModel>
+    not?: NestedFloatNullableFilter<$PrismaModel> | number | null
+  }
+
   export type NestedIntWithAggregatesFilter<$PrismaModel = never> = {
     equals?: number | IntFieldRefInput<$PrismaModel>
     in?: number[] | ListIntFieldRefInput<$PrismaModel>
@@ -6043,17 +6162,6 @@ export namespace Prisma {
     _count?: NestedIntNullableFilter<$PrismaModel>
     _min?: NestedStringNullableFilter<$PrismaModel>
     _max?: NestedStringNullableFilter<$PrismaModel>
-  }
-
-  export type NestedIntNullableFilter<$PrismaModel = never> = {
-    equals?: number | IntFieldRefInput<$PrismaModel> | null
-    in?: number[] | ListIntFieldRefInput<$PrismaModel> | null
-    notIn?: number[] | ListIntFieldRefInput<$PrismaModel> | null
-    lt?: number | IntFieldRefInput<$PrismaModel>
-    lte?: number | IntFieldRefInput<$PrismaModel>
-    gt?: number | IntFieldRefInput<$PrismaModel>
-    gte?: number | IntFieldRefInput<$PrismaModel>
-    not?: NestedIntNullableFilter<$PrismaModel> | number | null
   }
   export type NestedJsonFilter<$PrismaModel = never> =
     | PatchUndefined<
@@ -6147,6 +6255,7 @@ export namespace Prisma {
     startTs: bigint | number
     cliffTs: bigint | number
     endTs: bigint | number
+    completedAt?: bigint | number | null
     vestingType: number
     status: number
     cancelable: boolean
@@ -6171,6 +6280,7 @@ export namespace Prisma {
     startTs: bigint | number
     cliffTs: bigint | number
     endTs: bigint | number
+    completedAt?: bigint | number | null
     vestingType: number
     status: number
     cancelable: boolean
@@ -6211,6 +6321,7 @@ export namespace Prisma {
     startTs?: BigIntFieldUpdateOperationsInput | bigint | number
     cliffTs?: BigIntFieldUpdateOperationsInput | bigint | number
     endTs?: BigIntFieldUpdateOperationsInput | bigint | number
+    completedAt?: NullableBigIntFieldUpdateOperationsInput | bigint | number | null
     vestingType?: IntFieldUpdateOperationsInput | number
     status?: IntFieldUpdateOperationsInput | number
     cancelable?: BoolFieldUpdateOperationsInput | boolean
@@ -6235,6 +6346,7 @@ export namespace Prisma {
     startTs?: BigIntFieldUpdateOperationsInput | bigint | number
     cliffTs?: BigIntFieldUpdateOperationsInput | bigint | number
     endTs?: BigIntFieldUpdateOperationsInput | bigint | number
+    completedAt?: NullableBigIntFieldUpdateOperationsInput | bigint | number | null
     vestingType?: IntFieldUpdateOperationsInput | number
     status?: IntFieldUpdateOperationsInput | number
     cancelable?: BoolFieldUpdateOperationsInput | boolean

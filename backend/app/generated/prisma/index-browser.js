@@ -131,6 +131,7 @@ exports.Prisma.StreamScalarFieldEnum = {
   startTs: 'startTs',
   cliffTs: 'cliffTs',
   endTs: 'endTs',
+  completedAt: 'completedAt',
   vestingType: 'vestingType',
   status: 'status',
   cancelable: 'cancelable',
@@ -177,15 +178,15 @@ exports.Prisma.QueryMode = {
   insensitive: 'insensitive'
 };
 
+exports.Prisma.NullsOrder = {
+  first: 'first',
+  last: 'last'
+};
+
 exports.Prisma.JsonNullValueFilter = {
   DbNull: Prisma.DbNull,
   JsonNull: Prisma.JsonNull,
   AnyNull: Prisma.AnyNull
-};
-
-exports.Prisma.NullsOrder = {
-  first: 'first',
-  last: 'last'
 };
 
 

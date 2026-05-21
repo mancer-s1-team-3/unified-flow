@@ -21,6 +21,7 @@ model Stream {
   startTs         BigInt
   cliffTs         BigInt
   endTs           BigInt
+  completedAt     BigInt?
 
   vestingType     Int
   status          Int
