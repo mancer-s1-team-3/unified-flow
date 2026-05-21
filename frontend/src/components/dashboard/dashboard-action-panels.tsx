@@ -152,14 +152,22 @@ export function DashboardActionPanels(props: Props) {
 
       {activeTab === "create_streams" && (
         <div className="animate-in fade-in-30 duration-200">
-          <div className="flex items-center justify-between border-b border-zinc-900 pb-4 mb-6">
-            <div>
+          <div className="flex flex-col gap-4 border-b border-zinc-900 pb-4 mb-6 sm:flex-row sm:items-center sm:justify-between">
+            <div className="min-w-0">
               <h2 className="text-2xl font-extrabold tracking-tight">Create Stream</h2>
               <p className="text-xs text-zinc-400">Deploy a manual stream or deploy multiple streams via CSV</p>
             </div>
-            <div className="flex bg-zinc-950 border border-zinc-800 p-1 rounded-xl">
-              <button onClick={() => setCreateMode("manual")} className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${createMode === "manual" ? "bg-indigo-600 text-white" : "text-zinc-400 hover:text-zinc-200"}`}>Manual Form</button>
-              <button onClick={() => setCreateMode("csv")} className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 ${createMode === "csv" ? "bg-indigo-600 text-white" : "text-zinc-400 hover:text-zinc-200"}`}>
+            <div className="flex w-full flex-col gap-2 rounded-2xl border border-zinc-800 bg-zinc-950 p-1 sm:w-auto sm:flex-row">
+              <button
+                onClick={() => setCreateMode("manual")}
+                className={`w-full px-3 py-2 rounded-xl text-xs font-bold transition-all sm:w-auto ${createMode === "manual" ? "bg-indigo-600 text-white" : "text-zinc-400 hover:text-zinc-200"}`}
+              >
+                Manual Form
+              </button>
+              <button
+                onClick={() => setCreateMode("csv")}
+                className={`w-full px-3 py-2 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-1.5 sm:w-auto ${createMode === "csv" ? "bg-indigo-600 text-white" : "text-zinc-400 hover:text-zinc-200"}`}
+              >
                 CSV Bulk Import
                 {isWipFeature("csvBulkCreate") && <span className="inline-flex rounded-full border border-amber-500/30 bg-amber-500/10 px-1.5 py-0.5 text-[9px] font-black uppercase tracking-wider text-amber-300">WIP</span>}
               </button>
@@ -167,14 +175,14 @@ export function DashboardActionPanels(props: Props) {
           </div>
 
           {createMode === "manual" ? (
-            <div className="grid gap-4 sm:grid-cols-2">
-              <div className="col-span-2">
+            <div className="grid gap-4 md:grid-cols-2">
+              <div className="md:col-span-2">
                 <label className="block text-xs font-semibold text-zinc-400 uppercase tracking-wider mb-1.5">Recipient Pubkey</label>
-                <input type="text" value={createForm.recipient} onChange={(e) => setCreateForm({ ...createForm, recipient: e.target.value })} className="w-full bg-zinc-950 border border-zinc-800 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:border-indigo-500 font-mono" />
+                <input type="text" value={createForm.recipient} onChange={(e) => setCreateForm({ ...createForm, recipient: e.target.value })} className="w-full min-w-0 bg-zinc-950 border border-zinc-800 rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-indigo-500 font-mono" />
               </div>
               <div>
                 <label className="block text-xs font-semibold text-zinc-400 uppercase tracking-wider mb-1.5">Total Amount</label>
-                <input type="text" inputMode="decimal" value={createForm.amount} onChange={(e) => setCreateForm({ ...createForm, amount: e.target.value })} className="w-full bg-zinc-950 border border-zinc-800 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:border-indigo-500" />
+                <input type="text" inputMode="decimal" value={createForm.amount} onChange={(e) => setCreateForm({ ...createForm, amount: e.target.value })} className="w-full min-w-0 bg-zinc-950 border border-zinc-800 rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-indigo-500" />
               </div>
               <div>
                 <label className="block text-xs font-semibold text-zinc-400 uppercase tracking-wider mb-1.5">Token Mint</label>
@@ -182,7 +190,7 @@ export function DashboardActionPanels(props: Props) {
                   <button
                     type="button"
                     onClick={() => setMintMenuOpen((open) => !open)}
-                    className="w-full flex items-center justify-between gap-3 bg-zinc-950 border border-zinc-800 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:border-indigo-500 transition-colors"
+                    className="w-full flex items-center justify-between gap-3 bg-zinc-950 border border-zinc-800 rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-indigo-500 transition-colors min-w-0"
                   >
                     <div className="flex items-center gap-3 min-w-0">
                       <div
@@ -215,7 +223,7 @@ export function DashboardActionPanels(props: Props) {
                   </button>
 
                   {mintMenuOpen && (
-                    <div className="absolute z-20 mt-2 w-full rounded-2xl border border-zinc-800 bg-zinc-950 shadow-2xl shadow-black/40 overflow-hidden">
+                    <div className="absolute z-20 mt-2 w-full rounded-2xl border border-zinc-800 bg-zinc-950 shadow-2xl shadow-black/40 overflow-hidden max-h-[72vh]">
                       <div className="flex items-center justify-between gap-3 px-4 py-3 border-b border-zinc-900 bg-zinc-950/95">
                         <div>
                           <div className="text-[10px] font-black uppercase tracking-[0.24em] text-zinc-500">Known mints for {clusterLabel}</div>
@@ -229,7 +237,7 @@ export function DashboardActionPanels(props: Props) {
                           Clear
                         </button>
                       </div>
-                      <div className="max-h-72 overflow-y-auto p-2">
+                      <div className="max-h-[60vh] overflow-y-auto p-2">
                         {mintPresets.map((preset) => {
                           const active = createForm.mint.trim() === preset.mint;
 
@@ -270,7 +278,7 @@ export function DashboardActionPanels(props: Props) {
                             value={createForm.mint}
                             onChange={(e) => setCreateForm({ ...createForm, mint: e.target.value })}
                             placeholder="Paste a mint address"
-                            className="w-full bg-zinc-950 border border-zinc-800 rounded-xl px-3 py-2 text-xs focus:outline-none focus:border-indigo-500 font-mono"
+                            className="w-full min-w-0 bg-zinc-950 border border-zinc-800 rounded-xl px-3 py-2.5 text-xs focus:outline-none focus:border-indigo-500 font-mono"
                           />
                         </div>
                       </div>
@@ -280,7 +288,7 @@ export function DashboardActionPanels(props: Props) {
               </div>
               <div>
                 <label className="block text-xs font-semibold text-zinc-400 uppercase tracking-wider mb-1.5">Vesting Schedule Type</label>
-                <select value={createForm.type} onChange={(e) => setCreateForm({ ...createForm, type: e.target.value })} className="w-full bg-zinc-950 border border-zinc-800 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:border-indigo-500 font-medium">
+                <select value={createForm.type} onChange={(e) => setCreateForm({ ...createForm, type: e.target.value })} className="w-full min-w-0 bg-zinc-950 border border-zinc-800 rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-indigo-500 font-medium">
                   <option value="0">Linear Vesting</option>
                   <option value="1">Cliff Vesting</option>
                   <option value="2">Milestone-Based Vesting</option>
@@ -289,14 +297,14 @@ export function DashboardActionPanels(props: Props) {
               {createForm.type !== "2" && (
                 <div>
                   <label className="block text-xs font-semibold text-zinc-400 uppercase tracking-wider mb-1.5">Duration (Seconds)</label>
-                  <input type="number" value={createForm.duration} onChange={(e) => setCreateForm({ ...createForm, duration: e.target.value })} className="w-full bg-zinc-950 border border-zinc-800 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:border-indigo-500 font-mono" />
+                  <input type="number" value={createForm.duration} onChange={(e) => setCreateForm({ ...createForm, duration: e.target.value })} className="w-full min-w-0 bg-zinc-950 border border-zinc-800 rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-indigo-500 font-mono" />
                 </div>
               )}
 
               {createForm.type === "1" && (
                 <div>
                   <label className="block text-xs font-semibold text-zinc-400 uppercase tracking-wider mb-1.5">Cliff Duration (Seconds)</label>
-                  <input type="number" value={createForm.cliffDuration} onChange={(e) => setCreateForm({ ...createForm, cliffDuration: e.target.value })} className="w-full bg-zinc-950 border border-zinc-800 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:border-indigo-500 font-mono" />
+                  <input type="number" value={createForm.cliffDuration} onChange={(e) => setCreateForm({ ...createForm, cliffDuration: e.target.value })} className="w-full min-w-0 bg-zinc-950 border border-zinc-800 rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-indigo-500 font-mono" />
                   {cliffExceedsDuration && (
                     <div className="mt-2 text-[10px] font-semibold text-amber-400">
                       Cliff duration must be less than or equal to the stream duration.
@@ -306,14 +314,14 @@ export function DashboardActionPanels(props: Props) {
               )}
 
               {createForm.type === "2" && (
-                <div className="col-span-2 grid gap-4 bg-zinc-900/30 border border-zinc-900 p-4 rounded-xl">
+                <div className="md:col-span-2 grid gap-4 bg-zinc-900/30 border border-zinc-900 p-4 rounded-xl">
                   <div>
                     <label className="block text-xs font-semibold text-zinc-400 uppercase tracking-wider mb-1.5">Milestone Count</label>
-                    <input type="number" value={createForm.milestoneCount} onChange={(e) => setCreateForm({ ...createForm, milestoneCount: e.target.value })} className="w-full bg-zinc-950 border border-zinc-800 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:border-indigo-500 font-mono" />
+                    <input type="number" value={createForm.milestoneCount} onChange={(e) => setCreateForm({ ...createForm, milestoneCount: e.target.value })} className="w-full min-w-0 bg-zinc-950 border border-zinc-800 rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-indigo-500 font-mono" />
                   </div>
                   <div className="border-t border-zinc-900/60 pt-3">
                     <label className="block text-[10px] font-bold text-zinc-500 uppercase tracking-widest mb-2">Milestone Amount Allocations</label>
-                    <div className="grid grid-cols-2 gap-3">
+                    <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                       {milestoneAmounts.map((amt, idx) => (
                         <div key={idx} className="flex flex-col gap-1">
                           <span className="text-[10px] text-zinc-400 font-mono font-bold">Milestone #{idx} Amount</span>
@@ -321,7 +329,7 @@ export function DashboardActionPanels(props: Props) {
                             const next = [...milestoneAmounts];
                             next[idx] = e.target.value;
                             setMilestoneAmounts(next);
-                          }} className="w-full bg-zinc-950 border border-zinc-800 rounded-xl px-3 py-1.5 text-xs focus:outline-none focus:border-indigo-500 font-mono" placeholder="0" />
+                          }} className="w-full min-w-0 bg-zinc-950 border border-zinc-800 rounded-xl px-3 py-2.5 text-xs focus:outline-none focus:border-indigo-500 font-mono" placeholder="0" />
                         </div>
                       ))}
                     </div>
@@ -334,30 +342,30 @@ export function DashboardActionPanels(props: Props) {
                 </div>
               )}
 
-              <div className="flex items-center gap-3 h-full mt-6">
+              <div className="md:col-span-2 flex items-start gap-3 mt-2">
                 <input type="checkbox" id="cancelable" checked={createForm.cancelable} onChange={(e) => setCreateForm({ ...createForm, cancelable: e.target.checked })} className="w-4 h-4 rounded border-zinc-800 text-indigo-600 bg-zinc-950 focus:ring-0 focus:ring-offset-0" />
-                <label htmlFor="cancelable" className="text-xs font-semibold text-zinc-350 cursor-pointer select-none">Stream is Cancelable by Creator</label>
+                <label htmlFor="cancelable" className="text-xs leading-5 font-semibold text-zinc-350 cursor-pointer select-none">Stream is cancelable by creator</label>
               </div>
 
-              <button onClick={() => handleAction("create_stream", createForm)} className="col-span-2 w-full mt-8 bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs py-3 rounded-xl transition-all shadow-lg hover:shadow-indigo-500/20">Simulate / Deploy Stream</button>
+              <button onClick={() => handleAction("create_stream", createForm)} className="md:col-span-2 w-full mt-4 bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs py-3 rounded-xl transition-all shadow-lg hover:shadow-indigo-500/20">Simulate / Deploy Stream</button>
             </div>
           ) : (
             <div className="grid gap-4">
-              <div className="flex flex-wrap items-center justify-between gap-4 bg-zinc-950 border border-zinc-900 rounded-2xl p-4">
-                <div className="flex items-center gap-3">
-                  <button onClick={() => downloadTemplate("create")} className="flex items-center gap-1.5 px-3 py-1.5 border border-zinc-800 hover:border-zinc-700 bg-zinc-900/50 rounded-xl text-xs font-semibold text-zinc-350 transition-all"><Download className="w-3.5 h-3.5 text-indigo-400" />Template</button>
-                  <button onClick={() => fileInputCreateRef.current?.click()} className="flex items-center gap-1.5 px-3 py-1.5 border border-indigo-900/60 bg-indigo-950/20 hover:bg-indigo-950/40 text-indigo-450 rounded-xl text-xs font-semibold transition-all"><Upload className="w-3.5 h-3.5" />Upload CSV</button>
+              <div className="flex flex-col gap-3 rounded-2xl border border-zinc-900 bg-zinc-950 p-4 sm:flex-row sm:items-center sm:justify-between">
+                <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+                  <button onClick={() => downloadTemplate("create")} className="flex w-full items-center justify-center gap-1.5 px-3 py-2 border border-zinc-800 hover:border-zinc-700 bg-zinc-900/50 rounded-xl text-xs font-semibold text-zinc-350 transition-all sm:w-auto"><Download className="w-3.5 h-3.5 text-indigo-400" />Template</button>
+                  <button onClick={() => fileInputCreateRef.current?.click()} className="flex w-full items-center justify-center gap-1.5 px-3 py-2 border border-indigo-900/60 bg-indigo-950/20 hover:bg-indigo-950/40 text-indigo-450 rounded-xl text-xs font-semibold transition-all sm:w-auto"><Upload className="w-3.5 h-3.5" />Upload CSV</button>
                   <input type="file" accept=".csv" ref={fileInputCreateRef} onChange={(e) => handleCsvUpload(e, "create")} className="hidden" />
                 </div>
-                <div className="flex items-center gap-3">
-                  <div className="flex items-center gap-2">
+                <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
+                  <div className="flex flex-wrap items-center gap-2">
                     <span className="text-[9px] text-zinc-500 font-black uppercase tracking-wider">Baseline:</span>
-                    <select value={compareVersionSelected} onChange={(e) => setCompareVersionSelected(e.target.value)} className="bg-zinc-900 border border-zinc-805 rounded-xl px-2.5 py-1.5 text-[10px] text-zinc-300 font-extrabold focus:outline-none focus:border-indigo-500">
+                    <select value={compareVersionSelected} onChange={(e) => setCompareVersionSelected(e.target.value)} className="min-w-0 bg-zinc-900 border border-zinc-805 rounded-xl px-2.5 py-2 text-[10px] text-zinc-300 font-extrabold focus:outline-none focus:border-indigo-500">
                       <option value="0">Live Active DB</option>
                       {csvVersions.map((v) => <option key={v.id} value={v.version}>Version {v.version} ({v.filename})</option>)}
                     </select>
                   </div>
-                  <button onClick={() => handleAnalyzeDiff("create")} disabled={loadingDiff} className="flex items-center gap-1.5 px-3 py-1.5 bg-indigo-650 hover:bg-indigo-600 border border-indigo-700 rounded-xl text-[10px] font-black text-white transition-all disabled:opacity-40">
+                  <button onClick={() => handleAnalyzeDiff("create")} disabled={loadingDiff} className="flex items-center justify-center gap-1.5 px-3 py-2 bg-indigo-650 hover:bg-indigo-600 border border-indigo-700 rounded-xl text-[10px] font-black text-white transition-all disabled:opacity-40 sm:w-auto">
                     {loadingDiff ? <RefreshCw className="w-3 h-3 animate-spin text-white" /> : <Layers className="w-3 h-3" />}Analyze Diff
                   </button>
                 </div>
@@ -365,7 +373,7 @@ export function DashboardActionPanels(props: Props) {
 
               <div>
                 <label className="block text-xs font-semibold text-zinc-400 uppercase tracking-wider mb-1.5">CSV Payload Preview / Editor</label>
-                <textarea rows={6} value={csvCreateText} onChange={(e) => setCsvCreateText(e.target.value)} className="w-full bg-zinc-950 border border-zinc-800 rounded-xl px-4 py-3 text-xs focus:outline-none focus:border-indigo-500 font-mono" />
+                <textarea rows={8} value={csvCreateText} onChange={(e) => setCsvCreateText(e.target.value)} className="w-full bg-zinc-950 border border-zinc-800 rounded-xl px-4 py-3 text-xs focus:outline-none focus:border-indigo-500 font-mono" />
               </div>
 
       <CsvDiffPanel csvDiffResult={csvDiffResult} compareVersionSelected={compareVersionSelected} onClose={() => setCsvDiffResult(null)} />
