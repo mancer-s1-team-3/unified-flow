@@ -26,9 +26,12 @@ model Stream {
 
   cancelable     Boolean
   milestoneCount Int
+  milestones     String  @default("")
+  unlockedAmount BigInt  @default(0)
 
-  nonce BigInt
-  bump  Int
+  nonce        BigInt
+  bump         Int
+  isCsvCreated Boolean @default(false)
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -48,5 +51,14 @@ model Transaction {
 
   raw Json
 
+  createdAt DateTime @default(now())
+}
+
+model CsvUpload {
+  id        String   @id @default(uuid())
+  version   Int
+  filename  String
+  content   String // Stores raw CSV text
+  uploader  String // Wallet address of the uploader
   createdAt DateTime @default(now())
 }

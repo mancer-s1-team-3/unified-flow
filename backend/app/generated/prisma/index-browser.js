@@ -135,8 +135,11 @@ exports.Prisma.StreamScalarFieldEnum = {
   status: 'status',
   cancelable: 'cancelable',
   milestoneCount: 'milestoneCount',
+  milestones: 'milestones',
+  unlockedAmount: 'unlockedAmount',
   nonce: 'nonce',
   bump: 'bump',
+  isCsvCreated: 'isCsvCreated',
   createdAt: 'createdAt',
   updatedAt: 'updatedAt'
 };
@@ -148,6 +151,15 @@ exports.Prisma.TransactionScalarFieldEnum = {
   streamId: 'streamId',
   type: 'type',
   raw: 'raw',
+  createdAt: 'createdAt'
+};
+
+exports.Prisma.CsvUploadScalarFieldEnum = {
+  id: 'id',
+  version: 'version',
+  filename: 'filename',
+  content: 'content',
+  uploader: 'uploader',
   createdAt: 'createdAt'
 };
 
@@ -179,7 +191,8 @@ exports.Prisma.NullsOrder = {
 
 exports.Prisma.ModelName = {
   Stream: 'Stream',
-  Transaction: 'Transaction'
+  Transaction: 'Transaction',
+  CsvUpload: 'CsvUpload'
 };
 
 /**

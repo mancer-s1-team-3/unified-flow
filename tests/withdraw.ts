@@ -288,7 +288,7 @@ describe("withdraw", () => {
     // createStream — auto-resolved: config (PDA), stream (PDA via creator+recipient+nonce arg),
     //                               vault (ATA), systemProgram, associatedTokenProgram
     await program.methods
-      .createStream(new BN(amount), new BN(startTs), new BN(endTs), new BN(nonce.toString()))
+      .createStream(new BN(amount), new BN(startTs), new BN(startTs), new BN(endTs), 0, [], new BN(nonce.toString()))
       .accounts({
         creator: creator.publicKey,
         recipient: rcpt.publicKey,

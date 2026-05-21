@@ -5,7 +5,7 @@ import {
     SystemProgram,
 } from "@solana/web3.js";
 
-import idl from "../../../target/idl/solana_program.json";
+import idl from "../idl/solana_program.json";
 
 import {
     connection,

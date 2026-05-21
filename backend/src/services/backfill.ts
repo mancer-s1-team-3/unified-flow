@@ -1,39 +1,31 @@
 import dotenv from "dotenv";
-
-import {
-    PublicKey,
-} from "@solana/web3.js";
-
+import { PublicKey } from "@solana/web3.js";
 import { connection } from "./rpc";
-
 import prisma from "../db/prisma";
-
-import { eventParser } from "./eventParser";
+import { parseEventsSafely } from "./eventParser";
+import {
+    normalizeMilestoneUnlocked,
+    normalizeStreamCreated,
+    normalizeTokensClaimed,
+} from "./eventNormalizer";
 
 dotenv.config();
 
-const PROGRAM_ID = new PublicKey(
-    process.env.PROGRAM_ID!
-);
+const PROGRAM_ID = new PublicKey(process.env.PROGRAM_ID!);
 
 export async function backfill() {
-    console.log(
-        "Starting backfill..."
-    );
+    console.log("Starting backfill...");
 
-    let before:
-        | string
-        | undefined = undefined;
+    let before: string | undefined = undefined;
 
     while (true) {
-        const signatures =
-            await connection.getSignaturesForAddress(
-                PROGRAM_ID,
-                {
-                    before,
-                    limit: 100,
-                }
-            );
+        const signatures = await connection.getSignaturesForAddress(
+            PROGRAM_ID,
+            {
+                before,
+                limit: 100,
+            }
+        );
 
         if (signatures.length === 0) {
             break;
@@ -41,24 +33,14 @@ export async function backfill() {
 
         for (const sigInfo of signatures) {
             try {
-                console.log(
-                    "Backfill TX:",
-                    sigInfo.signature
-                );
+                console.log("Backfill TX:", sigInfo.signature);
 
                 // =========================
                 // SKIP EXISTING
                 // =========================
-
-                const existing =
-                    await prisma.transaction.findUnique(
-                        {
-                            where: {
-                                signature:
-                                    sigInfo.signature,
-                            },
-                        }
-                    );
+                const existing = await prisma.transaction.findUnique({
+                    where: { signature: sigInfo.signature },
+                });
 
                 if (existing) {
                     continue;
@@ -67,152 +49,200 @@ export async function backfill() {
                 // =========================
                 // FETCH TX
                 // =========================
+                await new Promise((r) => setTimeout(r, 800));
 
-                const tx =
-                    await connection.getTransaction(
-                        sigInfo.signature,
-                        {
-                            commitment:
-                                "confirmed",
-
-                            maxSupportedTransactionVersion: 0,
-                        }
-                    );
+                const tx = await connection.getTransaction(sigInfo.signature, {
+                    commitment: "confirmed",
+                    maxSupportedTransactionVersion: 0,
+                });
 
                 if (!tx) {
                     continue;
                 }
 
-                const logs =
-                    tx.meta?.logMessages || [];
+                const logs = tx.meta?.logMessages || [];
 
                 // =========================
                 // PARSE EVENTS
                 // =========================
-
-                const events = [];
-
-                for (const event of eventParser.parseLogs(
-                    logs
-                )) {
-                    events.push(event);
-                }
+                const events = parseEventsSafely(logs);
 
                 // =========================
                 // HANDLE EVENTS
                 // =========================
-
                 for (const event of events) {
-                    if (
-                        event.name ===
-                        "StreamCreated"
-                    ) {
-                        await prisma.stream.upsert({
-                            where: {
-                                id: event.data.stream.toString(),
-                            },
-
-                            update: {},
-
-                            create: {
-                                id:
-                                    event.data.stream.toString(),
-
-                                creator:
-                                    event.data.creator.toString(),
-
-                                recipient:
-                                    event.data.recipient.toString(),
-
-                                mint:
-                                    event.data.mint.toString(),
-
-                                vault:
-                                    event.data.vault.toString(),
-
-                                totalAmount:
-                                    BigInt(
-                                        event.data.total_amount.toString()
-                                    ),
-
-                                withdrawn:
-                                    BigInt(0),
-
-                                startTs:
-                                    BigInt(
-                                        event.data.start_ts.toString()
-                                    ),
-
-                                cliffTs:
-                                    BigInt(
-                                        event.data.start_ts.toString()
-                                    ),
-
-                                endTs:
-                                    BigInt(
-                                        event.data.end_ts.toString()
-                                    ),
-
-                                vestingType: 0,
-
-                                status: 1,
-
-                                cancelable: true,
-
-                                milestoneCount: 0,
-
-                                nonce: BigInt(
-                                    event.data.nonce.toString()
-                                ),
-
-                                bump: 0,
-                            },
-                        });
-
-                        await prisma.transaction.create(
-                            {
-                                data: {
-                                    id:
-                                        sigInfo.signature,
-
-                                    signature:
-                                        sigInfo.signature,
-
-                                    slot: BigInt(
-                                        tx.slot
-                                    ),
-
-                                    streamId:
-                                        event.data.stream.toString(),
-
-                                    type:
-                                        "CREATE_STREAM",
-
-                                    raw: JSON.parse(
-                                        JSON.stringify(tx)
-                                    ),
-                                },
-                            }
-                        );
-
-                        console.log(
-                            "Backfilled stream:",
-                            event.data.stream.toString()
-                        );
+                    if (event.name === "StreamCreated") {
+                        await handleStreamCreated(event.data, tx, sigInfo.signature);
+                    } else if (event.name === "TokensClaimed") {
+                        await handleTokensClaimed(event.data, tx, sigInfo.signature);
+                    } else if (event.name === "MilestoneUnlocked") {
+                        await handleMilestoneUnlocked(event.data, tx, sigInfo.signature);
                     }
                 }
             } catch (err) {
-                console.error(err);
+                console.error(`Error in backfilling transaction ${sigInfo.signature}:`, err);
             }
         }
 
-        before =
-            signatures[
-                signatures.length - 1
-            ].signature;
+        before = signatures[signatures.length - 1].signature;
     }
 
-    console.log(
-        "Backfill completed"
-    );
+    console.log("Backfill completed");
+}
+
+async function handleStreamCreated(
+    event: any,
+    tx: any,
+    signature: string
+) {
+    console.log("STREAM CREATED (BACKFILL):", event);
+
+    const normalized = normalizeStreamCreated(event);
+    if (!normalized) {
+        console.warn("Skipping StreamCreated event with missing fields:", event);
+        return;
+    }
+
+    const streamId = normalized.stream;
+
+    await prisma.stream.upsert({
+        where: { id: streamId },
+        update: {},
+        create: {
+            id: streamId,
+            creator: normalized.creator,
+            recipient: normalized.recipient,
+            mint: normalized.mint,
+            vault: normalized.vault,
+            totalAmount: normalized.totalAmount,
+            withdrawn: BigInt(0),
+            startTs: normalized.startTs,
+            cliffTs: normalized.cliffTs,
+            endTs: normalized.endTs,
+            vestingType: normalized.vestingType,
+            status: 1, // ACTIVE
+            cancelable: normalized.cancelable,
+            milestoneCount: normalized.milestoneCount,
+            nonce: normalized.nonce,
+            bump: 0,
+        }
+    });
+
+    await prisma.transaction.upsert({
+        where: { signature },
+        update: {},
+        create: {
+            id: signature,
+            signature,
+            slot: BigInt(tx.slot),
+            streamId: streamId,
+            type: "CREATE_STREAM",
+            raw: JSON.parse(JSON.stringify(tx)),
+        },
+    });
+
+    console.log("Backfilled stream:", streamId);
+}
+
+async function handleTokensClaimed(
+    event: any,
+    tx: any,
+    signature: string
+) {
+    console.log("TOKENS CLAIMED (BACKFILL):", event);
+
+    const normalized = normalizeTokensClaimed(event);
+    if (!normalized) {
+        console.warn("Skipping TokensClaimed event with missing fields:", event);
+        return;
+    }
+
+    const streamId = normalized.stream;
+    const withdrawnTotal = normalized.withdrawnTotal;
+
+    // Fetch stream totalAmount to check if it's completed
+    const stream = await prisma.stream.findUnique({
+        where: { id: streamId }
+    });
+
+    if (stream) {
+        let newStatus = 1; // ACTIVE
+        if (withdrawnTotal >= stream.totalAmount) {
+            newStatus = 2; // COMPLETED
+        }
+
+        await prisma.stream.update({
+            where: { id: streamId },
+            data: {
+                withdrawn: withdrawnTotal,
+                status: newStatus
+            }
+        });
+    } else {
+        console.log(`Stream ${streamId} not found in database, skipping balance update.`);
+    }
+
+    await prisma.transaction.upsert({
+        where: { signature },
+        update: {},
+        create: {
+            id: signature,
+            signature,
+            slot: BigInt(tx.slot),
+            streamId: stream ? streamId : null,
+            type: "WITHDRAW",
+            raw: JSON.parse(JSON.stringify(tx)),
+        }
+    });
+
+    console.log(`Backfilled withdrawal for stream ${streamId}: ${normalized.claimable.toString()} tokens`);
+}
+
+async function handleMilestoneUnlocked(
+    event: any,
+    tx: any,
+    signature: string
+) {
+    console.log("MILESTONE UNLOCKED (BACKFILL):", event);
+
+    const normalized = normalizeMilestoneUnlocked(event);
+    if (!normalized) {
+        console.warn("Skipping MilestoneUnlocked event with missing fields:", event);
+        return;
+    }
+
+    const streamId = normalized.stream;
+    const milestoneAmount = normalized.amount;
+
+    // Fetch stream to update its unlockedAmount
+    const stream = await prisma.stream.findUnique({
+        where: { id: streamId }
+    });
+
+    if (stream) {
+        const currentUnlocked = stream.unlockedAmount || BigInt(0);
+        await prisma.stream.update({
+            where: { id: streamId },
+            data: {
+                unlockedAmount: currentUnlocked + milestoneAmount
+            }
+        });
+    } else {
+        console.log(`Stream ${streamId} not found in database during milestone unlock, skipping.`);
+    }
+
+    await prisma.transaction.upsert({
+        where: { signature },
+        update: {},
+        create: {
+            id: signature,
+            signature,
+            slot: BigInt(tx.slot),
+            streamId: stream ? streamId : null,
+            type: "MILESTONE_UNLOCKED",
+            raw: JSON.parse(JSON.stringify(tx)),
+        }
+    });
+
+    console.log(`Backfilled milestone unlock for stream ${streamId}: unlocked ${milestoneAmount.toString()} tokens`);
 }

@@ -7,3 +7,5 @@ test-ledger
 .yarn
 .env
 docker-compose.yml
+dist
+.env.local
