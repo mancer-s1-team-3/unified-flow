@@ -75,7 +75,7 @@ export default function Home({ initialStreams = [] }: Props) {
 
   const [milestoneAmounts, setMilestoneAmounts] = useState<string[]>(["250", "250", "250", "250"]);
 
-  const [withdrawForm, setWithdrawForm] = useState({ streamId: "", amount: "" });
+  const [withdrawForm, setWithdrawForm] = useState({ streamId: "" });
   const [cancelForm, setCancelForm] = useState({ streamId: "" });
   const [unlockForm, setUnlockForm] = useState({ streamId: "" });
   const [editMilestoneForm, setEditMilestoneForm] = useState({ streamId: "", index: "0", newAmount: "250" });
@@ -534,7 +534,7 @@ export default function Home({ initialStreams = [] }: Props) {
   // Pre-fill helpers to easily act on a stream
   const prefillAction = (tab: TabId, streamId: string) => {
     setActiveTab(tab);
-    if (tab === "withdraw") setWithdrawForm({ streamId, amount: "" });
+    if (tab === "withdraw") setWithdrawForm({ streamId });
     if (tab === "cancel") setCancelForm({ streamId });
     if (tab === "unlock_milestone") setUnlockForm({ streamId });
     if (tab === "edit_milestone") setEditMilestoneForm({ streamId, index: "0", newAmount: "250" });

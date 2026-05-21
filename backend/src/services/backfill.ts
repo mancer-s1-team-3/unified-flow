@@ -213,6 +213,8 @@ async function handleMilestoneUnlocked(
 
     const streamId = normalized.stream;
     const milestoneAmount = normalized.amount;
+    const unlockTs = normalized.unlockTs;
+    const completionTs = unlockTs ?? (tx.blockTime !== null && tx.blockTime !== undefined ? BigInt(tx.blockTime) : null);
 
     // Fetch stream to update its unlockedAmount
     const stream = await prisma.stream.findUnique({
@@ -221,10 +223,14 @@ async function handleMilestoneUnlocked(
 
     if (stream) {
         const currentUnlocked = stream.unlockedAmount || BigInt(0);
+        const updatedUnlocked = currentUnlocked + milestoneAmount;
+        const completed = updatedUnlocked >= stream.totalAmount;
         await prisma.stream.update({
             where: { id: streamId },
             data: {
-                unlockedAmount: currentUnlocked + milestoneAmount
+                unlockedAmount: updatedUnlocked,
+                status: completed ? 2 : stream.status,
+                completedAt: completed && completionTs !== null ? completionTs : stream.completedAt,
             }
         });
     } else {

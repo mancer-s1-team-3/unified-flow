@@ -17,9 +17,10 @@ model Stream {
   totalAmount BigInt
   withdrawn   BigInt
 
-  startTs BigInt
-  cliffTs BigInt
-  endTs   BigInt
+  startTs     BigInt
+  cliffTs     BigInt
+  endTs       BigInt
+  completedAt BigInt?
 
   vestingType Int
   status      Int

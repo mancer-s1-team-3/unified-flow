@@ -317,9 +317,10 @@ export default function StreamsPage() {
 
                   const claimable = Math.max(vested - withdrawn, 0);
 
-                  const isCompleted = withdrawn >= total;
+                  const isMilestoneCompleted = stream.vestingType === 2 && (Number(stream.completedAt || 0) > 0 || unlocked >= total);
+                  const isCompleted = stream.vestingType === 2 ? isMilestoneCompleted : withdrawn >= total;
                   const isNotStarted = now < start;
-                  const isEnded = stream.vestingType === 2 ? (unlocked >= total) : (now >= end);
+                  const isEnded = stream.vestingType === 2 ? isMilestoneCompleted : (now >= end);
                   const isCliffLocked = stream.vestingType === 1 && now < cliff;
                   const isMilestone = stream.vestingType === 2;
                   const unlockedCount = isMilestone ? Math.round((Number(stream.unlockedAmount || 0) / Number(stream.totalAmount)) * stream.milestoneCount) : 0;
@@ -663,7 +664,12 @@ export default function StreamsPage() {
 
                     <div className="border-t border-zinc-900/60 pt-3 grid grid-cols-2 gap-2 text-[10px] text-zinc-500 font-mono">
                       <span className="flex items-center gap-1"><Calendar className="w-3 h-3" /> Start: {formatDate(selectedStream.startTs)}</span>
-                      <span className="flex items-center gap-1"><Calendar className="w-3 h-3" /> End: {formatDate(selectedStream.endTs)}</span>
+                      {selectedStream.vestingType !== 2 && (
+                        <span className="flex items-center gap-1"><Calendar className="w-3 h-3" /> End: {formatDate(selectedStream.endTs)}</span>
+                      )}
+                      {selectedStream.vestingType === 2 && selectedStream.completedAt && (
+                        <span className="col-span-2 flex items-center gap-1 text-emerald-400 font-bold border-t border-zinc-900/40 pt-1.5 mt-1"><Calendar className="w-3 h-3" /> Completed At: {formatDate(selectedStream.completedAt)}</span>
+                      )}
                       {selectedStream.vestingType === 1 && (
                         <span className="col-span-2 flex items-center gap-1 text-amber-500 font-bold border-t border-zinc-900/40 pt-1.5 mt-1"><Calendar className="w-3 h-3" /> Cliff Unlock: {formatDate(selectedStream.cliffTs)} ({Number(selectedStream.cliffTs) - Number(selectedStream.startTs)}s duration)</span>
                       )}
