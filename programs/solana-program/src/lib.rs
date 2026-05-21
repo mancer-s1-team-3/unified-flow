@@ -421,9 +421,14 @@ pub fn create_stream<'info>(
         Ok(())
     }
 
- pub fn cancel(ctx: Context<Cancel>) -> Result<()> {
+pub fn cancel(ctx: Context<Cancel>) -> Result<()> {
     let now = Clock::get()?.unix_timestamp;
 
+    require_keys_eq!(
+        ctx.accounts.stream.creator,
+        ctx.accounts.creator.key(),
+        ErrorCode::Unauthorized
+    );
     require!(!ctx.accounts.stream.cancelled, ErrorCode::AlreadyCancelled);
 
     let vested = vested_amount(&ctx.accounts.stream, now)?;
@@ -571,6 +576,7 @@ pub fn edit_milestone(
         stream.status == STREAM_STATUS_ACTIVE,
         ErrorCode::StreamNotActive
     );
+    require!(now < stream.end_ts, ErrorCode::StreamExpired);
 
     require!(
         !milestone.unlocked,
@@ -679,6 +685,7 @@ pub fn edit_cliff(ctx: Context<EditCliff>, new_cliff_ts: i64) -> Result<()> {
             stream.status == STREAM_STATUS_ACTIVE,
             ErrorCode::StreamNotActive
         );
+        require!(now < stream.end_ts, ErrorCode::StreamExpired);
         require!(
             stream.withdrawn == 0,
             ErrorCode::StreamAlreadyStarted
@@ -726,6 +733,7 @@ pub fn edit_linear(
         stream.status == STREAM_STATUS_ACTIVE,
         ErrorCode::StreamNotActive
     );
+    require!(now < stream.end_ts, ErrorCode::StreamExpired);
 
     // Minimal salah satu harus diisi
     require!(
@@ -950,7 +958,6 @@ pub struct Cancel<'info> {
             &stream.nonce.to_le_bytes()
         ],
         bump = stream.bump,
-        has_one = creator,
         has_one = mint,
         constraint = stream.cancelable
             @ ErrorCode::StreamNotCancelable,
