@@ -47,9 +47,10 @@ export const StreamCard = memo(function StreamCard({
   }
 
   const claimable = Math.max(vested - withdrawn, 0);
-  const isCompleted = withdrawn >= total;
+  const isMilestoneCompleted = stream.vestingType === 2 && (Number(stream.completedAt || 0) > 0 || unlocked >= total);
+  const isCompleted = stream.vestingType === 2 ? isMilestoneCompleted : withdrawn >= total;
   const isNotStarted = now < start;
-  const isEnded = stream.vestingType === 2 ? unlocked >= total : now >= end;
+  const isEnded = stream.vestingType === 2 ? isMilestoneCompleted : now >= end;
   const isCliffLocked = stream.vestingType === 1 && now < cliff;
   const isMilestone = stream.vestingType === 2;
   const unlockedCount = isMilestone ? Math.round((Number(stream.unlockedAmount || 0) / Number(stream.totalAmount)) * stream.milestoneCount) : 0;

@@ -11,6 +11,7 @@ export interface StreamAccount {
     startTs: bigint;
     cliffTs: bigint;
     endTs: bigint;
+    completedAt?: bigint | null;
 
     vestingType: number;
     status: number;
