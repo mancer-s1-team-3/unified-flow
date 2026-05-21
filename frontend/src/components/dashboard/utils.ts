@@ -23,5 +23,16 @@ export function formatTokenAmount(amount: string | number | bigint, decimals?: n
 }
 
 export function getAmountUnitLabel(mint: string | null | undefined) {
-  return mint === "So11111111111111111111111111111111111111112" ? "SOL" : "tokens";
+  if (!mint) return "tokens";
+
+  const knownLabels: Record<string, string> = {
+    "So11111111111111111111111111111111111111112": "SOL",
+    "4zMMC9srt5Ri5X14GAgXhaHii3GnPAEERYPJgZJDncDU": "USDC",
+    "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v": "USDC",
+    "Es9vMFrzaCERmJfrF4H2FYD4KCoNkY11McCe8BenwNYB": "USDT",
+    "2b1kV6DkPAnxd5ixfnxCpjxmKwqjjaYmCZfHsFu24GXo": "PYUSD",
+    "2u1tszSeqZ3qBWF3uNGPFc8TzMk2tdiwknnRMWGWjGWH": "USDG",
+  };
+
+  return knownLabels[mint] ?? "tokens";
 }

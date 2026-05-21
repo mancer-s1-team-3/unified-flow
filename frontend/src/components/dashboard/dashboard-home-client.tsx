@@ -1,7 +1,7 @@
 "use client";
 
 import dynamic from "next/dynamic";
-import { useState, useEffect, useRef, useCallback } from "react";
+import { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import { api } from "@/lib/api";
 import { useClusterState, useWalletConnection } from "@solana/react-hooks";
@@ -13,6 +13,12 @@ import type { TabId } from "@/components/dashboard/types";
 import { createStreamOnChain } from "@/lib/solana/create-stream";
 import { withdrawFromStreamOnChain } from "@/lib/solana/withdraw";
 import { cancelStreamOnChain } from "@/lib/solana/cancel";
+import {
+  buildCreateStreamCsvTemplate,
+  getClusterLabel,
+  getDefaultMint,
+  getMintPresets,
+} from "@/components/dashboard/token-mints";
 
 type Props = {
   initialStreams?: any[];
@@ -27,6 +33,9 @@ export default function Home({ initialStreams = [] }: Props) {
   const router = useRouter();
   const { wallet, connected } = useWalletConnection();
   const { endpoint } = useClusterState();
+  const mintPresets = useMemo(() => getMintPresets(endpoint), [endpoint]);
+  const clusterLabel = useMemo(() => getClusterLabel(endpoint), [endpoint]);
+  const defaultMint = useMemo(() => getDefaultMint(endpoint), [endpoint]);
   const [activeTab, setActiveTab] = useState<TabId>("streams");
   const [nowTs, setNowTs] = useState(() => Math.floor(Date.now() / 1000));
   const [streams, setStreams] = useState<any[]>(initialStreams);
@@ -43,9 +52,7 @@ export default function Home({ initialStreams = [] }: Props) {
 
   // CSV States
   const [createMode, setCreateMode] = useState<"manual" | "csv">("manual");
-  const [csvCreateText, setCsvCreateText] = useState(
-    "recipient,amount,mint,type,duration,cliff_duration,cancelable,milestones\nAoFGFuBasrNZ7bs9XddzyvMvYhZPGJHpWKGLG2CU62EY,1500,EHHDgoeiRa4FCNgwCtjuL69wX2Hre3q3bSddh1LZB3pr,0,7200,0,true,\nAoFGFuBasrNZ7bs9XddzyvMvYhZPGJHpWKGLG2CU62EY,3000,EHHDgoeiRa4FCNgwCtjuL69wX2Hre3q3bSddh1LZB3pr,1,15000,3600,true,\nAoFGFuBasrNZ7bs9XddzyvMvYhZPGJHpWKGLG2CU62EY,2000,EHHDgoeiRa4FCNgwCtjuL69wX2Hre3q3bSddh1LZB3pr,2,9000,0,false,500;500;500;500"
-  );
+  const [csvCreateText, setCsvCreateText] = useState(() => buildCreateStreamCsvTemplate(endpoint));
   const [csvEditText, setCsvEditText] = useState(
     "id,amount,duration,cliff_duration,cancelable,milestones\nStreamCSV-XXXXX,1800,10800,0,false,"
   );
@@ -57,7 +64,7 @@ export default function Home({ initialStreams = [] }: Props) {
   const [createForm, setCreateForm] = useState({
     recipient: "",
     amount: "1000",
-    mint: "EHHDgoeiRa4FCNgwCtjuL69wX2Hre3q3bSddh1LZB3pr",
+    mint: defaultMint,
     type: "0", // 0: Linear, 1: Cliff, 2: Milestone
     duration: "3600",
     cancelable: true,
@@ -301,7 +308,7 @@ export default function Home({ initialStreams = [] }: Props) {
   // Download template utility
   const downloadTemplate = (mode: "create" | "edit") => {
     const headers = mode === "create"
-      ? "recipient,amount,mint,type,duration,cliff_duration,cancelable,milestones\nAoFGFuBasrNZ7bs9XddzyvMvYhZPGJHpWKGLG2CU62EY,1500,EHHDgoeiRa4FCNgwCtjuL69wX2Hre3q3bSddh1LZB3pr,0,7200,0,true,\nAoFGFuBasrNZ7bs9XddzyvMvYhZPGJHpWKGLG2CU62EY,3000,EHHDgoeiRa4FCNgwCtjuL69wX2Hre3q3bSddh1LZB3pr,1,15000,3600,true,\nAoFGFuBasrNZ7bs9XddzyvMvYhZPGJHpWKGLG2CU62EY,2000,EHHDgoeiRa4FCNgwCtjuL69wX2Hre3q3bSddh1LZB3pr,2,9000,0,false,500;500;500;500"
+      ? buildCreateStreamCsvTemplate(endpoint)
       : "id,amount,duration,cliff_duration,cancelable,milestones\nStreamCSV-XXXXX,1800,10800,0,false,";
 
     const blob = new Blob([headers], { type: "text/csv;charset=utf-8;" });
@@ -550,6 +557,8 @@ export default function Home({ initialStreams = [] }: Props) {
                 setCreateMode={setCreateMode}
                 createForm={createForm}
                 setCreateForm={setCreateForm}
+                clusterLabel={clusterLabel}
+                mintPresets={mintPresets}
                 milestoneAmounts={milestoneAmounts}
                 setMilestoneAmounts={setMilestoneAmounts}
                 csvCreateText={csvCreateText}
@@ -581,10 +590,6 @@ export default function Home({ initialStreams = [] }: Props) {
                 editCliffForm={editCliffForm}
                 setEditCliffForm={setEditCliffForm}
                 isStreamCsvCreated={isStreamCsvCreated}
-                copiedId={copiedId}
-                copyToClipboard={copyToClipboard}
-                prefillAction={prefillAction}
-                setActiveTab={setActiveTab}
               />
             )}
 
