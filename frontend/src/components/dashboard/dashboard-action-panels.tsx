@@ -177,20 +177,20 @@ export function DashboardActionPanels(props: Props) {
           {createMode === "manual" ? (
             <div className="grid gap-4 md:grid-cols-2">
               <div className="md:col-span-2">
-                <label className="block text-xs font-semibold text-zinc-400 uppercase tracking-wider mb-1.5">Recipient Pubkey</label>
-                <input type="text" value={createForm.recipient} onChange={(e) => setCreateForm({ ...createForm, recipient: e.target.value })} className="w-full min-w-0 bg-zinc-950 border border-zinc-800 rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-indigo-500 font-mono" />
+                <label className="block text-[10px] sm:text-xs font-semibold text-zinc-400 uppercase tracking-wider mb-1.5">Recipient</label>
+                <input type="text" value={createForm.recipient} onChange={(e) => setCreateForm({ ...createForm, recipient: e.target.value })} className="w-full min-w-0 bg-zinc-950 border border-zinc-800 rounded-xl px-3.5 py-2.5 sm:px-4 sm:py-3 text-sm focus:outline-none focus:border-indigo-500 font-mono" />
               </div>
               <div>
-                <label className="block text-xs font-semibold text-zinc-400 uppercase tracking-wider mb-1.5">Total Amount</label>
-                <input type="text" inputMode="decimal" value={createForm.amount} onChange={(e) => setCreateForm({ ...createForm, amount: e.target.value })} className="w-full min-w-0 bg-zinc-950 border border-zinc-800 rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-indigo-500" />
+                <label className="block text-[10px] sm:text-xs font-semibold text-zinc-400 uppercase tracking-wider mb-1.5">Amount</label>
+                <input type="text" inputMode="decimal" value={createForm.amount} onChange={(e) => setCreateForm({ ...createForm, amount: e.target.value })} className="w-full min-w-0 bg-zinc-950 border border-zinc-800 rounded-xl px-3.5 py-2.5 sm:px-4 sm:py-3 text-sm focus:outline-none focus:border-indigo-500" />
               </div>
               <div>
-                <label className="block text-xs font-semibold text-zinc-400 uppercase tracking-wider mb-1.5">Token Mint</label>
+                <label className="block text-[10px] sm:text-xs font-semibold text-zinc-400 uppercase tracking-wider mb-1.5">Mint</label>
                 <div ref={mintPickerRef} className="relative">
                   <button
                     type="button"
                     onClick={() => setMintMenuOpen((open) => !open)}
-                    className="w-full flex items-center justify-between gap-3 bg-zinc-950 border border-zinc-800 rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-indigo-500 transition-colors min-w-0"
+                    className="w-full flex items-center justify-between gap-3 bg-zinc-950 border border-zinc-800 rounded-xl px-3.5 py-2.5 sm:px-4 sm:py-3 text-sm focus:outline-none focus:border-indigo-500 transition-colors min-w-0"
                   >
                     <div className="flex items-center gap-3 min-w-0">
                       <div
@@ -287,8 +287,8 @@ export function DashboardActionPanels(props: Props) {
                 </div>
               </div>
               <div>
-                <label className="block text-xs font-semibold text-zinc-400 uppercase tracking-wider mb-1.5">Vesting Schedule Type</label>
-                <select value={createForm.type} onChange={(e) => setCreateForm({ ...createForm, type: e.target.value })} className="w-full min-w-0 bg-zinc-950 border border-zinc-800 rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-indigo-500 font-medium">
+                <label className="block text-[10px] sm:text-xs font-semibold text-zinc-400 uppercase tracking-wider mb-1.5">Type</label>
+                <select value={createForm.type} onChange={(e) => setCreateForm({ ...createForm, type: e.target.value })} className="w-full min-w-0 bg-zinc-950 border border-zinc-800 rounded-xl px-3.5 py-2.5 sm:px-4 sm:py-3 text-sm focus:outline-none focus:border-indigo-500 font-medium">
                   <option value="0">Linear Vesting</option>
                   <option value="1">Cliff Vesting</option>
                   <option value="2">Milestone-Based Vesting</option>
@@ -296,15 +296,15 @@ export function DashboardActionPanels(props: Props) {
               </div>
               {createForm.type !== "2" && (
                 <div>
-                  <label className="block text-xs font-semibold text-zinc-400 uppercase tracking-wider mb-1.5">Duration (Seconds)</label>
-                  <input type="number" value={createForm.duration} onChange={(e) => setCreateForm({ ...createForm, duration: e.target.value })} className="w-full min-w-0 bg-zinc-950 border border-zinc-800 rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-indigo-500 font-mono" />
+                  <label className="block text-[10px] sm:text-xs font-semibold text-zinc-400 uppercase tracking-wider mb-1.5">Duration</label>
+                  <input type="number" value={createForm.duration} onChange={(e) => setCreateForm({ ...createForm, duration: e.target.value })} className="w-full min-w-0 bg-zinc-950 border border-zinc-800 rounded-xl px-3.5 py-2.5 sm:px-4 sm:py-3 text-sm focus:outline-none focus:border-indigo-500 font-mono" />
                 </div>
               )}
 
               {createForm.type === "1" && (
                 <div>
-                  <label className="block text-xs font-semibold text-zinc-400 uppercase tracking-wider mb-1.5">Cliff Duration (Seconds)</label>
-                  <input type="number" value={createForm.cliffDuration} onChange={(e) => setCreateForm({ ...createForm, cliffDuration: e.target.value })} className="w-full min-w-0 bg-zinc-950 border border-zinc-800 rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-indigo-500 font-mono" />
+                  <label className="block text-[10px] sm:text-xs font-semibold text-zinc-400 uppercase tracking-wider mb-1.5">Cliff</label>
+                  <input type="number" value={createForm.cliffDuration} onChange={(e) => setCreateForm({ ...createForm, cliffDuration: e.target.value })} className="w-full min-w-0 bg-zinc-950 border border-zinc-800 rounded-xl px-3.5 py-2.5 sm:px-4 sm:py-3 text-sm focus:outline-none focus:border-indigo-500 font-mono" />
                   {cliffExceedsDuration && (
                     <div className="mt-2 text-[10px] font-semibold text-amber-400">
                       Cliff duration must be less than or equal to the stream duration.
@@ -316,15 +316,15 @@ export function DashboardActionPanels(props: Props) {
               {createForm.type === "2" && (
                 <div className="md:col-span-2 grid gap-4 bg-zinc-900/30 border border-zinc-900 p-4 rounded-xl">
                   <div>
-                    <label className="block text-xs font-semibold text-zinc-400 uppercase tracking-wider mb-1.5">Milestone Count</label>
-                    <input type="number" value={createForm.milestoneCount} onChange={(e) => setCreateForm({ ...createForm, milestoneCount: e.target.value })} className="w-full min-w-0 bg-zinc-950 border border-zinc-800 rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-indigo-500 font-mono" />
+                    <label className="block text-[10px] sm:text-xs font-semibold text-zinc-400 uppercase tracking-wider mb-1.5">Count</label>
+                    <input type="number" value={createForm.milestoneCount} onChange={(e) => setCreateForm({ ...createForm, milestoneCount: e.target.value })} className="w-full min-w-0 bg-zinc-950 border border-zinc-800 rounded-xl px-3.5 py-2.5 sm:px-4 sm:py-3 text-sm focus:outline-none focus:border-indigo-500 font-mono" />
                   </div>
                   <div className="border-t border-zinc-900/60 pt-3">
-                    <label className="block text-[10px] font-bold text-zinc-500 uppercase tracking-widest mb-2">Milestone Amount Allocations</label>
+                    <label className="block text-[10px] font-bold text-zinc-500 uppercase tracking-widest mb-2">Milestones</label>
                     <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                       {milestoneAmounts.map((amt, idx) => (
                         <div key={idx} className="flex flex-col gap-1">
-                          <span className="text-[10px] text-zinc-400 font-mono font-bold">Milestone #{idx} Amount</span>
+                          <span className="text-[10px] text-zinc-400 font-mono font-bold">#{idx}</span>
                           <input type="text" inputMode="decimal" value={amt} onChange={(e) => {
                             const next = [...milestoneAmounts];
                             next[idx] = e.target.value;
