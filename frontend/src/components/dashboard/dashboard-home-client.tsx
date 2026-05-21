@@ -13,6 +13,7 @@ import type { TabId } from "@/components/dashboard/types";
 import { createStreamOnChain } from "@/lib/solana/create-stream";
 import { withdrawFromStreamOnChain } from "@/lib/solana/withdraw";
 import { cancelStreamOnChain } from "@/lib/solana/cancel";
+import { unlockMilestoneOnChain } from "@/lib/solana/unlock-milestone";
 import {
   buildCreateStreamCsvTemplate,
   getClusterLabel,
@@ -76,7 +77,7 @@ export default function Home({ initialStreams = [] }: Props) {
 
   const [withdrawForm, setWithdrawForm] = useState({ streamId: "", amount: "" });
   const [cancelForm, setCancelForm] = useState({ streamId: "" });
-  const [unlockForm, setUnlockForm] = useState({ streamId: "", milestoneIndex: "0" });
+  const [unlockForm, setUnlockForm] = useState({ streamId: "" });
   const [editMilestoneForm, setEditMilestoneForm] = useState({ streamId: "", index: "0", newAmount: "250" });
   const [editLinearForm, setEditLinearForm] = useState({ streamId: "", newEndTs: "", topupAmount: "" });
   const [editCliffForm, setEditCliffForm] = useState({ streamId: "", newCliffTs: "" });
@@ -421,6 +422,33 @@ export default function Home({ initialStreams = [] }: Props) {
       return;
     }
 
+    if (actionName === "unlock_milestone") {
+      if (!wallet) {
+        showNotification("error", "Connect the creator wallet before unlocking a milestone.");
+        return;
+      }
+
+      try {
+        const result = await unlockMilestoneOnChain({
+          wallet,
+          endpoint,
+          input: {
+            streamAddress: data.streamId,
+          },
+        });
+
+        showNotification(
+          "success",
+          `Milestone #${result.unlockedMilestoneIndex} unlocked on-chain. Signature: ${result.signature.slice(0, 8)}...`
+        );
+        fetchStreams();
+        setActiveTab("streams");
+      } catch (err: any) {
+        showNotification("error", err?.message || "Unlock milestone failed.");
+      }
+      return;
+    }
+
     // Direct CSV Bulk Deploy with Versioning
     if (actionName === "create_stream_csv") {
       try {
@@ -508,7 +536,7 @@ export default function Home({ initialStreams = [] }: Props) {
     setActiveTab(tab);
     if (tab === "withdraw") setWithdrawForm({ streamId, amount: "" });
     if (tab === "cancel") setCancelForm({ streamId });
-    if (tab === "unlock_milestone") setUnlockForm({ streamId, milestoneIndex: "0" });
+    if (tab === "unlock_milestone") setUnlockForm({ streamId });
     if (tab === "edit_milestone") setEditMilestoneForm({ streamId, index: "0", newAmount: "250" });
     if (tab === "edit_linear") setEditLinearForm({ streamId, newEndTs: "", topupAmount: "" });
     if (tab === "edit_cliff") setEditCliffForm({ streamId, newCliffTs: "" });

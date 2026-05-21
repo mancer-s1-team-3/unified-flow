@@ -576,7 +576,6 @@ pub fn edit_milestone(
         stream.status == STREAM_STATUS_ACTIVE,
         ErrorCode::StreamNotActive
     );
-    require!(now < stream.end_ts, ErrorCode::StreamExpired);
 
     require!(
         !milestone.unlocked,

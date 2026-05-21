@@ -101,7 +101,6 @@ export const DashboardSidebar = memo(function DashboardSidebar({
         onClick={() => setActiveTab("unlock_milestone")}
         icon={<Unlock className="w-4 h-4" />}
         label="Unlock Milestone"
-        badge="WIP"
       />
 
       <TabButton
