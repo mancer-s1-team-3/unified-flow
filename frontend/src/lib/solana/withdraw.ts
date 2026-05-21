@@ -237,18 +237,16 @@ export async function withdrawFromStreamOnChain({
     data: anchorInstruction.data,
   } as any;
 
-  const transactionMessage = setTransactionMessageLifetimeUsingBlockhash(
+  let transactionMessage: any = setTransactionMessageFeePayerSigner(
+    kitSigner,
+    createTransactionMessage({ version: 0 })
+  );
+
+  transactionMessage = appendTransactionMessageInstruction(createRecipientAtaInstruction as any, transactionMessage);
+  transactionMessage = appendTransactionMessageInstruction(kitInstruction, transactionMessage);
+  transactionMessage = setTransactionMessageLifetimeUsingBlockhash(
     { blockhash: blockhash as any, lastValidBlockHeight: BigInt(lastValidBlockHeight) },
-    appendTransactionMessageInstruction(
-      kitInstruction,
-      appendTransactionMessageInstruction(
-        createRecipientAtaInstruction as any,
-        setTransactionMessageFeePayerSigner(
-          kitSigner,
-          createTransactionMessage({ version: 0 })
-        )
-      )
-    )
+    transactionMessage
   );
 
   let simulationLogs: string[] = [];
