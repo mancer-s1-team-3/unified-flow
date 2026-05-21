@@ -5,6 +5,7 @@ import { useMemo } from "react";
 import { Shield, Download, Layers, Lock, RefreshCw, Terminal, Upload } from "lucide-react";
 import { CsvDiffPanel } from "@/components/dashboard/csv-diff-panel";
 import { isWipFeature } from "./feature-flags";
+import type { MintPreset } from "@/components/dashboard/token-mints";
 
 type Props = {
   activeTab: string;
@@ -12,6 +13,8 @@ type Props = {
   setUseMultisig: (value: boolean) => void;
   createMode: "manual" | "csv";
   setCreateMode: (value: "manual" | "csv") => void;
+  clusterLabel: string;
+  mintPresets: MintPreset[];
   createForm: any;
   setCreateForm: (value: any) => void;
   milestoneAmounts: string[];
@@ -45,10 +48,6 @@ type Props = {
   editCliffForm: any;
   setEditCliffForm: (value: any) => void;
   isStreamCsvCreated: (id: string) => boolean;
-  copiedId: string | null;
-  copyToClipboard: (text: string, id: string) => void;
-  prefillAction: (tab: any, streamId: string) => void;
-  setActiveTab: (tab: any) => void;
 };
 
 export function DashboardActionPanels(props: Props) {
@@ -58,6 +57,8 @@ export function DashboardActionPanels(props: Props) {
     setUseMultisig,
     createMode,
     setCreateMode,
+    clusterLabel,
+    mintPresets,
     createForm,
     setCreateForm,
     milestoneAmounts,
@@ -91,11 +92,6 @@ export function DashboardActionPanels(props: Props) {
     editCliffForm,
     setEditCliffForm,
     isStreamCsvCreated,
-    copiedId,
-    copyToClipboard,
-    prefillAction,
-    setActiveTab,
-    setCsvEditText: setCsvEditTextProp,
   } = props;
 
   const milestoneSum = useMemo(
@@ -161,6 +157,34 @@ export function DashboardActionPanels(props: Props) {
               <div>
                 <label className="block text-xs font-semibold text-zinc-400 uppercase tracking-wider mb-1.5">Token Mint</label>
                 <input type="text" value={createForm.mint} onChange={(e) => setCreateForm({ ...createForm, mint: e.target.value })} className="w-full bg-zinc-950 border border-zinc-800 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:border-indigo-500 font-mono" />
+                <div className="mt-2 rounded-xl border border-zinc-900 bg-zinc-950/70 p-3">
+                  <div className="flex items-center justify-between gap-3 mb-2">
+                    <span className="text-[10px] font-black uppercase tracking-[0.24em] text-zinc-500">Known mints for {clusterLabel}</span>
+                    <span className="text-[10px] text-zinc-600">Tap a preset to fill the field</span>
+                  </div>
+                  <div className="grid gap-2 sm:grid-cols-2">
+                    {mintPresets.map((preset) => {
+                      const active = createForm.mint.trim() === preset.mint;
+
+                      return (
+                        <button
+                          key={preset.mint}
+                          type="button"
+                          onClick={() => setCreateForm({ ...createForm, mint: preset.mint })}
+                          className={`rounded-xl border px-3 py-2 text-left transition-all ${active ? "border-indigo-500/70 bg-indigo-500/10 shadow-[0_0_0_1px_rgba(99,102,241,0.18)]" : "border-zinc-800 bg-zinc-900/40 hover:border-zinc-700 hover:bg-zinc-900/65"}`}
+                        >
+                          <div className="flex items-center justify-between gap-2">
+                            <span className="text-xs font-extrabold text-zinc-100">{preset.label}</span>
+                            {active && <span className="rounded-full bg-indigo-500/20 px-2 py-0.5 text-[9px] font-black uppercase tracking-wider text-indigo-300">Selected</span>}
+                          </div>
+                          <div className="mt-1 text-[10px] text-zinc-500">{preset.decimals} decimals</div>
+                          <div className="mt-1 font-mono text-[10px] text-zinc-400 break-all">{preset.mint}</div>
+                          <div className="mt-1 text-[10px] text-zinc-500">{preset.note}</div>
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
               </div>
               <div>
                 <label className="block text-xs font-semibold text-zinc-400 uppercase tracking-wider mb-1.5">Vesting Schedule Type</label>
