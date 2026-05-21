@@ -1,7 +1,13 @@
 "use client";
 
 import * as anchor from "@coral-xyz/anchor";
-import { ASSOCIATED_TOKEN_PROGRAM_ADDRESS, TOKEN_PROGRAM_ADDRESS } from "@solana-program/token";
+import {
+  ASSOCIATED_TOKEN_PROGRAM_ADDRESS,
+  TOKEN_PROGRAM_ADDRESS,
+  getCreateAssociatedTokenIdempotentInstruction,
+  getSyncNativeInstruction,
+} from "@solana-program/token";
+import { getTransferSolInstruction } from "@solana-program/system";
 import { type Commitment, Connection, PublicKey, SystemProgram, VersionedTransaction } from "@solana/web3.js";
 import { Buffer } from "buffer";
 import {
@@ -25,6 +31,7 @@ const PROGRAM_ID = new PublicKey(
 
 const TOKEN_PROGRAM_ID = new PublicKey(TOKEN_PROGRAM_ADDRESS);
 const ASSOCIATED_TOKEN_PROGRAM_ID = new PublicKey(ASSOCIATED_TOKEN_PROGRAM_ADDRESS);
+const WRAPPED_SOL_MINT = "So11111111111111111111111111111111111111112";
 
 const CREATE_STREAM_IDL = {
   address: PROGRAM_ID.toBase58(),
@@ -163,6 +170,10 @@ function formatTokenAmountFromBaseUnits(amount: anchor.BN | string | bigint, dec
   return `${negative ? "-" : ""}${fraction ? `${whole}.${fraction}` : whole}`;
 }
 
+function isWrappedSolMint(mint: PublicKey) {
+  return mint.toBase58() === WRAPPED_SOL_MINT;
+}
+
 function getAnchorWallet(session: WalletSession) {
   return {
     publicKey: new PublicKey(session.account.address.toString()),
@@ -290,6 +301,53 @@ export async function createStreamOnChain({
         })
       : [];
 
+  const preInstructions: any[] = [];
+
+  if (isWrappedSolMint(mint)) {
+    let existingAmount = new anchor.BN(0);
+
+    try {
+      const balance = await connection.getTokenAccountBalance(creatorTokenAccount, commitment);
+      existingAmount = new anchor.BN(balance.value.amount);
+    } catch (balanceError: any) {
+      const notFound = String(balanceError?.message || balanceError).toLowerCase().includes("could not find account") ||
+        String(balanceError?.message || balanceError).toLowerCase().includes("account does not exist");
+
+      if (!notFound) {
+        throw balanceError;
+      }
+    }
+
+    const topUpAmount = amountBn.sub(existingAmount);
+
+    if (topUpAmount.gt(new anchor.BN(0))) {
+      preInstructions.push(
+        await getCreateAssociatedTokenIdempotentInstruction({
+          payer: walletSigner as any,
+          ata: creatorTokenAccount.toBase58() as any,
+          owner: creator.toBase58() as any,
+          mint: mint.toBase58() as any,
+          systemProgram: SystemProgram.programId.toBase58() as any,
+          tokenProgram: TOKEN_PROGRAM_ID.toBase58() as any,
+        } as any)
+      );
+
+      preInstructions.push(
+        getTransferSolInstruction({
+          source: walletSigner as any,
+          destination: creatorTokenAccount.toBase58() as any,
+          amount: BigInt(topUpAmount.toString()),
+        } as any)
+      );
+
+      preInstructions.push(
+        getSyncNativeInstruction({
+          account: creatorTokenAccount.toBase58() as any,
+        } as any)
+      );
+    }
+  }
+
   const anchorInstruction = await program.methods
     .createStream(amountBn, startTs, cliffTs, endTs, vestingType, milestones, nonce)
     .accounts({
@@ -331,15 +389,19 @@ export async function createStreamOnChain({
     data: anchorInstruction.data,
   } as const;
 
-  const transactionMessage = setTransactionMessageLifetimeUsingBlockhash(
+  let transactionMessage: any = setTransactionMessageFeePayerSigner(
+    kitSigner as any,
+    createTransactionMessage({ version: 0 })
+  );
+
+  for (const instruction of preInstructions) {
+    transactionMessage = appendTransactionMessageInstruction(instruction as any, transactionMessage);
+  }
+
+  transactionMessage = appendTransactionMessageInstruction(kitInstruction as any, transactionMessage);
+  transactionMessage = setTransactionMessageLifetimeUsingBlockhash(
     { blockhash: blockhash as any, lastValidBlockHeight: BigInt(lastValidBlockHeight) },
-    appendTransactionMessageInstruction(
-      kitInstruction as any,
-      setTransactionMessageFeePayerSigner(
-        kitSigner as any,
-        createTransactionMessage({ version: 0 })
-      )
-    )
+    transactionMessage
   );
 
   let simulationLogs: string[] = [];
