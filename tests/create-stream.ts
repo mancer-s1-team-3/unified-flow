@@ -405,6 +405,36 @@ describe("create-stream", () => {
     );
   });
 
+  it("Fails when cliff stream start equals end", async () => {
+    const nonce = new BN(9000014);
+    const startTs = BASE_NOW + 60;
+    const cliffTs = startTs;
+    const endTs = startTs;
+
+    await expectError(
+      program.methods
+        .createStream(
+          amount,
+          new BN(startTs),
+          new BN(cliffTs),
+          new BN(endTs),
+          VESTING_TYPE_CLIFF,
+          [],
+          nonce
+        )
+        .accounts({
+          creator: creator.publicKey,
+          recipient: recipient.publicKey,
+          mint,
+          creatorTokenAccount,
+          tokenProgram: TOKEN_PROGRAM_ID,
+        })
+        .signers([creator])
+        .rpc(),
+      "InvalidSchedule"
+    );
+  });
+
   it("Fails when cliff date is after end date", async () => {
     const nonce = new BN(900004);
     const startTs = BASE_NOW + 60;
