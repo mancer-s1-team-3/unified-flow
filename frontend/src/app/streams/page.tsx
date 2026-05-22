@@ -593,10 +593,12 @@ export default function StreamsPage() {
                     </div>
 
                     <div className="grid grid-cols-2 gap-4 border-t border-zinc-900/60 pt-3">
+                      {/* Hardcoded in smart contract — hidden until configurable
                       <div>
                         <span className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest block mb-0.5">Cancelable</span>
                         <span className="font-semibold text-zinc-300">{selectedStream.cancelable ? "Yes (Permitted)" : "No (Immutable)"}</span>
                       </div>
+                      */}
                       <div>
                         <span className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest block mb-0.5">Milestones Defined</span>
                         <span className="font-semibold text-zinc-300 font-mono">{selectedStream.milestoneCount} milestones</span>
