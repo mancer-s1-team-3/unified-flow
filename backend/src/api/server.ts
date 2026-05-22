@@ -145,7 +145,7 @@ app.post("/streams", async (req, res) => {
                 status: 1,
                 cancelable: Boolean(data.cancelable !== undefined ? data.cancelable : true),
                 milestones: data.milestones ? data.milestones.map((m: any) => m.amount).join(";") : "",
-                milestoneCount: Number(data.milestoneCount || 0),
+                milestoneCount: data.milestones ? data.milestones.length : Number(data.milestoneCount || 0),
                 nonce: BigInt(1),
                 bump: 254,
                 isCsvCreated: false, // Explicitly manual
@@ -180,7 +180,7 @@ app.post("/streams/bulk", async (req, res) => {
                     status: 1,
                     cancelable: Boolean(item.cancelable !== undefined ? item.cancelable : true),
                     milestones: String(item.milestones || ""),
-                    milestoneCount: Number(item.milestoneCount || 0),
+                    milestoneCount: item.milestones ? String(item.milestones).split(";").filter(Boolean).length : Number(item.milestoneCount || 0),
                     nonce: BigInt(1),
                     bump: 254,
                     isCsvCreated: true, // Tagged as CSV created

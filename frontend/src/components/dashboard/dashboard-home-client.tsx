@@ -21,6 +21,56 @@ import {
   getMintPresets,
 } from "@/components/dashboard/token-mints";
 
+function parseTokenAmountToBaseUnits(value: string, decimals: number) {
+  const trimmed = String(value ?? "").trim().replace(/,/g, ".");
+
+  if (trimmed === "" || !/^\d+(\.\d+)?$/.test(trimmed)) {
+    return BigInt(0);
+  }
+
+  const [wholePart, fractionPart = ""] = trimmed.split(".");
+  const normalizedFraction = fractionPart.slice(0, decimals).padEnd(decimals, "0");
+  const raw = `${wholePart}${normalizedFraction}`.replace(/^0+(?=\d)/, "");
+
+  try {
+    return BigInt(raw || "0");
+  } catch {
+    return BigInt(0);
+  }
+}
+
+function formatBaseUnitsToTokenAmount(amount: bigint, decimals: number) {
+  if (decimals <= 0) return amount.toString();
+
+  const negative = amount < BigInt(0);
+  const unsigned = negative ? (amount * BigInt(-1)).toString() : amount.toString();
+  const padded = unsigned.padStart(decimals + 1, "0");
+  const whole = padded.slice(0, -decimals) || "0";
+  const fraction = padded.slice(-decimals).replace(/0+$/, "");
+  return `${negative ? "-" : ""}${whole}${fraction ? `.${fraction}` : ""}`;
+}
+
+function buildEvenMilestoneAmounts(amount: string, count: number, decimals: number) {
+  if (!Number.isFinite(count) || count <= 0) return [];
+
+  const normalizedCount = Math.floor(count);
+  if (normalizedCount <= 0) return [];
+
+  const total = parseTokenAmountToBaseUnits(amount, decimals);
+  const divisor = BigInt(normalizedCount);
+
+  if (total < divisor) {
+    return Array.from({ length: normalizedCount }, () => "0");
+  }
+
+  const base = total / divisor;
+  const remainder = total % divisor;
+
+  return Array.from({ length: normalizedCount }, (_, index) =>
+    formatBaseUnitsToTokenAmount(base + (BigInt(index) < remainder ? BigInt(1) : BigInt(0)), decimals)
+  );
+}
+
 type Props = {
   initialStreams?: any[];
 };
@@ -235,18 +285,9 @@ export default function Home({ initialStreams = [] }: Props) {
     const count = parseInt(val, 10);
     if (Number.isNaN(count) || count <= 0) return;
 
-    setMilestoneAmounts((prev) => {
-      const next = [...prev];
-      if (next.length < count) {
-        while (next.length < count) {
-          next.push("0");
-        }
-      } else if (next.length > count) {
-        next.splice(count);
-      }
-      return next;
-    });
-  }, []);
+    const decimals = mintPresets.find((preset) => preset.mint === createForm.mint)?.decimals ?? 0;
+    setMilestoneAmounts(buildEvenMilestoneAmounts(createForm.amount, count, decimals));
+  }, [createForm.amount, createForm.mint, mintPresets]);
 
   // Format Helpers
   const formatDate = (ts: string) => new Date(Number(ts) * 1000).toLocaleString();
@@ -585,6 +626,7 @@ export default function Home({ initialStreams = [] }: Props) {
                 setCreateMode={setCreateMode}
                 createForm={createForm}
                 setCreateForm={setCreateForm}
+                onMilestoneCountChange={handleMilestoneCountChange}
                 clusterLabel={clusterLabel}
                 mintPresets={mintPresets}
                 milestoneAmounts={milestoneAmounts}

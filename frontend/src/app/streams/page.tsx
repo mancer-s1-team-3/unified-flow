@@ -7,7 +7,7 @@ import { useRouter } from "next/navigation";
 import { useWalletConnection } from "@solana/react-hooks";
 import { WalletPickerButton } from "@/components/wallet/wallet-picker-button";
 import { BrandMark } from "@/components/brand/brand-mark";
-import { formatTokenAmount, getAmountUnitLabel } from "@/components/dashboard/utils";
+import { formatTokenAmount, getAmountUnitLabel, getMilestoneAllocations } from "@/components/dashboard/utils";
 import { 
   Layers, ChevronRight, Copy, Check, X, Info, 
   History, Calendar, RefreshCw, ArrowDownRight, XCircle, 
@@ -608,9 +608,11 @@ export default function StreamsPage() {
                           <span className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest block mb-2">Milestones Allocation per Index</span>
                           <div className="grid gap-2">
                             {(() => {
-                              const list = selectedStream.milestones
-                                ? selectedStream.milestones.split(";").map(Number)
-                                : Array(selectedStream.milestoneCount).fill(Math.floor(Number(selectedStream.totalAmount) / (selectedStream.milestoneCount || 1)));
+                              const list = getMilestoneAllocations({
+                                totalAmount: selectedStream.totalAmount,
+                                milestoneCount: Number(selectedStream.milestoneCount || 0),
+                                milestones: selectedStream.milestones,
+                              });
                               
                               let cumulativeSum = 0;
                               const unlocked = Number(selectedStream.unlockedAmount || 0);

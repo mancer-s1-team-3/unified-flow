@@ -3,7 +3,7 @@
 import { memo, useEffect } from "react";
 import { createPortal } from "react-dom";
 import { ArrowDownRight, ArrowUpRight, Calendar, Check, Copy, FileText, History, Settings, Unlock, XCircle } from "lucide-react";
-import { formatDate, formatTokenAmount, getAmountUnitLabel, shorten } from "./utils";
+import { formatDate, formatTokenAmount, getAmountUnitLabel, getMilestoneAllocations, shorten } from "./utils";
 
 export const StreamDetailsDrawer = memo(function StreamDetailsDrawer({
   selectedStream,
@@ -161,9 +161,11 @@ export const StreamDetailsDrawer = memo(function StreamDetailsDrawer({
                       <span className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest block mb-2">Milestones Allocation per Index</span>
                       <div className="grid gap-2">
                         {(() => {
-                          const list = selectedStream.milestones
-                            ? selectedStream.milestones.split(";").map(Number)
-                            : Array(selectedStream.milestoneCount).fill(Math.floor(Number(selectedStream.totalAmount) / (selectedStream.milestoneCount || 1)));
+                          const list = getMilestoneAllocations({
+                            totalAmount: selectedStream.totalAmount,
+                            milestoneCount: Number(selectedStream.milestoneCount || 0),
+                            milestones: selectedStream.milestones,
+                          });
 
                           let cumulativeSum = 0;
                           const unlocked = Number(selectedStream.unlockedAmount || 0);
