@@ -26,6 +26,10 @@ const TOKEN_PROGRAM_ID = new PublicKey(TOKEN_PROGRAM_ADDRESS);
 const ASSOCIATED_TOKEN_PROGRAM_ID = new PublicKey(ASSOCIATED_TOKEN_PROGRAM_ADDRESS);
 const CHAINLINK_FEED = new PublicKey("99B2bTijsU6f1GCT73HmdR7HCFFjGMBcPZY6jZ96ynrR");
 const TOKEN_ACCOUNT_SIZE = 165;
+const CHAINLINK_FEED_LEN = 248;
+const CHAINLINK_FEED_DECIMALS_OFFSET = 0x8a;
+const CHAINLINK_FEED_TIMESTAMP_OFFSET = 0xd0;
+const CHAINLINK_FEED_ANSWER_OFFSET = 0xd8;
 
 export type WithdrawStreamInput = Readonly<{
   streamAddress: string;
@@ -80,6 +84,58 @@ function formatTokenAmountFromBaseUnits(amount: anchor.BN | string | bigint, dec
   const whole = padded.slice(0, -decimals) || "0";
   const fraction = padded.slice(-decimals).replace(/0+$/, "");
   return `${negative ? "-" : ""}${fraction ? `${whole}.${fraction}` : whole}`;
+}
+
+function parseChainlinkPrice(feedData: Buffer) {
+  if (feedData.length < CHAINLINK_FEED_LEN) {
+    throw new Error("Unable to read the SOL price feed.");
+  }
+
+  const decimals = feedData.readUInt8(CHAINLINK_FEED_DECIMALS_OFFSET);
+  const updatedAt = feedData.readUInt32LE(CHAINLINK_FEED_TIMESTAMP_OFFSET);
+
+  let rawPrice = BigInt(0);
+  for (let i = 15; i >= 0; i--) {
+    rawPrice = (rawPrice << BigInt(8)) | BigInt(feedData.readUInt8(CHAINLINK_FEED_ANSWER_OFFSET + i));
+  }
+
+  const signBit = BigInt(1) << BigInt(127);
+  if ((rawPrice & signBit) !== BigInt(0)) {
+    rawPrice -= BigInt(1) << BigInt(128);
+  }
+
+  return {
+    decimals,
+    updatedAt,
+    rawPrice,
+  };
+}
+
+function computeWithdrawFeeLamports(priceRaw: bigint, priceDecimals: number) {
+  if (priceRaw <= BigInt(0)) {
+    throw new Error("Unable to calculate the SOL withdrawal fee from the price feed.");
+  }
+
+  const factor = BigInt(10) ** BigInt(priceDecimals);
+  return Number((BigInt(99) * BigInt(1_000_000_000) * factor) / (BigInt(100) * priceRaw));
+}
+
+function parseInsufficientLamportsFromLogs(logs: string[]) {
+  const line = logs.find((log) => log.includes("insufficient lamports"));
+  if (!line) return null;
+
+  const match = line.match(/insufficient lamports\s+(\d+),\s+need\s+(\d+)/i);
+  if (!match) return null;
+
+  const available = BigInt(match[1]);
+  const needed = BigInt(match[2]);
+  const missing = needed > available ? needed - available : BigInt(0);
+
+  return {
+    available,
+    needed,
+    missing,
+  };
 }
 
 function getAnchorWallet(session: WalletSession) {
@@ -205,6 +261,29 @@ export async function withdrawFromStreamOnChain({
 
   const { blockhash, lastValidBlockHeight } = await connection.getLatestBlockhash(commitment);
 
+  const feedInfo = await connection.getAccountInfo(CHAINLINK_FEED, commitment);
+  if (!feedInfo?.data) {
+    throw new Error("Unable to read the SOL price feed.");
+  }
+
+  const { decimals: feedDecimals, rawPrice } = parseChainlinkPrice(Buffer.from(feedInfo.data));
+  const estimatedFeeLamports = computeWithdrawFeeLamports(rawPrice, feedDecimals);
+  const estimatedAtaLamports = recipientAtaExists
+    ? 0
+    : await connection.getMinimumBalanceForRentExemption(TOKEN_ACCOUNT_SIZE, commitment);
+  const estimatedTotalLamports = estimatedFeeLamports + estimatedAtaLamports;
+
+  if (recipientSolBalance < estimatedTotalLamports) {
+    const missingLamports = estimatedTotalLamports - recipientSolBalance;
+    const estimatedFeeSol = formatTokenAmountFromBaseUnits(String(estimatedFeeLamports), 9);
+    const estimatedAtaSol = formatTokenAmountFromBaseUnits(String(estimatedAtaLamports), 9);
+    const missingSol = formatTokenAmountFromBaseUnits(String(missingLamports), 9);
+
+    throw new Error(
+      `Insufficient SOL balance for withdrawal. You need about ${estimatedFeeSol} SOL for the protocol fee${recipientAtaExists ? "" : ` and ${estimatedAtaSol} SOL to create the recipient token account`}. Missing approximately ${missingSol} SOL.`
+    );
+  }
+
   if (!recipientAtaExists) {
     const requiredLamports = await connection.getMinimumBalanceForRentExemption(TOKEN_ACCOUNT_SIZE, commitment);
 
@@ -290,6 +369,13 @@ export async function withdrawFromStreamOnChain({
     simulationLogs = simulation.value.logs ?? [];
 
     if (simulation.value.err) {
+      const insufficientLamports = parseInsufficientLamportsFromLogs(simulationLogs);
+      if (insufficientLamports) {
+        throw new Error(
+          `Insufficient SOL balance for withdrawal. Available ${formatTokenAmountFromBaseUnits(insufficientLamports.available.toString(), 9)} SOL, need ${formatTokenAmountFromBaseUnits(insufficientLamports.needed.toString(), 9)} SOL. Missing ${formatTokenAmountFromBaseUnits(insufficientLamports.missing.toString(), 9)} SOL.`
+        );
+      }
+
       throw new Error([
         "Withdraw simulation failed.",
         ...simulationLogs.slice(-6),
