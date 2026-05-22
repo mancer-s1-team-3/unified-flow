@@ -123,8 +123,8 @@ export function buildCreateStreamCsvTemplate(endpoint: string) {
 
   return [
     "recipient,amount,mint,type,duration,cliff_duration,cancelable,milestones",
-    `AoFGFuBasrNZ7bs9XddzyvMvYhZPGJHpWKGLG2CU62EY,1500,${defaultMint},0,7200,0,true,`,
-    `AoFGFuBasrNZ7bs9XddzyvMvYhZPGJHpWKGLG2CU62EY,3000,${defaultMint},1,15000,3600,true,`,
-    `AoFGFuBasrNZ7bs9XddzyvMvYhZPGJHpWKGLG2CU62EY,2000,${defaultMint},2,9000,0,false,500;500;500;500`,
+    `AoFGFuBasrNZ7bs9XddzyvMvYhZPGJHpWKGLG2CU62EY,2,${defaultMint},0,7200,0,true,`,
+    `AoFGFuBasrNZ7bs9XddzyvMvYhZPGJHpWKGLG2CU62EY,2,${defaultMint},1,15000,3600,true,`,
+    `AoFGFuBasrNZ7bs9XddzyvMvYhZPGJHpWKGLG2CU62EY,2,${defaultMint},2,9000,0,true,0.5,0.5,0.5,0.5`,
   ].join("\n");
 }
