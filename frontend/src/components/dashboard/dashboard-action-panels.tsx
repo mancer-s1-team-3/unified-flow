@@ -379,10 +379,12 @@ export function DashboardActionPanels(props: Props) {
                 </div>
               )}
 
+              {/* Hardcoded in smart contract — hidden until configurable
               <div className="md:col-span-2 flex min-w-0 items-start gap-3 mt-2">
                 <input type="checkbox" id="cancelable" checked={createForm.cancelable} onChange={(e) => setCreateForm({ ...createForm, cancelable: e.target.checked })} className="w-4 h-4 rounded border-zinc-800 text-indigo-600 bg-zinc-950 focus:ring-0 focus:ring-offset-0" />
                 <label htmlFor="cancelable" className="text-xs leading-5 font-semibold text-zinc-350 cursor-pointer select-none">Stream is cancelable by creator</label>
               </div>
+              */}
 
               <button
                 disabled={createForm.type === "2" && (hasInvalidMilestones || !milestonesMatchTotal)}
