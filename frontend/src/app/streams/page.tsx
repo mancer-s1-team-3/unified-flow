@@ -560,11 +560,13 @@ export default function StreamsPage() {
                     
                     <div>
                       <span className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest block mb-0.5">Stream ID (PDA)</span>
-                      <div className="flex items-center justify-between font-mono bg-zinc-950 border border-zinc-900 rounded-lg px-2.5 py-1.5 text-zinc-300">
-                        <span className="truncate mr-2">{selectedStream.id}</span>
+                      <div className="grid gap-2 sm:flex sm:items-center sm:justify-between font-mono bg-zinc-950 border border-zinc-900 rounded-lg px-2.5 py-1.5 text-zinc-300 overflow-visible">
+                        <span className="min-w-0 break-all whitespace-normal select-all">{selectedStream.id}</span>
                         <button 
+                          type="button"
                           onClick={() => copyToClipboard(selectedStream.id, "drawer_id_streams")}
-                          className="text-zinc-500 hover:text-zinc-300 shrink-0"
+                          className="text-zinc-500 hover:text-zinc-300 shrink-0 justify-self-end self-start sm:self-auto touch-manipulation"
+                          aria-label="Copy stream PDA"
                         >
                           {copiedId === "drawer_id_streams" ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <Copy className="w-3.5 h-3.5" />}
                         </button>

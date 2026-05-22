@@ -119,9 +119,14 @@ export const StreamDetailsDrawer = memo(function StreamDetailsDrawer({
               <div className="text-xs grid gap-3.5 bg-zinc-900/25 border border-zinc-900 p-4 rounded-2xl min-w-0 overflow-hidden">
                 <div>
                   <span className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest block mb-0.5">Stream ID (PDA)</span>
-                  <div className="flex items-center justify-between gap-2 font-mono bg-zinc-950 border border-zinc-900 rounded-lg px-2.5 py-1.5 text-zinc-300 min-w-0 overflow-hidden">
-                    <span className="min-w-0 flex-1 truncate sm:break-normal break-all">{selectedStream.id}</span>
-                    <button onClick={() => copyToClipboard(selectedStream.id, "drawer_id")} className="text-zinc-500 hover:text-zinc-300 shrink-0">
+                  <div className="grid gap-2 sm:flex sm:items-center sm:justify-between font-mono bg-zinc-950 border border-zinc-900 rounded-lg px-2.5 py-1.5 text-zinc-300 min-w-0 overflow-visible">
+                    <span className="min-w-0 flex-1 break-all whitespace-normal select-all">{selectedStream.id}</span>
+                    <button
+                      type="button"
+                      onClick={() => copyToClipboard(selectedStream.id, "drawer_id")}
+                      className="text-zinc-500 hover:text-zinc-300 shrink-0 justify-self-end self-start sm:self-auto touch-manipulation"
+                      aria-label="Copy stream PDA"
+                    >
                       {copiedId === "drawer_id" ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <Copy className="w-3.5 h-3.5" />}
                     </button>
                   </div>
