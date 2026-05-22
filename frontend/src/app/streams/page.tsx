@@ -106,6 +106,8 @@ export default function StreamsPage() {
     selectedStream?.creator?.toLowerCase() === connectedWalletAddress.toLowerCase();
   const selectedMintDecimals = typeof selectedStream?.mintDecimals === "number" ? selectedStream.mintDecimals : null;
   const selectedAmountLabel = getAmountUnitLabel(selectedStream?.mint);
+  const selectedCancelledTx = selectedStream?.transactions?.find((tx: any) => tx.type === "CANCEL") ?? null;
+  const selectedCancelledAt = selectedCancelledTx?.createdAt ?? selectedStream?.updatedAt ?? null;
 
   const handleSquadsAddressChange = (val: string) => {
     setFilterSquadsAddress(val);
@@ -288,6 +290,7 @@ export default function StreamsPage() {
                   const unlocked = Number(stream.unlockedAmount || 0);
                   const mintDecimals = typeof stream.mintDecimals === "number" ? stream.mintDecimals : null;
                   const amountLabel = getAmountUnitLabel(stream.mint);
+                  const isCancelled = Number(stream.status) === 3 || Boolean(stream.cancelled);
 
                   let vested = 0;
                   let progress = 0;
@@ -315,16 +318,19 @@ export default function StreamsPage() {
                     progress = Math.min((elapsed / duration) * 100, 100);
                   }
 
-                  const claimable = Math.max(vested - withdrawn, 0);
+                  if (isCancelled) {
+                    progress = total > 0 ? Math.min((withdrawn / total) * 100, 100) : 0;
+                  }
+
+                  const claimable = isCancelled ? 0 : Math.max(vested - withdrawn, 0);
 
                   const isMilestoneCompleted = stream.vestingType === 2 && (Number(stream.completedAt || 0) > 0 || unlocked >= total);
-                  const isCompleted = stream.vestingType === 2 ? isMilestoneCompleted : withdrawn >= total;
+                  const isCompleted = !isCancelled && (stream.vestingType === 2 ? isMilestoneCompleted : withdrawn >= total);
                   const isNotStarted = now < start;
-                  const isEnded = stream.vestingType === 2 ? isMilestoneCompleted : (now >= end);
+                  const isEnded = !isCancelled && (stream.vestingType === 2 ? isMilestoneCompleted : (now >= end));
                   const isCliffLocked = stream.vestingType === 1 && now < cliff;
                   const isMilestone = stream.vestingType === 2;
                   const unlockedCount = isMilestone ? Math.round((Number(stream.unlockedAmount || 0) / Number(stream.totalAmount)) * stream.milestoneCount) : 0;
-
                   return (
                     <div 
                       key={stream.id}
@@ -346,7 +352,9 @@ export default function StreamsPage() {
                         </div>
                         
                         <span className={`text-[10px] px-2.5 py-0.5 rounded-full font-bold uppercase tracking-widest ${
-                          isCompleted 
+                          isCancelled
+                            ? "bg-rose-500/10 text-rose-400 border border-rose-500/25"
+                          : isCompleted 
                             ? "bg-emerald-500/10 text-emerald-400 border border-emerald-500/25"
                           : isEnded
                             ? "bg-zinc-500/10 text-zinc-400 border border-zinc-500/25"
@@ -358,9 +366,11 @@ export default function StreamsPage() {
                             ? "bg-purple-500/10 text-purple-400 border border-purple-500/25"
                             : "bg-blue-500/10 text-blue-400 border border-blue-500/25"
                         }`}>
-                          {isCompleted 
+                          {isCancelled
+                            ? "Cancelled"
+                            : isCompleted 
                             ? "Completed" 
-                            : isEnded 
+                          : isEnded 
                             ? "Ended" 
                             : isNotStarted 
                             ? "Scheduled" 
@@ -387,7 +397,7 @@ export default function StreamsPage() {
                       </div>
 
                       {/* Data Grid */}
-                      <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 bg-zinc-950/20 border border-zinc-900/60 rounded-xl p-3.5 text-xs">
+                        <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 bg-zinc-950/20 border border-zinc-900/60 rounded-xl p-3.5 text-xs">
                         <div>
                         <div className="text-zinc-500 font-medium">Total Amount</div>
                           <div className="font-bold text-zinc-200">{formatTokenAmount(stream.totalAmount, mintDecimals)} {amountLabel}</div>
@@ -731,7 +741,7 @@ export default function StreamsPage() {
               <div className="border-t border-zinc-900 pt-4 flex flex-col gap-2">
                 <div className="text-[10px] text-zinc-500 font-bold uppercase tracking-widest">Execute Operations</div>
                 <div className="grid grid-cols-2 gap-2 text-xs font-semibold">
-                  {isRecipientWallet && (
+                  {isRecipientWallet && !selectedStream.cancelled && Number(selectedStream.status) !== 3 && (
                     <Link
                       href={`/?tab=withdraw&streamId=${selectedStream.id}`}
                       className="flex items-center justify-center gap-1.5 bg-indigo-600 hover:bg-indigo-700 text-zinc-50 py-2.5 rounded-xl transition-all"
@@ -741,7 +751,14 @@ export default function StreamsPage() {
                     </Link>
                   )}
 
-                  {isCreatorWallet && selectedStream.cancelable && (
+                  {isRecipientWallet && (selectedStream.cancelled || Number(selectedStream.status) === 3) && (
+                    <div className="flex items-center justify-center gap-1.5 bg-zinc-900 text-zinc-500 border border-zinc-800 py-2.5 rounded-xl text-center">
+                      <ArrowDownRight className="w-3.5 h-3.5" />
+                      Claim Disabled
+                    </div>
+                  )}
+
+                  {isCreatorWallet && selectedStream.cancelable && !(Number(selectedStream.status) === 3 || Boolean(selectedStream.cancelled)) && (
                     <Link
                       href={`/?tab=cancel&streamId=${selectedStream.id}`}
                       className="flex items-center justify-center gap-1.5 bg-zinc-900 hover:bg-zinc-800 text-red-400 hover:text-red-300 border border-zinc-800 hover:border-zinc-700 py-2.5 rounded-xl transition-all"
@@ -751,18 +768,32 @@ export default function StreamsPage() {
                     </Link>
                   )}
 
-                  {isCreatorWallet && selectedStream.vestingType === 2 && (
-                    <Link
-                      href={`/?tab=unlock_milestone&streamId=${selectedStream.id}`}
-                      className="col-span-2 flex items-center justify-center gap-1.5 bg-zinc-900 hover:bg-zinc-800 text-indigo-400 hover:text-indigo-300 border border-zinc-800 hover:border-zinc-700 py-2.5 rounded-xl transition-all"
-                    >
+                  {isCreatorWallet && (Number(selectedStream.status) === 3 || Boolean(selectedStream.cancelled)) && (
+                    <div className="flex items-center justify-center gap-1.5 bg-zinc-900 text-zinc-500 border border-zinc-800 py-2.5 rounded-xl text-center">
+                      <XCircle className="w-3.5 h-3.5" />
+                      Cancel Disabled
+                    </div>
+                  )}
+
+                      {isCreatorWallet && selectedStream.vestingType === 2 && (
+                        <Link
+                          href={`/?tab=unlock_milestone&streamId=${selectedStream.id}`}
+                          className="col-span-2 flex items-center justify-center gap-1.5 bg-zinc-900 hover:bg-zinc-800 text-indigo-400 hover:text-indigo-300 border border-zinc-800 hover:border-zinc-700 py-2.5 rounded-xl transition-all"
+                        >
                       <Unlock className="w-3.5 h-3.5" />
                       Unlock Milestone Target
                     </Link>
-                  )}
+                      )}
 
-                  {isCreatorWallet && (
-                    <Link
+                      {(Number(selectedStream.status) === 3 || Boolean(selectedStream.cancelled)) && selectedCancelledAt && (
+                        <div className="col-span-2 flex items-center justify-between gap-2 text-[10px] text-zinc-500 font-mono bg-rose-500/5 border border-rose-500/15 px-3 py-2 rounded-xl">
+                          <span>Cancelled At</span>
+                          <span className="text-rose-300">{new Date(selectedCancelledAt).toLocaleString()}</span>
+                        </div>
+                      )}
+
+                      {isCreatorWallet && (
+                        <Link
                       href={`/?tab=${selectedStream.vestingType === 0 ? "edit_linear" : selectedStream.vestingType === 1 ? "edit_cliff" : "edit_milestone"}&streamId=${selectedStream.id}`}
                       className="col-span-2 flex items-center justify-center gap-1.5 bg-zinc-900 hover:bg-zinc-800 text-zinc-400 hover:text-zinc-200 border border-zinc-855 hover:border-zinc-750 py-2.5 rounded-xl transition-all"
                     >

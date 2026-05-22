@@ -1060,6 +1060,19 @@
         200,
         91
       ]
+    },
+    {
+      "name": "StreamCancelled",
+      "discriminator": [
+        91,
+        215,
+        29,
+        237,
+        194,
+        6,
+        184,
+        92
+      ]
     }
   ],
   "errors": [
@@ -1647,6 +1660,42 @@
           },
           {
             "name": "withdrawn_total",
+            "type": "u64"
+          },
+          {
+            "name": "timestamp",
+            "type": "i64"
+          }
+        ]
+      }
+    },
+    {
+      "name": "StreamCancelled",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "stream",
+            "type": "pubkey"
+          },
+          {
+            "name": "creator",
+            "type": "pubkey"
+          },
+          {
+            "name": "recipient",
+            "type": "pubkey"
+          },
+          {
+            "name": "vested_amount",
+            "type": "u64"
+          },
+          {
+            "name": "returned_to_creator",
+            "type": "u64"
+          },
+          {
+            "name": "claimable_for_recipient",
             "type": "u64"
           },
           {

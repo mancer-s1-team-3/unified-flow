@@ -84,6 +84,12 @@ export async function cancelStreamOnChain({
 
   const streamState: any = await programAny.account.streamAccount.fetch(streamAddress);
 
+  const isCancelled = Number(streamState.status) === 3 || Boolean(streamState.cancelled);
+
+  if (isCancelled) {
+    throw new Error("This stream has already been cancelled and cannot be cancelled again.");
+  }
+
   if (streamState.creator.toBase58() !== creator.toBase58()) {
     throw new Error("Connected wallet is not the creator for this stream.");
   }
@@ -193,4 +199,3 @@ function getExplorerCluster(endpoint: string) {
   if (endpoint.includes("mainnet")) return "mainnet-beta";
   return "custom";
 }
-

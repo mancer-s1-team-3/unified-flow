@@ -45,6 +45,11 @@ export const StreamDetailsDrawer = memo(function StreamDetailsDrawer({
   const isCreatorWallet =
     connectedWalletAddress !== null &&
     selectedStream.creator?.toLowerCase() === connectedWalletAddress.toLowerCase();
+  const isCancelled = Number(selectedStream.status) === 3 || Boolean(selectedStream.cancelled);
+  const cancelledTx = isCancelled
+    ? selectedStream.transactions?.find((tx: any) => tx.type === "CANCEL") ?? null
+    : null;
+  const cancelledAt = cancelledTx?.createdAt ?? selectedStream.updatedAt ?? null;
   const mintDecimals = typeof selectedStream.mintDecimals === "number" ? selectedStream.mintDecimals : null;
   const amountLabel = getAmountUnitLabel(selectedStream.mint);
 
@@ -74,7 +79,7 @@ export const StreamDetailsDrawer = memo(function StreamDetailsDrawer({
             <>
               <div className="bg-zinc-900/40 border border-zinc-900 rounded-2xl p-4 mb-5 min-w-0 overflow-hidden">
                 <div className="text-[10px] text-zinc-500 font-bold uppercase tracking-widest mb-1.5">
-                  {selectedStream.vestingType === 2 ? "Milestone Unlock Progress" : "Claim Completeness Index"}
+                  {isCancelled ? "Cancelled Stream" : selectedStream.vestingType === 2 ? "Milestone Unlock Progress" : "Claim Completeness Index"}
                 </div>
                 <div className="flex justify-between items-end mb-2">
                     <span className="text-xl font-black font-mono bg-gradient-to-r from-indigo-400 to-purple-400 bg-clip-text text-transparent">
@@ -82,12 +87,14 @@ export const StreamDetailsDrawer = memo(function StreamDetailsDrawer({
                         const total = Number(selectedStream.totalAmount);
                         const withdrawn = Number(selectedStream.withdrawn);
                         const unlocked = Number(selectedStream.unlockedAmount || 0);
-                      const value = selectedStream.vestingType === 2 ? unlocked : withdrawn;
+                        const value = isCancelled ? withdrawn : selectedStream.vestingType === 2 ? unlocked : withdrawn;
                       return ((value / total) * 100).toFixed(1);
                     })()}%
                   </span>
                     <span className="text-[10px] text-zinc-400 font-mono">
-                    {selectedStream.vestingType === 2
+                    {isCancelled
+                      ? `${formatTokenAmount(selectedStream.withdrawn, mintDecimals)} / ${formatTokenAmount(selectedStream.totalAmount, mintDecimals)} ${amountLabel} Cancelled`
+                      : selectedStream.vestingType === 2
                       ? `${formatTokenAmount(selectedStream.unlockedAmount || 0, mintDecimals)} / ${formatTokenAmount(selectedStream.totalAmount, mintDecimals)} ${amountLabel} Unlocked`
                       : `${formatTokenAmount(selectedStream.withdrawn, mintDecimals)} / ${formatTokenAmount(selectedStream.totalAmount, mintDecimals)} ${amountLabel} Claimed`}
                     </span>
@@ -100,7 +107,7 @@ export const StreamDetailsDrawer = memo(function StreamDetailsDrawer({
                         ((() => {
                           const withdrawn = Number(selectedStream.withdrawn);
                           const unlocked = Number(selectedStream.unlockedAmount || 0);
-                          return selectedStream.vestingType === 2 ? unlocked : withdrawn;
+                          return isCancelled ? withdrawn : selectedStream.vestingType === 2 ? unlocked : withdrawn;
                         })() / Number(selectedStream.totalAmount)) * 100,
                         100
                       )}%`,
@@ -127,8 +134,8 @@ export const StreamDetailsDrawer = memo(function StreamDetailsDrawer({
                   </div>
                   <div>
                     <span className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest block mb-0.5">Creation Origin</span>
-                    <span className={`text-[10px] px-2 py-0.5 rounded-full font-bold uppercase tracking-wider inline-block ${selectedStream.isCsvCreated ? "bg-emerald-500/10 text-emerald-400 border border-emerald-500/25" : "bg-indigo-500/10 text-indigo-400 border border-indigo-500/25"}`}>
-                      {selectedStream.isCsvCreated ? "CSV Bulk" : "Manual"}
+                    <span className={`text-[10px] px-2 py-0.5 rounded-full font-bold uppercase tracking-wider inline-block ${isCancelled ? "bg-rose-500/10 text-rose-400 border border-rose-500/25" : selectedStream.isCsvCreated ? "bg-emerald-500/10 text-emerald-400 border border-emerald-500/25" : "bg-indigo-500/10 text-indigo-400 border border-indigo-500/25"}`}>
+                      {isCancelled ? "Cancelled" : selectedStream.isCsvCreated ? "CSV Bulk" : "Manual"}
                     </span>
                   </div>
                 </div>
@@ -143,6 +150,15 @@ export const StreamDetailsDrawer = memo(function StreamDetailsDrawer({
                     <span className="font-semibold text-zinc-300 font-mono">{selectedStream.milestoneCount} milestones</span>
                   </div>
                 </div>
+
+                {isCancelled && cancelledAt && (
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 border-t border-zinc-900/60 pt-3 min-w-0">
+                    <div>
+                      <span className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest block mb-0.5">Cancelled At</span>
+                      <span className="font-semibold text-rose-300 break-words">{new Date(cancelledAt).toLocaleString()}</span>
+                    </div>
+                  </div>
+                )}
 
                 {selectedStream.vestingType === 2 && (
                   <>
@@ -260,19 +276,33 @@ export const StreamDetailsDrawer = memo(function StreamDetailsDrawer({
         {!loadingDetails && (
           <div className="border-t border-zinc-900 pt-4 flex flex-col gap-2 min-w-0">
             <div className="text-[10px] text-zinc-500 font-bold uppercase tracking-widest">Instant Action Shortcuts</div>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs font-semibold min-w-0">
-              {isRecipientWallet && (
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs font-semibold min-w-0">
+              {isRecipientWallet && !isCancelled && (
                 <button onClick={() => prefillAction("withdraw", selectedStream.id)} className="flex items-center justify-center gap-1.5 bg-indigo-600 hover:bg-indigo-700 text-zinc-50 py-2.5 rounded-xl transition-all">
                   <ArrowDownRight className="w-3.5 h-3.5" />
                   Claim Tokens
                 </button>
               )}
 
-              {isCreatorWallet && selectedStream.cancelable && (
+              {isRecipientWallet && isCancelled && (
+                <div className="flex items-center justify-center gap-1.5 bg-zinc-900 text-zinc-500 border border-zinc-800 py-2.5 rounded-xl text-center">
+                  <ArrowDownRight className="w-3.5 h-3.5" />
+                  Claim Disabled
+                </div>
+              )}
+
+              {isCreatorWallet && selectedStream.cancelable && !isCancelled && (
                 <button onClick={() => prefillAction("cancel", selectedStream.id)} className="flex items-center justify-center gap-1.5 bg-zinc-900 hover:bg-zinc-800 text-red-400 hover:text-red-300 border border-zinc-800 hover:border-zinc-700 py-2.5 rounded-xl transition-all">
                   <XCircle className="w-3.5 h-3.5" />
                   Cancel Stream
                 </button>
+              )}
+
+              {isCreatorWallet && isCancelled && (
+                <div className="flex items-center justify-center gap-1.5 bg-zinc-900 text-zinc-500 border border-zinc-800 py-2.5 rounded-xl text-center">
+                  <XCircle className="w-3.5 h-3.5" />
+                  Cancel Disabled
+                </div>
               )}
 
               {isCreatorWallet && selectedStream.isCsvCreated ? (

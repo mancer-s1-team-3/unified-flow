@@ -412,6 +412,24 @@ describe("withdraw", () => {
       .rpc();
   }
 
+  async function doCancel(streamPda: PublicKey, recipientAta: PublicKey) {
+    const creatorAta = getAssociatedTokenAddressSync(mint, creator.publicKey, true, TOKEN_PROGRAM_ID);
+
+    return program.methods
+      .cancel()
+      .accountsStrict({
+        creator: creator.publicKey,
+        mint,
+        stream: streamPda,
+        vault: getAssociatedTokenAddressSync(mint, streamPda, true, TOKEN_PROGRAM_ID),
+        creatorTokenAccount: creatorAta,
+        recipientTokenAccount: recipientAta,
+        tokenProgram: TOKEN_PROGRAM_ID,
+      })
+      .signers([creator])
+      .rpc();
+  }
+
   /** Updates the mock Chainlink feed account in-place via bankrun's setAccount. */
   function updateFeed(priceRaw: bigint, decimals: number, updatedAt: number) {
     const data = buildFeedData(priceRaw, decimals, updatedAt);
@@ -683,6 +701,18 @@ describe("withdraw", () => {
     await expectError(
       doWithdraw(streamPda, recipientAta),
       "NothingToWithdraw"
+    );
+  });
+
+  it("fails with StreamNotActive after the stream is cancelled", async () => {
+    await setTime(context, BASE_NOW);
+    const { streamPda, recipientAta } = await setupStream();
+
+    await doCancel(streamPda, recipientAta);
+
+    await expectError(
+      doWithdraw(streamPda, recipientAta),
+      "StreamNotActive"
     );
   });
 
