@@ -379,6 +379,54 @@ describe("withdraw", () => {
     return { streamPda, recipientAta, milestonePdas, amount };
   }
 
+  async function setupCliffStream(opts: {
+    startTs?: number;
+    cliffTs?: number;
+    endTs?: number;
+    amount?: number;
+  } = {}): Promise<{
+    streamPda: PublicKey;
+    recipientAta: PublicKey;
+    startTs: number;
+    cliffTs: number;
+    endTs: number;
+    amount: number;
+  }> {
+    const nonce = BigInt(nonceCounter++);
+    const startTs = opts.startTs ?? BASE_NOW;
+    const cliffTs = opts.cliffTs ?? BASE_NOW + Math.floor(STREAM_DURATION / 2);
+    const endTs = opts.endTs ?? BASE_NOW + STREAM_DURATION;
+    const amount = opts.amount ?? TOKEN_AMOUNT;
+
+    const [streamPda] = PublicKey.findProgramAddressSync(
+      [
+        Buffer.from("stream"),
+        creator.publicKey.toBuffer(),
+        recipient.publicKey.toBuffer(),
+        Buffer.from(new BN(nonce.toString()).toArrayLike(Buffer, "le", 8)),
+      ],
+      program.programId
+    );
+
+    const creatorAta = await createAta(context, admin, mint, creator.publicKey);
+    await mintTokens(context, admin, mint, creatorAta, admin, amount);
+    const recipientAta = await createAta(context, admin, mint, recipient.publicKey);
+
+    await program.methods
+      .createStream(new BN(amount), new BN(startTs), new BN(cliffTs), new BN(endTs), 1, [], new BN(nonce.toString()))
+      .accounts({
+        creator: creator.publicKey,
+        recipient: recipient.publicKey,
+        mint,
+        creatorTokenAccount: creatorAta,
+        tokenProgram: TOKEN_PROGRAM_ID,
+      })
+      .signers([creator])
+      .rpc();
+
+    return { streamPda, recipientAta, startTs, cliffTs, endTs, amount };
+  }
+
   /**
    * Calls withdraw with the given accounts.
    * Auto-resolved: mint (has_one stream), config (PDA), vault (ATA), systemProgram.
@@ -743,6 +791,18 @@ describe("withdraw", () => {
     expect((afterBalance - beforeBalance).toString()).to.equal(amount.toString());
   });
 
+  it("MILESTONE: NothingToWithdraw when no milestones are unlocked yet", async () => {
+    await setTime(context, BASE_NOW);
+    const { streamPda, recipientAta } = await setupMilestoneStream();
+
+    updateFeed(PRICE_RAW, PRICE_DECIMALS, BASE_NOW);
+
+    await expectError(
+      doWithdraw(streamPda, recipientAta),
+      "NothingToWithdraw"
+    );
+  });
+
   // ══════════════════════════════════════════════════════════════════════════
   // ProtocolPaused
   // ══════════════════════════════════════════════════════════════════════════
@@ -925,5 +985,46 @@ describe("withdraw", () => {
         .rpc(),
       "0x1" // Solana generic "insufficient lamports" error
     );
+  });
+
+  // ══════════════════════════════════════════════════════════════════════════
+  // Cliff vesting: withdraw behavior at different time points
+  // ══════════════════════════════════════════════════════════════════════════
+
+  it("CLIFF: withdraw before cliff → NothingToWithdraw", async () => {
+    await setTime(context, BASE_NOW);
+    const { streamPda, recipientAta, cliffTs } = await setupCliffStream();
+
+    // Set time just before the cliff — vested = 0
+    const justBeforeCliff = cliffTs - 1;
+    await setTime(context, justBeforeCliff);
+    updateFeed(PRICE_RAW, PRICE_DECIMALS, justBeforeCliff);
+
+    await expectError(
+      doWithdraw(streamPda, recipientAta),
+      "NothingToWithdraw"
+    );
+  });
+
+  it("CLIFF: withdraw after cliff passes → tokens claimable proportionally from startTs", async () => {
+    await setTime(context, BASE_NOW);
+    const { streamPda, recipientAta, startTs, endTs, amount } = await setupCliffStream();
+
+    // 75% elapsed from startTs (past cliff which is at 50%)
+    const ts75 = startTs + Math.floor((endTs - startTs) * 0.75);
+    await setTime(context, ts75);
+    updateFeed(PRICE_RAW, PRICE_DECIMALS, ts75);
+
+    const tokenBefore = await getTokenBalance(context, recipientAta);
+    await doWithdraw(streamPda, recipientAta);
+    const tokenAfter = await getTokenBalance(context, recipientAta);
+
+    // vested = total * 75% (linear from startTs once cliff has passed)
+    const expectedTokens = Math.floor(amount * 0.75);
+    expect(Number(tokenAfter - tokenBefore)).to.be.closeTo(expectedTokens, 1);
+
+    const stream = await program.account.streamAccount.fetch(streamPda);
+    expect(stream.withdrawn.toNumber()).to.be.closeTo(expectedTokens, 1);
+    expect(stream.status).to.equal(1); // still ACTIVE
   });
 });

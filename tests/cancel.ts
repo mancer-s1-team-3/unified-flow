@@ -702,4 +702,30 @@ describe("cancel", () => {
       "FullyVested"
     );
   });
+
+  it("MILESTONE: fails with FullyVested when cancelling after all milestones are unlocked", async () => {
+    await setTime(BASE_NOW);
+    const perMilestone = TOKEN_AMOUNT / 4;
+    const { streamPda, creatorAta, recipientAta, milestonePdas } =
+      await setupMilestoneStream([perMilestone, perMilestone, perMilestone, perMilestone]);
+
+    // Unlock all 4 milestones — stream is now fully vested
+    for (const milestonePda of milestonePdas) {
+      await program.methods
+        .unlockMilestone()
+        .accountsStrict({
+          creator: creator.publicKey,
+          stream: streamPda,
+          milestone: milestonePda,
+          systemProgram: SystemProgram.programId,
+        })
+        .signers([creator])
+        .rpc();
+    }
+
+    await expectError(
+      doCancel(streamPda, creatorAta, recipientAta),
+      "FullyVested"
+    );
+  });
 });
