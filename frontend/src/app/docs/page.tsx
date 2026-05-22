@@ -1,13 +1,13 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import {
   BookOpen,
   Terminal,
   Cpu,
   Globe,
-  ChevronRight,
   Copy,
   Check,
   ArrowLeft,
@@ -167,7 +167,22 @@ const CodeSnippet = ({ code }: { code: string }) => {
 // MAIN PAGE COMPONENT
 // ============================================================================
 export default function DocsPage() {
+  const router = useRouter();
   const [activeTab, setActiveTab] = useState<"overview" | "api" | "mcp" | "cli">("overview");
+
+  useEffect(() => {
+    const resetView = () => {
+      setActiveTab("overview");
+      window.scrollTo({ top: 0, left: 0, behavior: "auto" });
+    };
+
+    resetView();
+
+    const handlePageShow = () => resetView();
+    window.addEventListener("pageshow", handlePageShow);
+
+    return () => window.removeEventListener("pageshow", handlePageShow);
+  }, []);
 
   return (
     <div className="min-h-screen bg-zinc-950 text-zinc-50 font-sans selection:bg-indigo-500/30 selection:text-indigo-200">
@@ -180,8 +195,9 @@ export default function DocsPage() {
 
         {/* BACK TO APP */}
         <div className="mb-8">
-          <Link
-            href="/"
+          <button
+            type="button"
+            onClick={() => router.push("/")}
             className="inline-flex items-center gap-2 text-zinc-400 hover:text-indigo-400 font-medium text-sm transition-colors group"
           >
             <ArrowLeft className="w-4 h-4 group-hover:-translate-x-1 transition-transform" />
@@ -555,10 +571,14 @@ export default function DocsPage() {
                 Our code has native supports for Model Context Protocol. AI Agents can instantly connect and execute complex operations for you securely.
               </p>
               <div className="mt-4">
-                <span className="text-3xs uppercase tracking-wider font-semibold text-indigo-300 block mb-1">Backend Spec File</span>
-                <code className="font-mono text-3xs text-zinc-400 break-all bg-black/40 px-2 py-1.5 rounded block border border-zinc-800">
-                  backend/agent_skills.md
-                </code>
+                <span className="text-3xs uppercase tracking-wider font-semibold text-indigo-300 block mb-1">Skills Route</span>
+                <Link
+                  href="/skills"
+                  className="inline-flex items-center gap-2 font-mono text-3xs text-zinc-200 bg-black/40 px-2 py-1.5 rounded border border-zinc-800 hover:border-indigo-500/40 hover:text-white transition-colors"
+                >
+                  <BookOpen className="w-3 h-3 text-indigo-400" />
+                  /skills
+                </Link>
               </div>
             </div>
 
