@@ -143,3 +143,27 @@ export function normalizeMilestoneUnlocked(event: Record<string, unknown>) {
         unlockTs,
     };
 }
+
+export function normalizeStreamCancelled(event: Record<string, unknown>) {
+    const stream = asString(firstDefined(event, ["stream"]));
+    const creator = asString(firstDefined(event, ["creator"]));
+    const recipient = asString(firstDefined(event, ["recipient"]));
+    const vestedAmount = asBigInt(firstDefined(event, ["vested_amount", "vestedAmount"]));
+    const returnedToCreator = asBigInt(firstDefined(event, ["returned_to_creator", "returnedToCreator"]));
+    const claimableForRecipient = asBigInt(firstDefined(event, ["claimable_for_recipient", "claimableForRecipient"]));
+    const timestamp = asBigInt(firstDefined(event, ["timestamp"]));
+
+    if (!stream || !creator || !recipient || vestedAmount === null || returnedToCreator === null || claimableForRecipient === null || timestamp === null) {
+        return null;
+    }
+
+    return {
+        stream,
+        creator,
+        recipient,
+        vestedAmount,
+        returnedToCreator,
+        claimableForRecipient,
+        timestamp,
+    };
+}

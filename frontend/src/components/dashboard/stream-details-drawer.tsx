@@ -3,7 +3,7 @@
 import { memo, useEffect } from "react";
 import { createPortal } from "react-dom";
 import { ArrowDownRight, ArrowUpRight, Calendar, Check, Copy, FileText, History, Settings, Unlock, XCircle } from "lucide-react";
-import { formatDate, formatTokenAmount, getAmountUnitLabel, shorten } from "./utils";
+import { formatDate, formatTokenAmount, getAmountUnitLabel, getMilestoneAllocations, shorten } from "./utils";
 
 export const StreamDetailsDrawer = memo(function StreamDetailsDrawer({
   selectedStream,
@@ -45,17 +45,22 @@ export const StreamDetailsDrawer = memo(function StreamDetailsDrawer({
   const isCreatorWallet =
     connectedWalletAddress !== null &&
     selectedStream.creator?.toLowerCase() === connectedWalletAddress.toLowerCase();
+  const isCancelled = Number(selectedStream.status) === 3 || Boolean(selectedStream.cancelled);
+  const cancelledTx = isCancelled
+    ? selectedStream.transactions?.find((tx: any) => tx.type === "CANCEL") ?? null
+    : null;
+  const cancelledAt = cancelledTx?.createdAt ?? selectedStream.updatedAt ?? null;
   const mintDecimals = typeof selectedStream.mintDecimals === "number" ? selectedStream.mintDecimals : null;
   const amountLabel = getAmountUnitLabel(selectedStream.mint);
 
   const drawer = (
-    <div className="fixed inset-0 z-50 bg-zinc-950/95 sm:bg-black/60 backdrop-blur-md flex justify-end animate-in fade-in duration-200">
-      <div className="w-full max-w-md bg-zinc-950 border-l border-zinc-800 h-[100dvh] sm:h-full rounded-none sm:rounded-r-3xl flex flex-col justify-between p-5 sm:p-6 shadow-2xl relative animate-in slide-in-from-right duration-350">
-        <div className="overflow-y-auto max-h-[85%] pr-1">
-          <div className="flex items-center justify-between border-b border-zinc-900 pb-4 mb-5">
-            <div className="flex items-center gap-2">
+    <div className="fixed inset-0 z-50 bg-zinc-950/95 sm:bg-black/60 backdrop-blur-md flex justify-end overflow-x-hidden animate-in fade-in duration-200">
+      <div className="w-full max-w-md bg-zinc-950 border-l border-zinc-800 h-[100dvh] sm:h-full rounded-none sm:rounded-r-3xl flex flex-col overflow-hidden p-5 sm:p-6 shadow-2xl relative animate-in slide-in-from-right duration-350">
+        <div className="flex-1 min-h-0 overflow-y-auto overflow-x-hidden pr-1">
+          <div className="flex items-center justify-between gap-3 border-b border-zinc-900 pb-4 mb-5 min-w-0">
+            <div className="flex items-center gap-2 min-w-0">
               <History className="w-5 h-5 text-indigo-400" />
-              <h3 className="text-md font-extrabold text-zinc-100">Stream Specifications</h3>
+              <h3 className="text-md font-extrabold text-zinc-100 truncate">Stream Specifications</h3>
             </div>
             <button
               onClick={() => setSelectedStream(null)}
@@ -72,9 +77,9 @@ export const StreamDetailsDrawer = memo(function StreamDetailsDrawer({
             </div>
           ) : (
             <>
-              <div className="bg-zinc-900/40 border border-zinc-900 rounded-2xl p-4 mb-5">
+              <div className="bg-zinc-900/40 border border-zinc-900 rounded-2xl p-4 mb-5 min-w-0 overflow-hidden">
                 <div className="text-[10px] text-zinc-500 font-bold uppercase tracking-widest mb-1.5">
-                  {selectedStream.vestingType === 2 ? "Milestone Unlock Progress" : "Claim Completeness Index"}
+                  {isCancelled ? "Cancelled Stream" : selectedStream.vestingType === 2 ? "Milestone Unlock Progress" : "Claim Completeness Index"}
                 </div>
                 <div className="flex justify-between items-end mb-2">
                     <span className="text-xl font-black font-mono bg-gradient-to-r from-indigo-400 to-purple-400 bg-clip-text text-transparent">
@@ -82,12 +87,14 @@ export const StreamDetailsDrawer = memo(function StreamDetailsDrawer({
                         const total = Number(selectedStream.totalAmount);
                         const withdrawn = Number(selectedStream.withdrawn);
                         const unlocked = Number(selectedStream.unlockedAmount || 0);
-                      const value = selectedStream.vestingType === 2 ? unlocked : withdrawn;
+                        const value = isCancelled ? withdrawn : selectedStream.vestingType === 2 ? unlocked : withdrawn;
                       return ((value / total) * 100).toFixed(1);
                     })()}%
                   </span>
                     <span className="text-[10px] text-zinc-400 font-mono">
-                    {selectedStream.vestingType === 2
+                    {isCancelled
+                      ? `${formatTokenAmount(selectedStream.withdrawn, mintDecimals)} / ${formatTokenAmount(selectedStream.totalAmount, mintDecimals)} ${amountLabel} Cancelled`
+                      : selectedStream.vestingType === 2
                       ? `${formatTokenAmount(selectedStream.unlockedAmount || 0, mintDecimals)} / ${formatTokenAmount(selectedStream.totalAmount, mintDecimals)} ${amountLabel} Unlocked`
                       : `${formatTokenAmount(selectedStream.withdrawn, mintDecimals)} / ${formatTokenAmount(selectedStream.totalAmount, mintDecimals)} ${amountLabel} Claimed`}
                     </span>
@@ -100,7 +107,7 @@ export const StreamDetailsDrawer = memo(function StreamDetailsDrawer({
                         ((() => {
                           const withdrawn = Number(selectedStream.withdrawn);
                           const unlocked = Number(selectedStream.unlockedAmount || 0);
-                          return selectedStream.vestingType === 2 ? unlocked : withdrawn;
+                          return isCancelled ? withdrawn : selectedStream.vestingType === 2 ? unlocked : withdrawn;
                         })() / Number(selectedStream.totalAmount)) * 100,
                         100
                       )}%`,
@@ -109,31 +116,31 @@ export const StreamDetailsDrawer = memo(function StreamDetailsDrawer({
                 </div>
               </div>
 
-              <div className="text-xs grid gap-3.5 bg-zinc-900/25 border border-zinc-900 p-4 rounded-2xl">
+              <div className="text-xs grid gap-3.5 bg-zinc-900/25 border border-zinc-900 p-4 rounded-2xl min-w-0 overflow-hidden">
                 <div>
                   <span className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest block mb-0.5">Stream ID (PDA)</span>
-                  <div className="flex items-center justify-between font-mono bg-zinc-950 border border-zinc-900 rounded-lg px-2.5 py-1.5 text-zinc-300">
-                    <span className="truncate mr-2">{selectedStream.id}</span>
+                  <div className="flex items-center justify-between gap-2 font-mono bg-zinc-950 border border-zinc-900 rounded-lg px-2.5 py-1.5 text-zinc-300 min-w-0 overflow-hidden">
+                    <span className="min-w-0 flex-1 truncate sm:break-normal break-all">{selectedStream.id}</span>
                     <button onClick={() => copyToClipboard(selectedStream.id, "drawer_id")} className="text-zinc-500 hover:text-zinc-300 shrink-0">
                       {copiedId === "drawer_id" ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <Copy className="w-3.5 h-3.5" />}
                     </button>
                   </div>
                 </div>
 
-                <div className="grid grid-cols-2 gap-4 border-t border-zinc-900/60 pt-3">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 border-t border-zinc-900/60 pt-3 min-w-0">
                   <div>
                     <span className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest block mb-0.5">Vesting Mode</span>
                     <span className="font-semibold text-zinc-300">{selectedStream.vestingType === 0 ? "Linear Stream" : selectedStream.vestingType === 1 ? "Cliff Lockup" : "Milestone-Based"}</span>
                   </div>
                   <div>
                     <span className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest block mb-0.5">Creation Origin</span>
-                    <span className={`text-[10px] px-2 py-0.5 rounded-full font-bold uppercase tracking-wider inline-block ${selectedStream.isCsvCreated ? "bg-emerald-500/10 text-emerald-400 border border-emerald-500/25" : "bg-indigo-500/10 text-indigo-400 border border-indigo-500/25"}`}>
-                      {selectedStream.isCsvCreated ? "CSV Bulk" : "Manual"}
+                    <span className={`text-[10px] px-2 py-0.5 rounded-full font-bold uppercase tracking-wider inline-block ${isCancelled ? "bg-rose-500/10 text-rose-400 border border-rose-500/25" : selectedStream.isCsvCreated ? "bg-emerald-500/10 text-emerald-400 border border-emerald-500/25" : "bg-indigo-500/10 text-indigo-400 border border-indigo-500/25"}`}>
+                      {isCancelled ? "Cancelled" : selectedStream.isCsvCreated ? "CSV Bulk" : "Manual"}
                     </span>
                   </div>
                 </div>
 
-                <div className="grid grid-cols-2 gap-4 border-t border-zinc-900/60 pt-3">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 border-t border-zinc-900/60 pt-3 min-w-0">
                   <div>
                     <span className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest block mb-0.5">Cancelable</span>
                     <span className="font-semibold text-zinc-300">{selectedStream.cancelable ? "Yes (Permitted)" : "No (Immutable)"}</span>
@@ -144,9 +151,18 @@ export const StreamDetailsDrawer = memo(function StreamDetailsDrawer({
                   </div>
                 </div>
 
+                {isCancelled && cancelledAt && (
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 border-t border-zinc-900/60 pt-3 min-w-0">
+                    <div>
+                      <span className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest block mb-0.5">Cancelled At</span>
+                      <span className="font-semibold text-rose-300 break-words">{new Date(cancelledAt).toLocaleString()}</span>
+                    </div>
+                  </div>
+                )}
+
                 {selectedStream.vestingType === 2 && (
                   <>
-                    <div className="grid grid-cols-2 gap-4 border-t border-zinc-900/60 pt-3">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 border-t border-zinc-900/60 pt-3 min-w-0">
                       <div>
                         <span className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest block mb-0.5">Unlocked Amount</span>
                         <span className="font-semibold text-emerald-400 font-mono">{formatTokenAmount(selectedStream.unlockedAmount || 0, mintDecimals)} {amountLabel}</span>
@@ -157,13 +173,15 @@ export const StreamDetailsDrawer = memo(function StreamDetailsDrawer({
                       </div>
                     </div>
 
-                    <div className="border-t border-zinc-900/60 pt-3">
+                    <div className="border-t border-zinc-900/60 pt-3 min-w-0">
                       <span className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest block mb-2">Milestones Allocation per Index</span>
-                      <div className="grid gap-2">
+                      <div className="grid gap-2 min-w-0">
                         {(() => {
-                          const list = selectedStream.milestones
-                            ? selectedStream.milestones.split(";").map(Number)
-                            : Array(selectedStream.milestoneCount).fill(Math.floor(Number(selectedStream.totalAmount) / (selectedStream.milestoneCount || 1)));
+                          const list = getMilestoneAllocations({
+                            totalAmount: selectedStream.totalAmount,
+                            milestoneCount: Number(selectedStream.milestoneCount || 0),
+                            milestones: selectedStream.milestones,
+                          });
 
                           let cumulativeSum = 0;
                           const unlocked = Number(selectedStream.unlockedAmount || 0);
@@ -173,13 +191,13 @@ export const StreamDetailsDrawer = memo(function StreamDetailsDrawer({
                             const isUnlocked = cumulativeSum <= unlocked;
 
                             return (
-                              <div key={idx} className="flex items-center justify-between font-mono bg-zinc-950 border border-zinc-900/70 rounded-xl px-3 py-2 text-zinc-300 text-[11px]">
-                                <div className="flex items-center gap-2">
+                              <div key={idx} className="flex items-center justify-between gap-3 font-mono bg-zinc-950 border border-zinc-900/70 rounded-xl px-3 py-2 text-zinc-300 text-[11px] min-w-0 overflow-hidden">
+                                <div className="flex items-center gap-2 min-w-0">
                                   <span className={`w-1.5 h-1.5 rounded-full ${isUnlocked ? "bg-emerald-450 shadow-[0_0_6px_rgba(16,185,129,0.5)]" : "bg-zinc-800"}`} />
-                                  <span className="font-extrabold">Milestone #{idx}</span>
+                                  <span className="font-extrabold truncate">Milestone #{idx}</span>
                                 </div>
-                                <div className="flex items-center gap-3">
-                                  <span className="text-zinc-400 font-bold">{formatTokenAmount(amt, mintDecimals)} {amountLabel}</span>
+                                <div className="flex items-center gap-3 min-w-0 shrink-0">
+                                  <span className="text-zinc-400 font-bold whitespace-nowrap text-right">{formatTokenAmount(amt, mintDecimals)} {amountLabel}</span>
                                   <span className={`text-[9px] px-2 py-0.5 rounded font-black uppercase ${isUnlocked ? "bg-emerald-500/10 text-emerald-400 border border-emerald-500/20" : "bg-zinc-900 text-zinc-600 border border-zinc-850"}`}>
                                     {isUnlocked ? "Unlocked" : "Locked"}
                                   </span>
@@ -193,36 +211,36 @@ export const StreamDetailsDrawer = memo(function StreamDetailsDrawer({
                   </>
                 )}
 
-                <div className="border-t border-zinc-900/60 pt-3">
+                <div className="border-t border-zinc-900/60 pt-3 min-w-0">
                   <span className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest block mb-0.5">Creator Account</span>
-                  <span className="font-mono text-zinc-400 truncate block">{selectedStream.creator}</span>
+                  <span className="font-mono text-zinc-400 break-all block">{selectedStream.creator}</span>
                 </div>
 
-                <div className="border-t border-zinc-900/60 pt-3">
+                <div className="border-t border-zinc-900/60 pt-3 min-w-0">
                   <span className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest block mb-0.5">Recipient Destination</span>
-                  <span className="font-mono text-zinc-400 truncate block">{selectedStream.recipient}</span>
+                  <span className="font-mono text-zinc-400 break-all block">{selectedStream.recipient}</span>
                 </div>
 
-                <div className="border-t border-zinc-900/60 pt-3">
+                <div className="border-t border-zinc-900/60 pt-3 min-w-0">
                   <span className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest block mb-0.5">Token Mint Address</span>
-                  <span className="font-mono text-zinc-400 truncate block">{selectedStream.mint}</span>
+                  <span className="font-mono text-zinc-400 break-all block">{selectedStream.mint}</span>
                 </div>
 
-                <div className="border-t border-zinc-900/60 pt-3 grid grid-cols-2 gap-2 text-[10px] text-zinc-500 font-mono">
-                  <span className="flex items-center gap-1"><Calendar className="w-3 h-3" /> Start: {formatDate(selectedStream.startTs)}</span>
+                <div className="border-t border-zinc-900/60 pt-3 grid grid-cols-1 sm:grid-cols-2 gap-2 text-[10px] text-zinc-500 font-mono min-w-0">
+                  <span className="flex items-center gap-1 min-w-0"><Calendar className="w-3 h-3 shrink-0" /> <span className="min-w-0 break-words">Start: {formatDate(selectedStream.startTs)}</span></span>
                   {selectedStream.vestingType !== 2 && (
-                    <span className="flex items-center gap-1"><Calendar className="w-3 h-3" /> End: {formatDate(selectedStream.endTs)}</span>
+                    <span className="flex items-center gap-1 min-w-0"><Calendar className="w-3 h-3 shrink-0" /> <span className="min-w-0 break-words">End: {formatDate(selectedStream.endTs)}</span></span>
                   )}
                   {selectedStream.vestingType === 2 && selectedStream.completedAt && (
-                    <span className="col-span-2 flex items-center gap-1 text-emerald-400 font-bold border-t border-zinc-900/40 pt-1.5 mt-1"><Calendar className="w-3 h-3" /> Completed At: {formatDate(selectedStream.completedAt)}</span>
+                    <span className="col-span-1 sm:col-span-2 flex items-center gap-1 text-emerald-400 font-bold border-t border-zinc-900/40 pt-1.5 mt-1 min-w-0"><Calendar className="w-3 h-3 shrink-0" /> <span className="min-w-0 break-words">Completed At: {formatDate(selectedStream.completedAt)}</span></span>
                   )}
                   {selectedStream.vestingType === 1 && (
-                    <span className="col-span-2 flex items-center gap-1 text-amber-500 font-bold border-t border-zinc-900/40 pt-1.5 mt-1"><Calendar className="w-3 h-3" /> Cliff Unlock: {formatDate(selectedStream.cliffTs)} ({Number(selectedStream.cliffTs) - Number(selectedStream.startTs)}s duration)</span>
+                    <span className="col-span-1 sm:col-span-2 flex items-center gap-1 text-amber-500 font-bold border-t border-zinc-900/40 pt-1.5 mt-1 min-w-0"><Calendar className="w-3 h-3 shrink-0" /> <span className="min-w-0 break-words">Cliff Unlock: {formatDate(selectedStream.cliffTs)} ({Number(selectedStream.cliffTs) - Number(selectedStream.startTs)}s duration)</span></span>
                   )}
                 </div>
               </div>
 
-              <div className="mt-5 border-t border-zinc-900 pt-5">
+              <div className="mt-5 border-t border-zinc-900 pt-5 min-w-0">
                 <div className="flex items-center gap-2 mb-3">
                   <History className="w-4 h-4 text-indigo-400" />
                   <h4 className="text-xs font-bold uppercase tracking-wider text-zinc-350">Transaction Ledger</h4>
@@ -231,10 +249,10 @@ export const StreamDetailsDrawer = memo(function StreamDetailsDrawer({
                 {!selectedStream.transactions || selectedStream.transactions.length === 0 ? (
                   <div className="text-[10px] text-zinc-600 bg-zinc-900/10 border border-zinc-900/50 text-center py-4 rounded-xl">No indexed ledger entries found for this stream.</div>
                 ) : (
-                  <div className="grid gap-2.5">
+                  <div className="grid gap-2.5 min-w-0">
                     {selectedStream.transactions.map((tx: any) => (
-                      <div key={tx.id} className="bg-zinc-900/20 border border-zinc-900 rounded-xl p-3 flex justify-between items-start text-[10px]">
-                        <div>
+                      <div key={tx.id} className="bg-zinc-900/20 border border-zinc-900 rounded-xl p-3 flex justify-between items-start gap-3 text-[10px] min-w-0 overflow-hidden">
+                        <div className="min-w-0">
                           <div className="flex items-center gap-1.5 mb-1">
                             <span className={`w-1.5 h-1.5 rounded-full ${tx.type === "CREATE_STREAM" ? "bg-indigo-400" : "bg-emerald-400"}`} />
                             <span className="font-bold text-zinc-300 uppercase tracking-wide">{tx.type}</span>
@@ -243,7 +261,7 @@ export const StreamDetailsDrawer = memo(function StreamDetailsDrawer({
                           <span className="text-[9px] text-zinc-500 font-mono block">Slot: {tx.slot}</span>
                         </div>
 
-                        <a href={`https://solscan.io/tx/${tx.signature}?cluster=devnet`} target="_blank" rel="noopener noreferrer" className="text-indigo-400 hover:text-indigo-300 flex items-center gap-0.5 font-bold transition-all">
+                        <a href={`https://solscan.io/tx/${tx.signature}?cluster=devnet`} target="_blank" rel="noopener noreferrer" className="text-indigo-400 hover:text-indigo-300 flex items-center gap-0.5 font-bold transition-all shrink-0">
                           Solscan <ArrowUpRight className="w-3 h-3" />
                         </a>
                       </div>
@@ -256,21 +274,35 @@ export const StreamDetailsDrawer = memo(function StreamDetailsDrawer({
         </div>
 
         {!loadingDetails && (
-          <div className="border-t border-zinc-900 pt-4 flex flex-col gap-2">
+          <div className="border-t border-zinc-900 pt-4 flex flex-col gap-2 min-w-0">
             <div className="text-[10px] text-zinc-500 font-bold uppercase tracking-widest">Instant Action Shortcuts</div>
-            <div className="grid grid-cols-2 gap-2 text-xs font-semibold">
-              {isRecipientWallet && (
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs font-semibold min-w-0">
+              {isRecipientWallet && !isCancelled && (
                 <button onClick={() => prefillAction("withdraw", selectedStream.id)} className="flex items-center justify-center gap-1.5 bg-indigo-600 hover:bg-indigo-700 text-zinc-50 py-2.5 rounded-xl transition-all">
                   <ArrowDownRight className="w-3.5 h-3.5" />
                   Claim Tokens
                 </button>
               )}
 
-              {isCreatorWallet && selectedStream.cancelable && (
+              {isRecipientWallet && isCancelled && (
+                <div className="flex items-center justify-center gap-1.5 bg-zinc-900 text-zinc-500 border border-zinc-800 py-2.5 rounded-xl text-center">
+                  <ArrowDownRight className="w-3.5 h-3.5" />
+                  Claim Disabled
+                </div>
+              )}
+
+              {isCreatorWallet && selectedStream.cancelable && !isCancelled && (
                 <button onClick={() => prefillAction("cancel", selectedStream.id)} className="flex items-center justify-center gap-1.5 bg-zinc-900 hover:bg-zinc-800 text-red-400 hover:text-red-300 border border-zinc-800 hover:border-zinc-700 py-2.5 rounded-xl transition-all">
                   <XCircle className="w-3.5 h-3.5" />
                   Cancel Stream
                 </button>
+              )}
+
+              {isCreatorWallet && isCancelled && (
+                <div className="flex items-center justify-center gap-1.5 bg-zinc-900 text-zinc-500 border border-zinc-800 py-2.5 rounded-xl text-center">
+                  <XCircle className="w-3.5 h-3.5" />
+                  Cancel Disabled
+                </div>
               )}
 
               {isCreatorWallet && selectedStream.isCsvCreated ? (
@@ -280,7 +312,7 @@ export const StreamDetailsDrawer = memo(function StreamDetailsDrawer({
                     setCsvEditText(`id,amount,duration,cancelable\n${selectedStream.id},${selectedStream.totalAmount},3600,${selectedStream.cancelable}`);
                     setSelectedStream(null);
                   }}
-                  className="col-span-2 flex items-center justify-center gap-1.5 bg-emerald-600 hover:bg-emerald-700 text-white py-2.5 rounded-xl transition-all"
+                  className="sm:col-span-2 flex items-center justify-center gap-1.5 bg-emerald-600 hover:bg-emerald-700 text-white py-2.5 rounded-xl transition-all"
                 >
                   <FileText className="w-3.5 h-3.5" />
                   Edit via CSV Console
@@ -288,7 +320,7 @@ export const StreamDetailsDrawer = memo(function StreamDetailsDrawer({
               ) : isCreatorWallet ? (
                 <>
                   {selectedStream.vestingType === 2 && (
-                    <button onClick={() => prefillAction("unlock_milestone", selectedStream.id)} className="col-span-2 flex items-center justify-center gap-1.5 bg-zinc-900 hover:bg-zinc-800 text-indigo-400 hover:text-indigo-300 border border-zinc-800 hover:border-zinc-700 py-2.5 rounded-xl transition-all">
+                    <button onClick={() => prefillAction("unlock_milestone", selectedStream.id)} className="sm:col-span-2 flex items-center justify-center gap-1.5 bg-zinc-900 hover:bg-zinc-800 text-indigo-400 hover:text-indigo-300 border border-zinc-800 hover:border-zinc-700 py-2.5 rounded-xl transition-all">
                       <Unlock className="w-3.5 h-3.5" />
                       Unlock Milestone Target
                     </button>
@@ -299,7 +331,7 @@ export const StreamDetailsDrawer = memo(function StreamDetailsDrawer({
                       const tab = selectedStream.vestingType === 0 ? "edit_linear" : selectedStream.vestingType === 1 ? "edit_cliff" : "edit_milestone";
                       prefillAction(tab, selectedStream.id);
                     }}
-                    className="col-span-2 flex items-center justify-center gap-1.5 bg-zinc-900 hover:bg-zinc-800 text-zinc-400 hover:text-zinc-200 border border-zinc-850 hover:border-zinc-750 py-2.5 rounded-xl transition-all"
+                    className="sm:col-span-2 flex items-center justify-center gap-1.5 bg-zinc-900 hover:bg-zinc-800 text-zinc-400 hover:text-zinc-200 border border-zinc-850 hover:border-zinc-750 py-2.5 rounded-xl transition-all"
                   >
                     <Settings className="w-3.5 h-3.5" />
                     Modify Vesting Structure

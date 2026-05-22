@@ -141,12 +141,29 @@ function parseTokenAmount(value: string, decimals: number, label: string) {
   return new anchor.BN(normalized || "0");
 }
 
-function buildMilestones(type: string, amount: string, milestoneAmounts: string[], decimals: number) {
+function buildMilestones(
+  type: string,
+  amount: string,
+  milestoneAmounts: string[],
+  decimals: number,
+  milestoneCount?: string
+) {
   if (type !== "2") {
     return [] as { amount: anchor.BN }[];
   }
 
-  const parsedMilestones = milestoneAmounts.map((item, index) => parseTokenAmount(item || "0", decimals, `Milestone #${index + 1} amount`));
+  const requestedCount = Number(milestoneCount || milestoneAmounts.length || 0);
+  const normalizedCount = Number.isFinite(requestedCount) && requestedCount > 0 ? Math.floor(requestedCount) : milestoneAmounts.length;
+  const normalizedMilestoneAmounts = Array.from({ length: normalizedCount }, (_, index) => milestoneAmounts[index] ?? "0");
+
+  const parsedMilestones = normalizedMilestoneAmounts.map((item, index) =>
+    parseTokenAmount(item || "0", decimals, `Milestone #${index + 1} amount`)
+  );
+
+  if (parsedMilestones.some((item) => item.lte(new anchor.BN(0)))) {
+    throw new Error("Each milestone amount must be greater than zero.");
+  }
+
   const totalMilestones = parsedMilestones.reduce((sum, item) => sum.add(item), new anchor.BN(0));
   const totalAmount = parseTokenAmount(amount || "0", decimals, "Total amount");
 
@@ -247,7 +264,7 @@ export async function createStreamOnChain({
     throw new Error("Cliff duration must be a positive number of seconds.");
   }
 
-  const milestones = buildMilestones(input.type, input.amount, input.milestoneAmounts, mintDecimals);
+  const milestones = buildMilestones(input.type, input.amount, input.milestoneAmounts, mintDecimals, input.milestoneCount);
   const amountBn = parseTokenAmount(input.amount, mintDecimals, "Total amount");
   const [configAddress] = PublicKey.findProgramAddressSync([Buffer.from("config")], PROGRAM_ID);
   const [streamAddress] = PublicKey.findProgramAddressSync(

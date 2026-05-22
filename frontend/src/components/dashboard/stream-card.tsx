@@ -22,6 +22,7 @@ export const StreamCard = memo(function StreamCard({
   const unlocked = Number(stream.unlockedAmount || 0);
   const mintDecimals = typeof stream.mintDecimals === "number" ? stream.mintDecimals : null;
   const amountLabel = getAmountUnitLabel(stream.mint);
+  const isCancelled = Number(stream.status) === 3 || Boolean(stream.cancelled);
 
   let vested = 0;
   let progress = 0;
@@ -46,11 +47,15 @@ export const StreamCard = memo(function StreamCard({
     progress = Math.min((elapsed / duration) * 100, 100);
   }
 
-  const claimable = Math.max(vested - withdrawn, 0);
+  if (isCancelled) {
+    progress = total > 0 ? Math.min((withdrawn / total) * 100, 100) : 0;
+  }
+
+  const claimable = isCancelled ? 0 : Math.max(vested - withdrawn, 0);
   const isMilestoneCompleted = stream.vestingType === 2 && (Number(stream.completedAt || 0) > 0 || unlocked >= total);
-  const isCompleted = stream.vestingType === 2 ? isMilestoneCompleted : withdrawn >= total;
+  const isCompleted = !isCancelled && (stream.vestingType === 2 ? isMilestoneCompleted : withdrawn >= total);
   const isNotStarted = now < start;
-  const isEnded = stream.vestingType === 2 ? isMilestoneCompleted : now >= end;
+  const isEnded = !isCancelled && (stream.vestingType === 2 ? isMilestoneCompleted : now >= end);
   const isCliffLocked = stream.vestingType === 1 && now < cliff;
   const isMilestone = stream.vestingType === 2;
   const unlockedCount = isMilestone ? Math.round((Number(stream.unlockedAmount || 0) / Number(stream.totalAmount)) * stream.milestoneCount) : 0;
@@ -76,7 +81,9 @@ export const StreamCard = memo(function StreamCard({
 
         <span
           className={`text-[10px] px-2.5 py-0.5 rounded-full font-bold uppercase tracking-widest ${
-            isCompleted
+            isCancelled
+              ? "bg-rose-500/10 text-rose-400 border border-rose-500/25"
+            : isCompleted
               ? "bg-emerald-500/10 text-emerald-400 border border-emerald-500/25"
               : isEnded
               ? "bg-zinc-500/10 text-zinc-400 border border-zinc-500/25"
@@ -89,7 +96,7 @@ export const StreamCard = memo(function StreamCard({
               : "bg-blue-500/10 text-blue-400 border border-blue-500/25"
           }`}
         >
-          {isCompleted ? "Completed" : isEnded ? "Ended" : isNotStarted ? "Scheduled" : isCliffLocked ? "Cliff Lock" : isMilestone ? `Milestone Index ${unlockedCount}` : "Streaming"}
+          {isCancelled ? "Cancelled" : isCompleted ? "Completed" : isEnded ? "Ended" : isNotStarted ? "Scheduled" : isCliffLocked ? "Cliff Lock" : isMilestone ? `Milestone Index ${unlockedCount}` : "Streaming"}
         </span>
       </div>
 

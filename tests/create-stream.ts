@@ -130,6 +130,25 @@ async function expectError(promise: Promise<any>, fragment: string) {
   }
 }
 
+function buildMilestoneRemainingAccounts(
+  streamPDA: PublicKey,
+  count: number,
+  programId: PublicKey
+) {
+  const accounts: { pubkey: PublicKey; isWritable: boolean; isSigner: boolean }[] = [];
+
+  for (let i = 0; i < count; i++) {
+    const [pda] = PublicKey.findProgramAddressSync(
+      [Buffer.from("milestone"), streamPDA.toBuffer(), Buffer.from([i])],
+      programId
+    );
+
+    accounts.push({ pubkey: pda, isWritable: true, isSigner: false });
+  }
+
+  return accounts;
+}
+
 describe("create-stream", () => {
   let context: ProgramTestContext;
   let provider: BankrunProvider;
@@ -270,6 +289,152 @@ describe("create-stream", () => {
     expect(stream.withdrawn.toString()).to.equal("0");
   });
 
+  it("Creates a cliff vesting stream when cliff equals start", async () => {
+    const nonce = new BN(9000012);
+    const startTs = BASE_NOW + 60;
+    const cliffTs = startTs;
+    const endTs = startTs + 100;
+
+    const [streamPDA] = PublicKey.findProgramAddressSync(
+      [
+        Buffer.from("stream"),
+        creator.publicKey.toBuffer(),
+        recipient.publicKey.toBuffer(),
+        nonce.toArrayLike(Buffer, "le", 8),
+      ],
+      program.programId
+    );
+
+    await program.methods
+      .createStream(
+        amount,
+        new BN(startTs),
+        new BN(cliffTs),
+        new BN(endTs),
+        VESTING_TYPE_CLIFF,
+        [],
+        nonce
+      )
+      .accounts({
+        creator: creator.publicKey,
+        recipient: recipient.publicKey,
+        mint,
+        creatorTokenAccount,
+        tokenProgram: TOKEN_PROGRAM_ID,
+      })
+      .signers([creator])
+      .rpc();
+
+    const stream = await program.account.streamAccount.fetch(streamPDA);
+    expect(stream.cliffTs.toString()).to.equal(startTs.toString());
+    expect(stream.startTs.toString()).to.equal(startTs.toString());
+    expect(stream.endTs.toString()).to.equal(endTs.toString());
+    expect(stream.vestingType).to.equal(VESTING_TYPE_CLIFF);
+  });
+
+  it("Creates a cliff vesting stream when cliff equals end", async () => {
+    const nonce = new BN(9000013);
+    const startTs = BASE_NOW + 60;
+    const endTs = startTs + 100;
+    const cliffTs = endTs;
+
+    const [streamPDA] = PublicKey.findProgramAddressSync(
+      [
+        Buffer.from("stream"),
+        creator.publicKey.toBuffer(),
+        recipient.publicKey.toBuffer(),
+        nonce.toArrayLike(Buffer, "le", 8),
+      ],
+      program.programId
+    );
+
+    await program.methods
+      .createStream(
+        amount,
+        new BN(startTs),
+        new BN(cliffTs),
+        new BN(endTs),
+        VESTING_TYPE_CLIFF,
+        [],
+        nonce
+      )
+      .accounts({
+        creator: creator.publicKey,
+        recipient: recipient.publicKey,
+        mint,
+        creatorTokenAccount,
+        tokenProgram: TOKEN_PROGRAM_ID,
+      })
+      .signers([creator])
+      .rpc();
+
+    const stream = await program.account.streamAccount.fetch(streamPDA);
+    expect(stream.cliffTs.toString()).to.equal(endTs.toString());
+    expect(stream.startTs.toString()).to.equal(startTs.toString());
+    expect(stream.endTs.toString()).to.equal(endTs.toString());
+    expect(stream.vestingType).to.equal(VESTING_TYPE_CLIFF);
+  });
+
+  it("Fails when cliff stream duration is too short", async () => {
+    const nonce = new BN(9000011);
+    const startTs = BASE_NOW + 60;
+    const cliffTs = startTs + 10;
+    const endTs = startTs + 30;
+
+    await expectError(
+      program.methods
+        .createStream(
+          amount,
+          new BN(startTs),
+          new BN(cliffTs),
+          new BN(endTs),
+          VESTING_TYPE_CLIFF,
+          [],
+          nonce
+        )
+        .accounts({
+          creator: creator.publicKey,
+          recipient: recipient.publicKey,
+          mint,
+          creatorTokenAccount,
+          tokenProgram: TOKEN_PROGRAM_ID,
+        })
+        .signers([creator])
+        .rpc(),
+      "DurationTooShort"
+    );
+  });
+
+  it("Fails when cliff stream start equals end", async () => {
+    const nonce = new BN(9000014);
+    const startTs = BASE_NOW + 60;
+    const cliffTs = startTs;
+    const endTs = startTs;
+
+    await expectError(
+      program.methods
+        .createStream(
+          amount,
+          new BN(startTs),
+          new BN(cliffTs),
+          new BN(endTs),
+          VESTING_TYPE_CLIFF,
+          [],
+          nonce
+        )
+        .accounts({
+          creator: creator.publicKey,
+          recipient: recipient.publicKey,
+          mint,
+          creatorTokenAccount,
+          tokenProgram: TOKEN_PROGRAM_ID,
+        })
+        .signers([creator])
+        .rpc(),
+      "InvalidSchedule"
+    );
+  });
+
   it("Fails when cliff date is after end date", async () => {
     const nonce = new BN(900004);
     const startTs = BASE_NOW + 60;
@@ -346,8 +511,278 @@ describe("create-stream", () => {
         })
         .remainingAccounts(remainingAccounts)
         .signers([creator])
-        .rpc(),
+      .rpc(),
       "InvalidMilestoneAmount"
+    );
+  });
+
+  it("Fails when milestone total overflows u64", async () => {
+    const nonce = new BN(9000024);
+    const startTs = BASE_NOW + 60;
+    const endTs = BASE_NOW + 86400;
+
+    const [streamPDA] = PublicKey.findProgramAddressSync(
+      [
+        Buffer.from("stream"),
+        creator.publicKey.toBuffer(),
+        recipient.publicKey.toBuffer(),
+        nonce.toArrayLike(Buffer, "le", 8),
+      ],
+      program.programId
+    );
+
+    const remainingAccounts = buildMilestoneRemainingAccounts(streamPDA, 2, program.programId);
+
+    await expectError(
+      program.methods
+        .createStream(
+          new BN(1),
+          new BN(startTs),
+          new BN(startTs),
+          new BN(endTs),
+          VESTING_TYPE_MILESTONE,
+          [
+            { amount: new BN("18446744073709551615") },
+            { amount: new BN(1) },
+          ],
+          nonce
+        )
+        .accounts({
+          creator: creator.publicKey,
+          recipient: recipient.publicKey,
+          mint,
+          creatorTokenAccount,
+          tokenProgram: TOKEN_PROGRAM_ID,
+        })
+        .remainingAccounts(remainingAccounts)
+        .signers([creator])
+        .rpc(),
+      "MathOverflow"
+    );
+  });
+
+  it("Fails when milestone array is empty", async () => {
+    const nonce = new BN(90000241);
+    const startTs = BASE_NOW + 60;
+    const endTs = BASE_NOW + 86400;
+
+    await expectError(
+      program.methods
+        .createStream(
+          amount,
+          new BN(startTs),
+          new BN(startTs),
+          new BN(endTs),
+          VESTING_TYPE_MILESTONE,
+          [],
+          nonce
+        )
+        .accounts({
+          creator: creator.publicKey,
+          recipient: recipient.publicKey,
+          mint,
+          creatorTokenAccount,
+          tokenProgram: TOKEN_PROGRAM_ID,
+        })
+        .signers([creator])
+        .rpc(),
+      "InvalidMilestoneCount"
+    );
+  });
+
+  it("Fails when milestone remainingAccounts length is too long", async () => {
+    const nonce = new BN(90000242);
+    const startTs = BASE_NOW + 60;
+    const endTs = BASE_NOW + 86400;
+
+    const [streamPDA] = PublicKey.findProgramAddressSync(
+      [
+        Buffer.from("stream"),
+        creator.publicKey.toBuffer(),
+        recipient.publicKey.toBuffer(),
+        nonce.toArrayLike(Buffer, "le", 8),
+      ],
+      program.programId
+    );
+
+    const remainingAccounts = buildMilestoneRemainingAccounts(streamPDA, 5, program.programId);
+
+    await expectError(
+      program.methods
+        .createStream(
+          amount,
+          new BN(startTs),
+          new BN(startTs),
+          new BN(endTs),
+          VESTING_TYPE_MILESTONE,
+          [
+            { amount: amount.div(new BN(4)) },
+            { amount: amount.div(new BN(4)) },
+            { amount: amount.div(new BN(4)) },
+            { amount: amount.div(new BN(4)) },
+          ],
+          nonce
+        )
+        .accounts({
+          creator: creator.publicKey,
+          recipient: recipient.publicKey,
+          mint,
+          creatorTokenAccount,
+          tokenProgram: TOKEN_PROGRAM_ID,
+        })
+        .remainingAccounts(remainingAccounts)
+        .signers([creator])
+        .rpc(),
+      "InvalidMilestoneCount"
+    );
+  });
+
+  it("Fails when any milestone amount is zero", async () => {
+    const nonce = new BN(9000025);
+    const startTs = BASE_NOW + 60;
+    const endTs = BASE_NOW + 86400;
+
+    const [streamPDA] = PublicKey.findProgramAddressSync(
+      [
+        Buffer.from("stream"),
+        creator.publicKey.toBuffer(),
+        recipient.publicKey.toBuffer(),
+        nonce.toArrayLike(Buffer, "le", 8),
+      ],
+      program.programId
+    );
+
+    const remainingAccounts = [] as { pubkey: PublicKey; isWritable: boolean; isSigner: boolean }[];
+    for (let i = 0; i < 4; i++) {
+      const [pda] = PublicKey.findProgramAddressSync(
+        [Buffer.from("milestone"), streamPDA.toBuffer(), Buffer.from([i])],
+        program.programId
+      );
+      remainingAccounts.push({ pubkey: pda, isWritable: true, isSigner: false });
+    }
+
+    await expectError(
+      program.methods
+        .createStream(
+          amount,
+          new BN(startTs),
+          new BN(startTs),
+          new BN(endTs),
+          VESTING_TYPE_MILESTONE,
+          [
+            { amount: amount.div(new BN(2)) },
+            { amount: new BN(0) },
+            { amount: amount.div(new BN(4)) },
+            { amount: amount.div(new BN(4)) },
+          ],
+          nonce
+        )
+        .accounts({
+          creator: creator.publicKey,
+          recipient: recipient.publicKey,
+          mint,
+          creatorTokenAccount,
+          tokenProgram: TOKEN_PROGRAM_ID,
+        })
+        .remainingAccounts(remainingAccounts)
+        .signers([creator])
+        .rpc(),
+      "InvalidAmount"
+    );
+  });
+
+  it("Fails when milestone remainingAccounts length is too short", async () => {
+    const nonce = new BN(9000026);
+    const startTs = BASE_NOW + 60;
+    const endTs = BASE_NOW + 86400;
+
+    const [streamPDA] = PublicKey.findProgramAddressSync(
+      [
+        Buffer.from("stream"),
+        creator.publicKey.toBuffer(),
+        recipient.publicKey.toBuffer(),
+        nonce.toArrayLike(Buffer, "le", 8),
+      ],
+      program.programId
+    );
+
+    const remainingAccounts = buildMilestoneRemainingAccounts(streamPDA, 3, program.programId);
+
+    await expectError(
+      program.methods
+        .createStream(
+          amount,
+          new BN(startTs),
+          new BN(startTs),
+          new BN(endTs),
+          VESTING_TYPE_MILESTONE,
+          [
+            { amount: amount.div(new BN(4)) },
+            { amount: amount.div(new BN(4)) },
+            { amount: amount.div(new BN(4)) },
+            { amount: amount.div(new BN(4)) },
+          ],
+          nonce
+        )
+        .accounts({
+          creator: creator.publicKey,
+          recipient: recipient.publicKey,
+          mint,
+          creatorTokenAccount,
+          tokenProgram: TOKEN_PROGRAM_ID,
+        })
+        .remainingAccounts(remainingAccounts)
+        .signers([creator])
+        .rpc(),
+      "InvalidMilestoneCount"
+    );
+  });
+
+  it("Fails when milestone PDA order is incorrect", async () => {
+    const nonce = new BN(9000027);
+    const startTs = BASE_NOW + 60;
+    const endTs = BASE_NOW + 86400;
+
+    const [streamPDA] = PublicKey.findProgramAddressSync(
+      [
+        Buffer.from("stream"),
+        creator.publicKey.toBuffer(),
+        recipient.publicKey.toBuffer(),
+        nonce.toArrayLike(Buffer, "le", 8),
+      ],
+      program.programId
+    );
+
+    const remainingAccounts = buildMilestoneRemainingAccounts(streamPDA, 4, program.programId);
+    [remainingAccounts[1], remainingAccounts[2]] = [remainingAccounts[2], remainingAccounts[1]];
+
+    await expectError(
+      program.methods
+        .createStream(
+          amount,
+          new BN(startTs),
+          new BN(startTs),
+          new BN(endTs),
+          VESTING_TYPE_MILESTONE,
+          [
+            { amount: amount.div(new BN(4)) },
+            { amount: amount.div(new BN(4)) },
+            { amount: amount.div(new BN(4)) },
+            { amount: amount.div(new BN(4)) },
+          ],
+          nonce
+        )
+        .accounts({
+          creator: creator.publicKey,
+          recipient: recipient.publicKey,
+          mint,
+          creatorTokenAccount,
+          tokenProgram: TOKEN_PROGRAM_ID,
+        })
+        .remainingAccounts(remainingAccounts)
+        .signers([creator])
+        .rpc(),
+      "InvalidMilestonePda"
     );
   });
 

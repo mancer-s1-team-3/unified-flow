@@ -36,3 +36,40 @@ export function getAmountUnitLabel(mint: string | null | undefined) {
 
   return knownLabels[mint] ?? "tokens";
 }
+
+export function getMilestoneAllocations({
+  totalAmount,
+  milestoneCount,
+  milestones,
+}: {
+  totalAmount: string | number | bigint;
+  milestoneCount: number;
+  milestones?: string | null;
+}) {
+  const count = Number.isFinite(milestoneCount) ? Math.max(Math.floor(milestoneCount), 0) : 0;
+
+  if (milestones && milestones.trim() !== "") {
+    const parsed = milestones.split(";").map((value) => {
+      const amount = Number(value);
+      return Number.isFinite(amount) ? amount : 0;
+    });
+
+    if (count > 0) {
+      const normalized = parsed.slice(0, count);
+      while (normalized.length < count) {
+        normalized.push(0);
+      }
+      return normalized;
+    }
+
+    return parsed;
+  }
+
+  if (count <= 0) {
+    return [];
+  }
+
+  const total = Number(totalAmount || 0);
+  const base = Math.floor(total / count);
+  return Array(count).fill(base);
+}

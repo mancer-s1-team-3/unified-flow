@@ -155,6 +155,12 @@ export async function withdrawFromStreamOnChain({
 
   const streamState: any = await programAny.account.streamAccount.fetch(streamAddress);
 
+  const isCancelled = Number(streamState.status) === 3 || Boolean(streamState.cancelled);
+
+  if (isCancelled) {
+    throw new Error("This stream has been cancelled and can no longer be withdrawn.");
+  }
+
   if (streamState.recipient.toBase58() !== recipient.toBase58()) {
     throw new Error("Connected wallet is not the recipient for this stream.");
   }
