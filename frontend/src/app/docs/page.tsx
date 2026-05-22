@@ -3,14 +3,14 @@
 import React, { useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { 
-  BookOpen, 
-  Terminal, 
-  Cpu, 
-  Globe, 
-  Copy, 
-  Check, 
-  ArrowLeft, 
+import {
+  BookOpen,
+  Terminal,
+  Cpu,
+  Globe,
+  Copy,
+  Check,
+  ArrowLeft,
   Info,
   Clock,
   Layers,
@@ -151,8 +151,8 @@ const CodeSnippet = ({ code }: { code: string }) => {
 
   return (
     <div className="relative mt-2 rounded-xl bg-zinc-900 border border-zinc-800 p-4 font-mono text-xs text-zinc-300 overflow-x-auto shadow-inner group">
-      <button 
-        onClick={handleCopy} 
+      <button
+        onClick={handleCopy}
         className="absolute right-3 top-3 p-1.5 rounded-lg bg-zinc-800 hover:bg-zinc-700 text-zinc-400 hover:text-zinc-200 transition-colors opacity-0 group-hover:opacity-100 duration-200"
         title="Copy code"
       >
@@ -186,13 +186,13 @@ export default function DocsPage() {
 
   return (
     <div className="min-h-screen bg-zinc-950 text-zinc-50 font-sans selection:bg-indigo-500/30 selection:text-indigo-200">
-      
+
       {/* 🚀 GLOWING HEADER BACKGROUND */}
       <div className="absolute top-0 left-0 right-0 h-[500px] bg-gradient-to-b from-indigo-950/20 via-transparent to-transparent pointer-events-none blur-[120px]" />
-      
+
       {/* 🌌 MAIN WRAPPER */}
       <div className="max-w-7xl mx-auto px-6 py-12 relative z-10">
-        
+
         {/* BACK TO APP */}
         <div className="mb-8">
           <button
@@ -240,11 +240,10 @@ export default function DocsPage() {
         <nav className="flex flex-wrap gap-2.5 border-b border-zinc-800 pb-5 mb-10">
           <button
             onClick={() => setActiveTab("overview")}
-            className={`flex items-center gap-2 px-5 py-2.5 rounded-xl font-medium text-sm border transition-all ${
-              activeTab === "overview"
+            className={`flex items-center gap-2 px-5 py-2.5 rounded-xl font-medium text-sm border transition-all ${activeTab === "overview"
                 ? "bg-indigo-600/15 border-indigo-500/50 text-indigo-300 shadow-lg shadow-indigo-900/10"
                 : "bg-zinc-900/50 border-zinc-800 text-zinc-400 hover:text-zinc-200 hover:bg-zinc-950"
-            }`}
+              }`}
           >
             <BookOpen className="w-4.5 h-4.5" />
             Vesting Models
@@ -252,11 +251,10 @@ export default function DocsPage() {
 
           <button
             onClick={() => setActiveTab("api")}
-            className={`flex items-center gap-2 px-5 py-2.5 rounded-xl font-medium text-sm border transition-all ${
-              activeTab === "api"
+            className={`flex items-center gap-2 px-5 py-2.5 rounded-xl font-medium text-sm border transition-all ${activeTab === "api"
                 ? "bg-indigo-600/15 border-indigo-500/50 text-indigo-300 shadow-lg shadow-indigo-900/10"
                 : "bg-zinc-900/50 border-zinc-800 text-zinc-400 hover:text-zinc-200 hover:bg-zinc-950"
-            }`}
+              }`}
           >
             <Globe className="w-4.5 h-4.5" />
             REST API
@@ -264,11 +262,10 @@ export default function DocsPage() {
 
           <button
             onClick={() => setActiveTab("mcp")}
-            className={`flex items-center gap-2 px-5 py-2.5 rounded-xl font-medium text-sm border transition-all ${
-              activeTab === "mcp"
+            className={`flex items-center gap-2 px-5 py-2.5 rounded-xl font-medium text-sm border transition-all ${activeTab === "mcp"
                 ? "bg-indigo-600/15 border-indigo-500/50 text-indigo-300 shadow-lg shadow-indigo-900/10"
                 : "bg-zinc-900/50 border-zinc-800 text-zinc-400 hover:text-zinc-200 hover:bg-zinc-950"
-            }`}
+              }`}
           >
             <Cpu className="w-4.5 h-4.5" />
             Model Context Protocol
@@ -276,11 +273,10 @@ export default function DocsPage() {
 
           <button
             onClick={() => setActiveTab("cli")}
-            className={`flex items-center gap-2 px-5 py-2.5 rounded-xl font-medium text-sm border transition-all ${
-              activeTab === "cli"
+            className={`flex items-center gap-2 px-5 py-2.5 rounded-xl font-medium text-sm border transition-all ${activeTab === "cli"
                 ? "bg-indigo-600/15 border-indigo-500/50 text-indigo-300 shadow-lg shadow-indigo-900/10"
                 : "bg-zinc-900/50 border-zinc-800 text-zinc-400 hover:text-zinc-200 hover:bg-zinc-950"
-            }`}
+              }`}
           >
             <Terminal className="w-4.5 h-4.5" />
             CLI & Agent Skills
@@ -289,10 +285,10 @@ export default function DocsPage() {
 
         {/* 📦 CONTENT CONTAINER */}
         <div className="grid grid-cols-1 lg:grid-cols-4 gap-8">
-          
+
           {/* MAIN COLUMN */}
           <main className="lg:col-span-3 min-h-[500px]">
-            
+
             {/* ================================================================
                 TAB 1: PROTOCOL OVERVIEW
                 ================================================================ */}
@@ -309,7 +305,7 @@ export default function DocsPage() {
                 </div>
 
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                  
+
                   {/* CARD 1 */}
                   <div className="p-6 rounded-2xl bg-zinc-900/30 border border-zinc-800 hover:border-zinc-700 transition-all flex flex-col justify-between">
                     <div>
@@ -391,7 +387,7 @@ export default function DocsPage() {
                         <code className="text-zinc-100 font-mono text-sm font-semibold">{api.path}</code>
                       </div>
                       <p className="mt-3 text-zinc-400 text-xs">{api.desc}</p>
-                      
+
                       <div className="mt-4">
                         <h4 className="text-2xs uppercase tracking-wider font-semibold text-zinc-500 mb-2">Example Response Payload</h4>
                         <CodeSnippet code={api.response} />
@@ -537,7 +533,7 @@ export default function DocsPage() {
 
           {/* SIDEBAR AD CARD */}
           <aside className="space-y-6">
-            
+
             {/* PROTOCOL STATS CARD */}
             <div className="p-6 rounded-2xl bg-zinc-900/30 border border-zinc-800 shadow-sm relative overflow-hidden group">
               <div className="absolute -right-4 -bottom-4 w-24 h-24 bg-indigo-500/5 rounded-full blur-xl group-hover:bg-indigo-500/10 transition-colors" />
