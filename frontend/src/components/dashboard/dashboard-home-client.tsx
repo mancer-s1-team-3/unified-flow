@@ -454,6 +454,19 @@ export default function Home({ initialStreams = [] }: Props) {
           },
         });
 
+        setStreams((prev) =>
+          prev.map((stream) =>
+            stream.id === data.streamId
+              ? { ...stream, status: 3, cancelled: true }
+              : stream
+          )
+        );
+        setSelectedStream((prev: any) =>
+          prev && prev.id === data.streamId
+            ? { ...prev, status: 3, cancelled: true }
+            : prev
+        );
+
         showNotification("success", `Stream cancelled on-chain. Signature: ${result.signature.slice(0, 8)}...`);
         fetchStreams();
         setActiveTab("streams");

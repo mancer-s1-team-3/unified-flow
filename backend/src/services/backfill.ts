@@ -4,6 +4,7 @@ import { connection } from "./rpc";
 import prisma from "../db/prisma";
 import { parseEventsSafely } from "./eventParser";
 import {
+    normalizeStreamCancelled,
     normalizeMilestoneUnlocked,
     normalizeStreamCreated,
     normalizeTokensClaimed,
@@ -77,6 +78,8 @@ export async function backfill() {
                         await handleTokensClaimed(event.data, tx, sigInfo.signature);
                     } else if (event.name === "MilestoneUnlocked") {
                         await handleMilestoneUnlocked(event.data, tx, sigInfo.signature);
+                    } else if (event.name === "StreamCancelled") {
+                        await handleStreamCancelled(event.data, tx, sigInfo.signature);
                     }
                 }
             } catch (err) {
@@ -251,4 +254,53 @@ async function handleMilestoneUnlocked(
     });
 
     console.log(`Backfilled milestone unlock for stream ${streamId}: unlocked ${milestoneAmount.toString()} tokens`);
+}
+
+async function handleStreamCancelled(
+    event: any,
+    tx: any,
+    signature: string
+) {
+    console.log("STREAM CANCELLED (BACKFILL):", event);
+
+    const normalized = normalizeStreamCancelled(event);
+    if (!normalized) {
+        console.warn("Skipping StreamCancelled event with missing fields:", event);
+        return;
+    }
+
+    const streamId = normalized.stream;
+
+    const stream = await prisma.stream.findUnique({
+        where: { id: streamId }
+    });
+
+    if (stream) {
+        const nextWithdrawn = stream.withdrawn + normalized.claimableForRecipient;
+
+        await prisma.stream.update({
+            where: { id: streamId },
+            data: {
+                withdrawn: nextWithdrawn,
+                status: 3,
+            }
+        });
+    } else {
+        console.log(`Stream ${streamId} not found in database, skipping cancel update.`);
+    }
+
+    await prisma.transaction.upsert({
+        where: { signature },
+        update: {},
+        create: {
+            id: signature,
+            signature,
+            slot: BigInt(tx.slot),
+            streamId: stream ? streamId : null,
+            type: "CANCEL",
+            raw: JSON.parse(JSON.stringify(tx)),
+        }
+    });
+
+    console.log(`Backfilled cancel for stream ${streamId}: vested ${normalized.vestedAmount.toString()} tokens`);
 }
