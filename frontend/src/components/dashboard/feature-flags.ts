@@ -1,5 +1,4 @@
 export const FEATURE_FLAGS = {
-  csvBulkCreate: true,
   csvBulkEdit: true,
   editMilestone: true,
   editLinear: true,

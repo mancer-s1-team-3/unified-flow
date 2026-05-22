@@ -39,6 +39,7 @@ type Props = {
   compareVersionSelected: string;
   setCompareVersionSelected: (value: string) => void;
   csvVersions: any[];
+  handleDeleteCsvVersion: () => void;
   csvDiffResult: any;
   setCsvDiffResult: (value: any) => void;
   loadingDiff: boolean;
@@ -84,6 +85,7 @@ export function DashboardActionPanels(props: Props) {
     compareVersionSelected,
     setCompareVersionSelected,
     csvVersions,
+    handleDeleteCsvVersion,
     csvDiffResult,
     setCsvDiffResult,
     loadingDiff,
@@ -187,8 +189,7 @@ export function DashboardActionPanels(props: Props) {
                 onClick={() => setCreateMode("csv")}
                 className={`w-full px-3 py-2 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-1.5 sm:w-auto ${createMode === "csv" ? "bg-indigo-600 text-white" : "text-zinc-400 hover:text-zinc-200"}`}
               >
-                CSV Bulk Import
-                {isWipFeature("csvBulkCreate") && <span className="inline-flex rounded-full border border-amber-500/30 bg-amber-500/10 px-1.5 py-0.5 text-[9px] font-black uppercase tracking-wider text-amber-300">WIP</span>}
+                CSV Bulk Create
               </button>
             </div>
           </div>
@@ -403,13 +404,21 @@ export function DashboardActionPanels(props: Props) {
                   <input type="file" accept=".csv" ref={fileInputCreateRef} onChange={(e) => handleCsvUpload(e, "create")} className="hidden" />
                 </div>
                 <div className="flex min-w-0 flex-col gap-3 sm:flex-row sm:items-center">
-                  <div className="flex min-w-0 flex-wrap items-center gap-2">
-                    <span className="text-[9px] text-zinc-500 font-black uppercase tracking-wider">Baseline:</span>
-                    <select value={compareVersionSelected} onChange={(e) => setCompareVersionSelected(e.target.value)} className="min-w-0 bg-zinc-900 border border-zinc-805 rounded-xl px-2.5 py-2 text-[10px] text-zinc-300 font-extrabold focus:outline-none focus:border-indigo-500">
-                      <option value="0">Live Active DB</option>
-                      {csvVersions.map((v) => <option key={v.id} value={v.version}>Version {v.version} ({v.filename})</option>)}
-                    </select>
-                  </div>
+                <div className="flex min-w-0 flex-wrap items-center gap-2">
+                  <span className="text-[9px] text-zinc-500 font-black uppercase tracking-wider">Baseline:</span>
+                  <select value={compareVersionSelected} onChange={(e) => setCompareVersionSelected(e.target.value)} className="min-w-0 bg-zinc-900 border border-zinc-805 rounded-xl px-2.5 py-2 text-[10px] text-zinc-300 font-extrabold focus:outline-none focus:border-indigo-500">
+                    <option value="0">Live Active DB</option>
+                    {csvVersions.map((v) => <option key={v.id} value={v.version}>Version {v.version} ({v.filename})</option>)}
+                  </select>
+                  {compareVersionSelected !== "0" && (
+                    <button
+                      onClick={handleDeleteCsvVersion}
+                      className="rounded-xl border border-rose-900/60 bg-rose-950/20 px-3 py-2 text-[10px] font-black uppercase tracking-wider text-rose-300 hover:bg-rose-950/40 transition-all"
+                    >
+                      Hapus Version
+                    </button>
+                  )}
+                </div>
                   <button onClick={() => handleAnalyzeDiff("create")} disabled={loadingDiff} className="flex items-center justify-center gap-1.5 px-3 py-2 bg-indigo-650 hover:bg-indigo-600 border border-indigo-700 rounded-xl text-[10px] font-black text-white transition-all disabled:opacity-40 sm:w-auto">
                     {loadingDiff ? <RefreshCw className="w-3 h-3 animate-spin text-white" /> : <Layers className="w-3 h-3" />}Analyze Diff
                   </button>
@@ -449,6 +458,14 @@ export function DashboardActionPanels(props: Props) {
                     <option value="0">Live Active DB</option>
                     {csvVersions.map((v) => <option key={v.id} value={v.version}>Version {v.version} ({v.filename})</option>)}
                   </select>
+                  {compareVersionSelected !== "0" && (
+                    <button
+                      onClick={handleDeleteCsvVersion}
+                      className="rounded-xl border border-rose-900/60 bg-rose-950/20 px-3 py-1.5 text-[10px] font-black uppercase tracking-wider text-rose-300 hover:bg-rose-950/40 transition-all"
+                    >
+                      Hapus Version
+                    </button>
+                  )}
                 </div>
                 <button onClick={() => handleAnalyzeDiff("edit")} disabled={loadingDiff} className="flex items-center gap-1.5 px-3 py-1.5 bg-emerald-600 hover:bg-emerald-500 border border-emerald-700 rounded-xl text-[10px] font-black text-white transition-all disabled:opacity-40">
                   {loadingDiff ? <RefreshCw className="w-3 h-3 animate-spin text-white" /> : <Layers className="w-3 h-3" />}Analyze Diff

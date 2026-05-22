@@ -10,7 +10,7 @@ import { NotificationBanner } from "@/components/dashboard/notification-banner";
 import { StreamDetailsDrawer } from "@/components/dashboard/stream-details-drawer";
 import { DashboardStreamsPanel } from "@/components/dashboard/dashboard-streams-panel";
 import type { TabId } from "@/components/dashboard/types";
-import { createStreamOnChain } from "@/lib/solana/create-stream";
+import { createStreamBatchOnChain, createStreamOnChain } from "@/lib/solana/create-stream";
 import { withdrawFromStreamOnChain } from "@/lib/solana/withdraw";
 import { cancelStreamOnChain } from "@/lib/solana/cancel";
 import { unlockMilestoneOnChain } from "@/lib/solana/unlock-milestone";
@@ -172,12 +172,50 @@ export default function Home({ initialStreams = [] }: Props) {
 
   const fetchCsvVersions = useCallback(async () => {
     try {
-      const res = await api.get("/csv/versions");
+      const params = connectedWalletAddress ? { uploader: connectedWalletAddress } : undefined;
+      const res = await api.get("/csv/versions", { params });
       setCsvVersions(res.data);
     } catch (err) {
       console.error("Failed to fetch CSV versions:", err);
     }
-  }, []);
+  }, [connectedWalletAddress]);
+
+  const handleDeleteCsvVersion = useCallback(async () => {
+    if (!connectedWalletAddress) {
+      showNotification("error", "Connect the creator wallet before deleting a CSV version.");
+      return;
+    }
+
+    if (compareVersionSelected === "0") {
+      showNotification("error", "Select a historical CSV version first.");
+      return;
+    }
+
+    const versionToDelete = Number(compareVersionSelected);
+    if (!Number.isFinite(versionToDelete) || versionToDelete <= 0) {
+      showNotification("error", "Invalid CSV version selected.");
+      return;
+    }
+
+    const confirmed = window.confirm(`Delete CSV version ${versionToDelete}? This cannot be undone.`);
+    if (!confirmed) return;
+
+    try {
+      await api.delete("/csv/version", {
+        data: {
+          version: versionToDelete,
+          uploader: connectedWalletAddress,
+        },
+      });
+
+      showNotification("success", `CSV version ${versionToDelete} deleted.`);
+      setCompareVersionSelected("0");
+      setCsvDiffResult(null);
+      fetchCsvVersions();
+    } catch (err: any) {
+      showNotification("error", err.response?.data?.error || err?.message || "Failed to delete CSV version.");
+    }
+  }, [compareVersionSelected, connectedWalletAddress, fetchCsvVersions, showNotification]);
 
   const handleAnalyzeDiff = async (mode: "create" | "edit") => {
     const csvText = mode === "create" ? csvCreateText : csvEditText;
@@ -190,7 +228,8 @@ export default function Home({ initialStreams = [] }: Props) {
     try {
       const payload: any = {
         csvText,
-        mode
+        mode,
+        uploader: connectedWalletAddress || undefined,
       };
       if (compareVersionSelected !== "0") {
         payload.compareVersion = Number(compareVersionSelected);
@@ -219,6 +258,11 @@ export default function Home({ initialStreams = [] }: Props) {
       setLoadingDetails(false);
     }
   }, [showNotification]);
+
+  useEffect(() => {
+    setCompareVersionSelected("0");
+    fetchCsvVersions();
+  }, [connectedWalletAddress, fetchCsvVersions]);
 
   useEffect(() => {
     fetchStreams();
@@ -297,35 +341,67 @@ export default function Home({ initialStreams = [] }: Props) {
   const parseCsv = (csvText: string) => {
     const lines = csvText.trim().split("\n");
     if (lines.length < 2) return [];
-    const headers = lines[0].split(",").map(h => h.trim());
-    return lines.slice(1).map((line, lineIdx) => {
-      const values = line.split(",").map(v => v.trim());
+
+    const headers = lines[0].split(",").map((header) => header.trim().toLowerCase());
+
+    return lines.slice(1).map((line) => {
+      const values = line.split(",").map((value) => value.trim());
       const obj: any = {};
+
       headers.forEach((header, index) => {
-        if (values[index] !== undefined) {
-          obj[header] = values[index] === "true" ? true : values[index] === "false" ? false : values[index];
+        if (values[index] === undefined) return;
+
+        const rawValue = values[index];
+        const parsedValue = rawValue === "true" ? true : rawValue === "false" ? false : rawValue;
+
+        if (header === "cliff_duration" || header === "cliffduration") {
+          obj.cliffDuration = parsedValue;
+          return;
         }
+
+        if (header === "milestone_count" || header === "milestonecount") {
+          obj.milestoneCount = parsedValue;
+          return;
+        }
+
+        if (header === "milestones") {
+          obj.milestones = values
+            .slice(index)
+            .map((value) => value.trim())
+            .filter(Boolean)
+            .join(";");
+          return;
+        }
+
+        obj[header] = parsedValue;
       });
 
-      // Handle Milestone-Based Vesting type 2 allocations
-      if (Number(obj.type) === 2) {
-        if (obj.milestones) {
-          const parts = String(obj.milestones).split(";").map(Number).filter(n => !isNaN(n));
-          obj.milestoneCount = parts.length;
-          const sum = parts.reduce((a, b) => a + b, 0);
-          if (sum !== Number(obj.amount)) {
-            showNotification("error", `CSV Row #${lineIdx + 1}: Milestone sum (${sum.toLocaleString()}) does not match total amount (${Number(obj.amount).toLocaleString()})!`);
-          }
-        } else {
-          // Auto-distribute into 4 equal milestones if none provided
-          obj.milestoneCount = 4;
-          const amt = Number(obj.amount || 0);
-          const part = Math.floor(amt / 4);
-          obj.milestones = Array(4).fill(part).join(";");
-        }
-      }
       return obj;
     });
+  };
+
+  const buildCsvCreateInput = (item: any, index: number) => {
+    const milestones = String(item.milestones || "")
+      .split(";")
+      .map((value: string) => value.trim())
+      .filter(Boolean);
+
+    if (Number(item.type) === 2 && milestones.length === 0) {
+      throw new Error(`CSV Row #${index + 1}: milestone streams require a semicolon-separated milestones column.`);
+    }
+
+    return {
+      recipient: String(item.recipient || "").trim(),
+      amount: String(item.amount ?? "").trim(),
+      mint: String(item.mint || defaultMint).trim(),
+      type: String(item.type ?? 0).trim(),
+      duration: String(item.duration ?? 0).trim(),
+      cliffDuration: String(item.cliffDuration ?? 0).trim(),
+      milestoneCount: String(item.milestoneCount ?? milestones.length).trim(),
+      milestoneAmounts: milestones,
+      cancelable: item.cancelable !== undefined ? Boolean(item.cancelable) : true,
+      nonce: Date.now() + index,
+    };
   };
 
   // CSV File Reader / Selection handlers
@@ -373,7 +449,7 @@ export default function Home({ initialStreams = [] }: Props) {
 
   // Simulators / Submit Handlers
   const handleAction = async (actionName: string, data: any) => {
-    if (useMultisig && !["create_stream", "withdraw"].includes(actionName)) {
+    if (useMultisig && !["create_stream", "withdraw", "create_stream_csv"].includes(actionName)) {
       showNotification("success", `Squads Multisig proposal created successfully! Redirecting you to Streams page...`);
       setTimeout(() => {
         router.push("/streams");
@@ -503,8 +579,13 @@ export default function Home({ initialStreams = [] }: Props) {
       return;
     }
 
-    // Direct CSV Bulk Deploy with Versioning
+    // CSV bulk deploy with versioning
     if (actionName === "create_stream_csv") {
+      if (!wallet) {
+        showNotification("error", "Connect a Solana wallet before bulk creating streams.");
+        return;
+      }
+
       try {
         const parsedItems = parseCsv(csvCreateText);
         if (parsedItems.length === 0) {
@@ -512,16 +593,52 @@ export default function Home({ initialStreams = [] }: Props) {
           return;
         }
 
-        // 1. Persist file contents in Prisma version history
+        const normalizedItems = parsedItems.map((item, index) => {
+          if (!item.recipient) {
+            throw new Error(`CSV Row #${index + 1}: recipient is required.`);
+          }
+
+          if (item.amount === undefined || item.amount === null || String(item.amount).trim() === "") {
+            throw new Error(`CSV Row #${index + 1}: amount is required.`);
+          }
+
+          if (item.type === undefined || item.type === null || String(item.type).trim() === "") {
+            throw new Error(`CSV Row #${index + 1}: type is required.`);
+          }
+
+          if (item.duration === undefined || item.duration === null || String(item.duration).trim() === "") {
+            throw new Error(`CSV Row #${index + 1}: duration is required.`);
+          }
+
+          return buildCsvCreateInput(item, index);
+        });
+
+        const batchResult = await createStreamBatchOnChain({
+          wallet,
+          endpoint,
+          inputs: normalizedItems,
+          maxStreamsPerBatch: 2,
+        });
+
+        if (batchResult.streamAddresses.length === 0) {
+          throw new Error("No streams were created on-chain, so the CSV version was not saved.");
+        }
+
+        // 1. Persist file contents in Prisma version history only after the on-chain deploy succeeds.
         await api.post("/csv/upload", {
           content: csvCreateText,
           filename: `bulk_create_v${csvVersions.length + 1}.csv`,
-          uploader: "System Uploader"
+          uploader: connectedWalletAddress || "Anonymous"
         });
 
-        // 2. Direct deploy
-        await api.post("/streams/bulk", { items: parsedItems });
-        showNotification("success", `Successfully versioned (v${csvVersions.length + 1}) and deployed ${parsedItems.length} CSV bulk streams!`);
+        if (batchResult.streamAddresses.length > 0) {
+          await api.post("/streams/mark-origin", {
+            ids: batchResult.streamAddresses,
+            isCsvCreated: true,
+          });
+        }
+
+        showNotification("success", `Successfully versioned (v${csvVersions.length + 1}) and deployed ${batchResult.streamAddresses.length} CSV bulk streams on-chain in ${batchResult.batches.length} versioned transaction(s)!`);
         
         // Reset state
         setCsvDiffResult(null);
@@ -529,7 +646,7 @@ export default function Home({ initialStreams = [] }: Props) {
         fetchStreams();
         setActiveTab("streams");
       } catch (err: any) {
-        showNotification("error", err.response?.data?.error || "Bulk deployment failed.");
+        showNotification("error", err.response?.data?.error || err?.message || "Bulk deployment failed.");
       }
       return;
     }
@@ -543,15 +660,14 @@ export default function Home({ initialStreams = [] }: Props) {
           return;
         }
 
-        // 1. Persist edit contents in Prisma version history
+        await api.post("/streams/edit-csv", { items: parsedItems });
+
+        // 1. Persist edit contents in Prisma version history only after the update succeeds.
         await api.post("/csv/upload", {
           content: csvEditText,
           filename: `bulk_edit_v${csvVersions.length + 1}.csv`,
-          uploader: "System Uploader"
+          uploader: connectedWalletAddress || "Anonymous"
         });
-
-        // 2. Execute bulk updates
-        await api.post("/streams/edit-csv", { items: parsedItems });
         showNotification("success", `Successfully versioned (v${csvVersions.length + 1}) and applied CSV bulk edits!`);
         
         // Reset state
@@ -651,6 +767,7 @@ export default function Home({ initialStreams = [] }: Props) {
                 compareVersionSelected={compareVersionSelected}
                 setCompareVersionSelected={setCompareVersionSelected}
                 csvVersions={csvVersions}
+                handleDeleteCsvVersion={handleDeleteCsvVersion}
                 csvDiffResult={csvDiffResult}
                 setCsvDiffResult={setCsvDiffResult}
                 loadingDiff={loadingDiff}
