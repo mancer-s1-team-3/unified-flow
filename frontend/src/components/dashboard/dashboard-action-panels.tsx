@@ -29,6 +29,7 @@ type Props = {
   mintPresets: MintPreset[];
   createForm: any;
   setCreateForm: (value: any) => void;
+  onMilestoneCountChange: (value: string) => void;
   milestoneAmounts: string[];
   setMilestoneAmounts: (value: string[]) => void;
   csvCreateText: string;
@@ -73,6 +74,7 @@ export function DashboardActionPanels(props: Props) {
     mintPresets,
     createForm,
     setCreateForm,
+    onMilestoneCountChange,
     milestoneAmounts,
     setMilestoneAmounts,
     csvCreateText,
@@ -113,6 +115,11 @@ export function DashboardActionPanels(props: Props) {
     () => milestoneAmounts.reduce((acc, curr) => acc + Number(curr || 0), 0),
     [milestoneAmounts]
   );
+  const hasInvalidMilestones = useMemo(
+    () => milestoneAmounts.some((value) => !value || Number(value) <= 0 || !Number.isFinite(Number(value))),
+    [milestoneAmounts]
+  );
+  const milestonesMatchTotal = Math.abs(milestoneSum - Number(createForm.amount || 0)) < 0.0000001;
 
   const durationSeconds = Number(createForm.duration || 0);
   const cliffDurationSeconds = Number(createForm.cliffDuration || 0);
@@ -336,7 +343,7 @@ export function DashboardActionPanels(props: Props) {
                 <div className="md:col-span-2 grid min-w-0 gap-4 bg-zinc-900/30 border border-zinc-900 p-4 rounded-xl max-w-full overflow-hidden">
                   <div className="min-w-0 max-w-full">
                     <label className="block text-[10px] sm:text-xs font-semibold text-zinc-400 uppercase tracking-wider mb-1.5">Count</label>
-                    <input type="number" value={createForm.milestoneCount} onChange={(e) => setCreateForm({ ...createForm, milestoneCount: e.target.value })} className="block w-full max-w-full min-w-0 bg-zinc-950 border border-zinc-800 rounded-xl px-3.5 py-2.5 sm:px-4 sm:py-3 text-sm focus:outline-none focus:border-indigo-500 font-mono" />
+                    <input type="number" value={createForm.milestoneCount} onChange={(e) => onMilestoneCountChange(e.target.value)} className="block w-full max-w-full min-w-0 bg-zinc-950 border border-zinc-800 rounded-xl px-3.5 py-2.5 sm:px-4 sm:py-3 text-sm focus:outline-none focus:border-indigo-500 font-mono" />
                   </div>
                   <div className="border-t border-zinc-900/60 pt-3">
                     <label className="block text-[10px] font-bold text-zinc-500 uppercase tracking-widest mb-2">Milestones</label>
@@ -351,7 +358,8 @@ export function DashboardActionPanels(props: Props) {
                             value={amt}
                             onChange={(e) => {
                               const next = [...milestoneAmounts];
-                              next[idx] = normalizeDecimalInput(e.target.value);
+                              const normalized = normalizeDecimalInput(e.target.value);
+                              next[idx] = normalized === "" ? "0" : normalized;
                               setMilestoneAmounts(next);
                             }}
                             className="block w-full max-w-full min-w-0 bg-zinc-950 border border-zinc-800 rounded-xl px-3 py-2.5 text-xs focus:outline-none focus:border-indigo-500 font-mono"
@@ -360,10 +368,12 @@ export function DashboardActionPanels(props: Props) {
                         </div>
                       ))}
                     </div>
-                    <div className={`mt-3 text-[10px] font-semibold font-mono ${Math.abs(milestoneSum - Number(createForm.amount || 0)) < 0.0000001 ? "text-emerald-500" : "text-amber-500"}`}>
-                      {Math.abs(milestoneSum - Number(createForm.amount || 0)) < 0.0000001
-                        ? <span>✔ Allocations sum ({milestoneSum.toLocaleString()}) matches total amount ({Number(createForm.amount || 0).toLocaleString()})!</span>
-                        : <span>⚠ Sum ({milestoneSum.toLocaleString()}) does not match total amount ({Number(createForm.amount || 0).toLocaleString()}). Diff: {(Number(createForm.amount || 0) - milestoneSum).toLocaleString()}</span>}
+                    <div className={`mt-3 text-[10px] font-semibold font-mono ${hasInvalidMilestones ? "text-rose-400" : milestonesMatchTotal ? "text-emerald-500" : "text-amber-500"}`}>
+                      {hasInvalidMilestones
+                        ? <span>⚠ Every milestone amount must be filled and greater than zero.</span>
+                        : milestonesMatchTotal
+                          ? <span>✔ Allocations sum ({milestoneSum.toLocaleString()}) matches total amount ({Number(createForm.amount || 0).toLocaleString()})!</span>
+                          : <span>⚠ Sum ({milestoneSum.toLocaleString()}) does not match total amount ({Number(createForm.amount || 0).toLocaleString()}). Diff: {(Number(createForm.amount || 0) - milestoneSum).toLocaleString()}</span>}
                     </div>
                   </div>
                 </div>
@@ -374,7 +384,13 @@ export function DashboardActionPanels(props: Props) {
                 <label htmlFor="cancelable" className="text-xs leading-5 font-semibold text-zinc-350 cursor-pointer select-none">Stream is cancelable by creator</label>
               </div>
 
-              <button onClick={() => handleAction("create_stream", createForm)} className="md:col-span-2 w-full mt-4 bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs py-3 rounded-xl transition-all shadow-lg hover:shadow-indigo-500/20">Simulate / Deploy Stream</button>
+              <button
+                disabled={createForm.type === "2" && (hasInvalidMilestones || !milestonesMatchTotal)}
+                onClick={() => handleAction("create_stream", createForm)}
+                className={`md:col-span-2 w-full mt-4 text-white font-bold text-xs py-3 rounded-xl transition-all shadow-lg ${createForm.type === "2" && (hasInvalidMilestones || !milestonesMatchTotal) ? "bg-zinc-800 text-zinc-500 cursor-not-allowed shadow-none" : "bg-indigo-600 hover:bg-indigo-700 hover:shadow-indigo-500/20"}`}
+              >
+                Simulate / Deploy Stream
+              </button>
             </div>
           ) : (
             <div className={`grid min-w-0 gap-4 max-w-full overflow-hidden ${mobileNarrowFormClass}`}>
