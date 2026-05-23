@@ -2,10 +2,143 @@
 
 import type { ChangeEvent, RefObject } from "react";
 import { useEffect, useMemo, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import Image from "next/image";
-import { Check, ChevronDown, Shield, Download, Layers, Lock, RefreshCw, Terminal, Upload } from "lucide-react";
+import { AlertTriangle, Check, ChevronDown, Shield, Download, Layers, Lock, RefreshCw, Terminal, Upload, XCircle } from "lucide-react";
 import { CsvDiffPanel } from "@/components/dashboard/csv-diff-panel";
 import type { MintPreset } from "@/components/dashboard/token-mints";
+
+// ─── Cancel Confirmation Dialog ───────────────────────────────────────────
+function CancelConfirmDialog({
+  streamId,
+  onConfirm,
+  onClose,
+}: {
+  streamId: string;
+  onConfirm: () => void;
+  onClose: () => void;
+}) {
+  const [typed, setTyped] = useState("");
+  const confirmed = typed.trim().toLowerCase() === "cancel";
+
+  useEffect(() => {
+    const handleKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") onClose();
+    };
+    document.addEventListener("keydown", handleKey);
+    return () => document.removeEventListener("keydown", handleKey);
+  }, [onClose]);
+
+  const dialog = (
+    <div
+      className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm animate-in fade-in duration-200"
+      onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}
+    >
+      <div className="relative w-full max-w-md bg-zinc-950 border border-zinc-800 rounded-3xl shadow-2xl shadow-black/60 overflow-hidden animate-in zoom-in-95 slide-in-from-bottom-4 duration-300">
+        {/* Top accent bar */}
+        <div className="h-1 w-full bg-gradient-to-r from-rose-600 via-red-500 to-orange-500" />
+
+        {/* Dismiss */}
+        <button
+          onClick={onClose}
+          className="absolute top-4 right-4 p-1.5 rounded-lg text-zinc-500 hover:text-zinc-200 hover:bg-zinc-800/60 transition-all"
+          aria-label="Close"
+        >
+          <XCircle className="w-4 h-4" />
+        </button>
+
+        <div className="p-6 pt-7">
+          {/* Icon */}
+          <div className="flex items-center justify-center mb-5">
+            <div className="relative">
+              <div className="w-16 h-16 rounded-2xl bg-rose-500/10 border border-rose-500/25 flex items-center justify-center">
+                <AlertTriangle className="w-8 h-8 text-rose-400" />
+              </div>
+              <div className="absolute -inset-2 rounded-3xl bg-rose-500/5 blur-xl -z-10" />
+            </div>
+          </div>
+
+          {/* Title & description */}
+          <div className="text-center mb-5">
+            <h3 className="text-lg font-extrabold text-zinc-50 mb-1.5">Cancel Stream?</h3>
+            <p className="text-xs text-zinc-400 leading-relaxed">
+              This action is <span className="text-rose-400 font-bold">permanent and irreversible</span>.
+              All remaining locked tokens will be refunded to the creator wallet.
+              The recipient will no longer be able to claim any unvested tokens.
+            </p>
+          </div>
+
+          {/* Stream ID chip */}
+          <div className="bg-zinc-900/60 border border-zinc-800 rounded-xl px-3 py-2.5 mb-5 text-center">
+            <div className="text-[9px] font-black uppercase tracking-widest text-zinc-500 mb-1">Stream being cancelled</div>
+            <div className="font-mono text-[11px] text-zinc-300 break-all">{streamId || "—"}</div>
+          </div>
+
+          {/* What happens list */}
+          <ul className="space-y-2 mb-6">
+            {[
+              { color: "rose",   text: "Vesting schedule will be permanently terminated" },
+              { color: "orange", text: "Recipient loses access to all remaining unvested tokens" },
+              { color: "amber",  text: "Unlocked but unclaimed tokens remain claimable by recipient" },
+              { color: "emerald",text: "Locked tokens are refunded to creator wallet immediately" },
+            ].map(({ color, text }) => (
+              <li key={text} className="flex items-start gap-2.5 text-[11px] text-zinc-400">
+                <span className={`mt-0.5 w-1.5 h-1.5 rounded-full bg-${color}-400 shrink-0`} />
+                {text}
+              </li>
+            ))}
+          </ul>
+
+          {/* Typed confirmation */}
+          <div className="mb-5">
+            <label className="block text-[10px] font-bold uppercase tracking-widest text-zinc-500 mb-2">
+              Type <span className="text-rose-400 font-extrabold">cancel</span> to confirm
+            </label>
+            <input
+              autoFocus
+              type="text"
+              value={typed}
+              onChange={(e) => setTyped(e.target.value)}
+              onKeyDown={(e) => { if (e.key === "Enter" && confirmed) onConfirm(); }}
+              placeholder="cancel"
+              className={`w-full bg-zinc-900 border rounded-xl px-4 py-2.5 text-sm font-mono focus:outline-none transition-all placeholder:text-zinc-700 ${
+                confirmed
+                  ? "border-rose-500/60 text-rose-300 focus:border-rose-500"
+                  : "border-zinc-800 text-zinc-300 focus:border-zinc-600"
+              }`}
+            />
+          </div>
+
+          {/* Actions */}
+          <div className="flex gap-3">
+            <button
+              onClick={onClose}
+              className="flex-1 py-2.5 rounded-xl text-xs font-bold bg-zinc-900 hover:bg-zinc-800 border border-zinc-800 hover:border-zinc-700 text-zinc-300 hover:text-zinc-100 transition-all"
+            >
+              Keep Stream
+            </button>
+            <button
+              disabled={!confirmed}
+              onClick={onConfirm}
+              className={`flex-1 py-2.5 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-2 ${
+                confirmed
+                  ? "bg-rose-600 hover:bg-rose-700 text-white shadow-lg shadow-rose-900/30 hover:shadow-rose-900/50"
+                  : "bg-zinc-900 text-zinc-600 border border-zinc-800 cursor-not-allowed"
+              }`}
+            >
+              <AlertTriangle className="w-3.5 h-3.5" />
+              Cancel Stream
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+
+  if (typeof document === "undefined") return dialog;
+  return createPortal(dialog, document.body);
+}
+// ──────────────────────────────────────────────────────────────────────────
 
 function normalizeDecimalInput(value: string) {
   const replaced = value.replace(/,/g, ".");
@@ -46,6 +179,73 @@ function formatBaseUnitsToTokenAmount(amount: bigint, decimals: number) {
   const fraction = padded.slice(-decimals).replace(/0+$/, "");
   return `${negative ? "-" : ""}${whole}${fraction ? `.${fraction}` : ""}`;
 }
+
+// ─── Cancel Panel (manages dialog state) ─────────────────────────────────
+function CancelPanel({
+  cancelForm,
+  setCancelForm,
+  handleAction,
+}: {
+  cancelForm: { streamId: string };
+  setCancelForm: (value: { streamId: string }) => void;
+  handleAction: (actionName: string, data: any) => void;
+}) {
+  const [showDialog, setShowDialog] = useState(false);
+
+  const handleConfirm = () => {
+    setShowDialog(false);
+    handleAction("cancel", cancelForm);
+  };
+
+  return (
+    <div className="animate-in fade-in-30 duration-200">
+      <div className="border-b border-zinc-900 pb-4 mb-6">
+        <h2 className="text-2xl font-extrabold tracking-tight">Cancel Stream</h2>
+        <p className="text-xs text-zinc-400">Cancel vesting and refund remaining locked tokens back to creator</p>
+      </div>
+
+      {/* Stream ID */}
+      <div className="mb-6">
+        <label className="block text-xs font-semibold text-zinc-400 uppercase tracking-wider mb-1.5">
+          Stream ID (PDA Address)
+        </label>
+        <input
+          type="text"
+          value={cancelForm.streamId}
+          onChange={(e) => setCancelForm({ ...cancelForm, streamId: e.target.value })}
+          className="w-full bg-zinc-950 border border-zinc-800 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:border-zinc-600 font-mono"
+        />
+      </div>
+
+      {/* Warning card */}
+      <div className="bg-rose-950/20 border border-rose-500/20 rounded-2xl p-4 mb-6 flex items-start gap-3">
+        <AlertTriangle className="w-4 h-4 text-rose-400 shrink-0 mt-0.5" />
+        <p className="text-[11px] text-rose-300/80 leading-relaxed">
+          Cancelling a stream is <strong className="text-rose-300">permanent</strong>. The recipient will lose access
+          to all unvested tokens. Locked funds will be returned to the creator wallet on-chain.
+        </p>
+      </div>
+
+      {/* Trigger */}
+      <button
+        onClick={() => setShowDialog(true)}
+        className="w-full bg-rose-950/30 hover:bg-rose-600 text-rose-400 hover:text-white border border-rose-500/30 hover:border-rose-600 font-bold text-xs py-3 rounded-xl transition-all shadow-lg hover:shadow-rose-900/30 flex items-center justify-center gap-2"
+      >
+        <XCircle className="w-4 h-4" />
+        Cancel and Refund Stream
+      </button>
+
+      {showDialog && (
+        <CancelConfirmDialog
+          streamId={cancelForm.streamId}
+          onConfirm={handleConfirm}
+          onClose={() => setShowDialog(false)}
+        />
+      )}
+    </div>
+  );
+}
+// ──────────────────────────────────────────────────────────────────────────
 
 type Props = {
   activeTab: string;
@@ -554,11 +754,11 @@ export function DashboardActionPanels(props: Props) {
       )}
 
       {activeTab === "cancel" && (
-        <div className="animate-in fade-in-30 duration-200">
-          <div className="border-b border-zinc-900 pb-4 mb-6"><h2 className="text-2xl font-extrabold tracking-tight">Cancel Stream</h2><p className="text-xs text-zinc-400">Cancel vesting and refund remaining locked tokens back to creator</p></div>
-          <div><label className="block text-xs font-semibold text-zinc-400 uppercase tracking-wider mb-1.5">Stream ID (PDA Address)</label><input type="text" value={cancelForm.streamId} onChange={(e) => setCancelForm({ ...cancelForm, streamId: e.target.value })} className="w-full bg-zinc-950 border border-zinc-800 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:border-indigo-500 font-mono" /></div>
-          <button onClick={() => handleAction("cancel", cancelForm)} className="w-full mt-6 bg-red-600 hover:bg-red-700 text-white font-bold text-xs py-3 rounded-xl transition-all shadow-lg hover:shadow-red-500/20">Cancel and Refund</button>
-        </div>
+        <CancelPanel
+          cancelForm={cancelForm}
+          setCancelForm={setCancelForm}
+          handleAction={handleAction}
+        />
       )}
 
       {activeTab === "unlock_milestone" && (
