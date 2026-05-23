@@ -46,7 +46,6 @@ export type CreateStreamInput = {
   cliffDuration?: string;
   milestoneCount?: string;
   milestoneAmounts: string[];
-  cancelable?: boolean;
   nonce?: string | number | bigint;
 };
 
