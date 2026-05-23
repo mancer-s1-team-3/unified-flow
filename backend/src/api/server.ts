@@ -231,9 +231,15 @@ app.post("/streams/edit-csv", async (req, res) => {
 });
 
 // 1. Get all CSV upload versions
-app.get("/csv/versions", async (_, res) => {
+app.get("/csv/versions", async (req, res) => {
     try {
+        const uploader = typeof req.query.uploader === "string" ? req.query.uploader.trim() : "";
+        if (!uploader) {
+            res.send(JSON.stringify([]));
+            return;
+        }
         const versions = await prisma.csvUpload.findMany({
+            where: { uploader },
             orderBy: {
                 version: "desc"
             }
@@ -252,8 +258,11 @@ app.post("/csv/upload", async (req, res) => {
     }
 
     try {
-        // Find highest version number
+        const uploaderFilter = typeof uploader === "string" ? uploader.trim() : "";
+
+        // Find highest version number for this uploader so version history stays creator-scoped.
         const lastUpload = await prisma.csvUpload.findFirst({
+            where: uploaderFilter ? { uploader: uploaderFilter } : undefined,
             orderBy: {
                 version: "desc"
             }
@@ -265,7 +274,7 @@ app.post("/csv/upload", async (req, res) => {
                 version: newVersion,
                 filename: filename || `upload_v${newVersion}.csv`,
                 content,
-                uploader: uploader || "Anonymous"
+                uploader: uploaderFilter || "Anonymous"
             }
         });
 
@@ -275,9 +284,39 @@ app.post("/csv/upload", async (req, res) => {
     }
 });
 
+app.delete("/csv/version", async (req, res) => {
+    const { version, uploader } = req.body as { version?: number | string; uploader?: string };
+
+    if (version === undefined || version === null || String(version).trim() === "") {
+        return res.status(400).send({ error: "version is required." });
+    }
+
+    const uploaderFilter = typeof uploader === "string" ? uploader.trim() : "";
+    if (!uploaderFilter) {
+        return res.status(400).send({ error: "uploader is required." });
+    }
+
+    try {
+        const result = await prisma.csvUpload.deleteMany({
+            where: {
+                version: Number(version),
+                uploader: uploaderFilter,
+            },
+        });
+
+        if (result.count === 0) {
+            return res.status(404).send({ error: `CSV version ${version} not found for this uploader.` });
+        }
+
+        res.send(JSON.stringify({ success: true, count: result.count }));
+    } catch (err: any) {
+        res.status(400).send({ error: err.message });
+    }
+});
+
 // 3. Diff Engine Endpoint
 app.post("/csv/diff", async (req, res) => {
-    const { csvText, mode, compareVersion } = req.body;
+    const { csvText, mode, compareVersion, uploader } = req.body;
     if (!csvText) {
         return res.status(400).send({ error: "csvText is required." });
     }
@@ -286,22 +325,38 @@ app.post("/csv/diff", async (req, res) => {
     }
 
     try {
+        const uploaderFilter = typeof uploader === "string" ? uploader.trim() : "";
         let refStreams: any[] = [];
 
         if (compareVersion) {
+            if (!uploaderFilter) {
+                return res.status(403).send({ error: "Uploader is required to access CSV version history." });
+            }
             // Compare against a specific historical version
             const targetUpload = await prisma.csvUpload.findFirst({
-                where: { version: Number(compareVersion) }
+                where: {
+                    version: Number(compareVersion),
+                    uploader: uploaderFilter
+                }
             });
             if (!targetUpload) {
                 return res.status(404).send({ error: `CSV version ${compareVersion} not found.` });
             }
-            const parsedRefRows = parseCsvText(targetUpload.content);
-            refStreams = mapCsvRowsToStreams(parsedRefRows);
+            if (mode === "create") {
+                // For create diffs, keep the current DB streams for this creator so the unchanged
+                // section shows the real live stream IDs and values. The historical CSV is only
+                // used to verify that the requested version exists for this uploader.
+                refStreams = await prisma.stream.findMany({
+                    where: { creator: uploaderFilter },
+                });
+            } else {
+                const parsedRefRows = parseCsvText(targetUpload.content);
+                refStreams = mapCsvRowsToStreams(parsedRefRows);
+            }
         } else {
-            // Compare against current live database streams that were created via CSV
+            // Compare against current live database streams, scoped to the connected creator when available.
             refStreams = await prisma.stream.findMany({
-                where: { isCsvCreated: true }
+                where: uploaderFilter ? { creator: uploaderFilter } : undefined,
             });
         }
 
@@ -348,6 +403,35 @@ app.post("/streams/edit-linear", async (req, res) => {
         });
 
         res.send(JSON.stringify({ success: true, stream: updated }, bigintReplacer));
+    } catch (err: any) {
+        res.status(400).send({ error: err.message });
+    }
+});
+
+app.post("/streams/mark-origin", async (req, res) => {
+    const { ids, isCsvCreated } = req.body as { ids?: string[]; isCsvCreated?: boolean };
+
+    if (!Array.isArray(ids) || ids.length === 0) {
+        return res.status(400).send({ error: "ids is required." });
+    }
+
+    try {
+        const normalizedIds = ids.filter((id): id is string => typeof id === "string" && id.trim() !== "");
+
+        if (normalizedIds.length === 0) {
+            return res.status(400).send({ error: "ids is required." });
+        }
+
+        const result = await prisma.stream.updateMany({
+            where: {
+                id: { in: normalizedIds },
+            },
+            data: {
+                isCsvCreated: isCsvCreated ?? true,
+            },
+        });
+
+        res.send(JSON.stringify({ success: true, count: result.count }));
     } catch (err: any) {
         res.status(400).send({ error: err.message });
     }

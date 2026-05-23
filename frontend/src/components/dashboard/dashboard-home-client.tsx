@@ -9,8 +9,12 @@ import { DashboardSidebar } from "@/components/dashboard/dashboard-sidebar";
 import { NotificationBanner } from "@/components/dashboard/notification-banner";
 import { StreamDetailsDrawer } from "@/components/dashboard/stream-details-drawer";
 import { DashboardStreamsPanel } from "@/components/dashboard/dashboard-streams-panel";
+import { ChatbotWidget } from "@/components/dashboard/chatbot-widget";
 import type { TabId } from "@/components/dashboard/types";
-import { createStreamOnChain } from "@/lib/solana/create-stream";
+import { createStreamBatchOnChain, createStreamOnChain } from "@/lib/solana/create-stream";
+import { editCliffOnChain } from "@/lib/solana/edit-cliff";
+import { editLinearOnChain } from "@/lib/solana/edit-linear";
+import { editMilestoneOnChain } from "@/lib/solana/edit-milestone";
 import { withdrawFromStreamOnChain } from "@/lib/solana/withdraw";
 import { cancelStreamOnChain } from "@/lib/solana/cancel";
 import { unlockMilestoneOnChain } from "@/lib/solana/unlock-milestone";
@@ -50,6 +54,18 @@ function formatBaseUnitsToTokenAmount(amount: bigint, decimals: number) {
   return `${negative ? "-" : ""}${whole}${fraction ? `.${fraction}` : ""}`;
 }
 
+function parseBaseUnits(value: unknown) {
+  try {
+    if (typeof value === "bigint") return value;
+    if (typeof value === "number") return BigInt(Math.trunc(value));
+    if (typeof value === "string" && value.trim() !== "") return BigInt(value.trim());
+  } catch {
+    // Fall back to zero for values we cannot interpret as base units.
+  }
+
+  return BigInt(0);
+}
+
 function buildEvenMilestoneAmounts(amount: string, count: number, decimals: number) {
   if (!Number.isFinite(count) || count <= 0) return [];
 
@@ -69,6 +85,59 @@ function buildEvenMilestoneAmounts(amount: string, count: number, decimals: numb
   return Array.from({ length: normalizedCount }, (_, index) =>
     formatBaseUnitsToTokenAmount(base + (BigInt(index) < remainder ? BigInt(1) : BigInt(0)), decimals)
   );
+}
+
+function buildEvenMilestoneAmountsFromBaseUnits(totalBaseUnits: bigint, count: number, decimals: number) {
+  if (!Number.isFinite(count) || count <= 0) return [];
+
+  const normalizedCount = Math.floor(count);
+  if (normalizedCount <= 0) return [];
+
+  const divisor = BigInt(normalizedCount);
+
+  if (totalBaseUnits < divisor) {
+    return Array.from({ length: normalizedCount }, () => formatBaseUnitsToTokenAmount(BigInt(0), decimals));
+  }
+
+  const base = totalBaseUnits / divisor;
+  const remainder = totalBaseUnits % divisor;
+
+  return Array.from({ length: normalizedCount }, (_, index) =>
+    formatBaseUnitsToTokenAmount(base + (BigInt(index) < remainder ? BigInt(1) : BigInt(0)), decimals)
+  );
+}
+
+function buildMilestoneAmountsFromStream(stream: any) {
+  const count = Number(stream?.milestoneCount || 0);
+  if (!Number.isFinite(count) || count <= 0) {
+    return [] as string[];
+  }
+
+  const decimals = typeof stream?.mintDecimals === "number" ? stream.mintDecimals : 0;
+  const totalBaseUnits = parseBaseUnits(stream?.totalAmount);
+
+  const rawMilestones = String(stream?.milestones || "").trim();
+  if (rawMilestones !== "") {
+    const parsed = rawMilestones
+      .split(";")
+      .map((value: string) => value.trim())
+      .filter(Boolean);
+
+    if (parsed.length > 0) {
+      while (parsed.length < count) {
+        parsed.push("0");
+      }
+
+      const trimmed = parsed.slice(0, count);
+      const parsedSum = trimmed.reduce((sum, amount) => sum + parseTokenAmountToBaseUnits(amount, decimals), BigInt(0));
+
+      if (parsedSum === totalBaseUnits) {
+        return trimmed;
+      }
+    }
+  }
+
+  return buildEvenMilestoneAmountsFromBaseUnits(totalBaseUnits, count, decimals);
 }
 
 type Props = {
@@ -105,7 +174,7 @@ export default function Home({ initialStreams = [] }: Props) {
   const [createMode, setCreateMode] = useState<"manual" | "csv">("manual");
   const [csvCreateText, setCsvCreateText] = useState(() => buildCreateStreamCsvTemplate(endpoint));
   const [csvEditText, setCsvEditText] = useState(
-    "id,amount,duration,cliff_duration,cancelable,milestones\nStreamCSV-XXXXX,1800,10800,0,false,"
+    "id,amount,duration,cliff_duration,milestones\nStreamCSV-XXXXX,1800,10800,0,"
   );
 
   const fileInputCreateRef = useRef<HTMLInputElement>(null);
@@ -118,7 +187,6 @@ export default function Home({ initialStreams = [] }: Props) {
     mint: defaultMint,
     type: "0", // 0: Linear, 1: Cliff, 2: Milestone
     duration: "3600",
-    cancelable: true,
     cliffDuration: "600",
     milestoneCount: "4",
   });
@@ -128,9 +196,14 @@ export default function Home({ initialStreams = [] }: Props) {
   const [withdrawForm, setWithdrawForm] = useState({ streamId: "" });
   const [cancelForm, setCancelForm] = useState({ streamId: "" });
   const [unlockForm, setUnlockForm] = useState({ streamId: "" });
-  const [editMilestoneForm, setEditMilestoneForm] = useState({ streamId: "", index: "0", newAmount: "250" });
-  const [editLinearForm, setEditLinearForm] = useState({ streamId: "", newEndTs: "", topupAmount: "" });
-  const [editCliffForm, setEditCliffForm] = useState({ streamId: "", newCliffTs: "" });
+  const [editMilestoneForm, setEditMilestoneForm] = useState({
+    streamId: "",
+    amounts: ["250", "250", "250", "250"],
+    totalAmount: "",
+    mintDecimals: null as number | null,
+  });
+  const [editLinearForm, setEditLinearForm] = useState({ streamId: "", newEndDuration: "", topupAmount: "" });
+  const [editCliffForm, setEditCliffForm] = useState({ streamId: "", newCliffDuration: "" });
 
   // Notifications
   const [notification, setNotification] = useState<{
@@ -172,12 +245,50 @@ export default function Home({ initialStreams = [] }: Props) {
 
   const fetchCsvVersions = useCallback(async () => {
     try {
-      const res = await api.get("/csv/versions");
+      const params = connectedWalletAddress ? { uploader: connectedWalletAddress } : undefined;
+      const res = await api.get("/csv/versions", { params });
       setCsvVersions(res.data);
     } catch (err) {
       console.error("Failed to fetch CSV versions:", err);
     }
-  }, []);
+  }, [connectedWalletAddress]);
+
+  const handleDeleteCsvVersion = useCallback(async () => {
+    if (!connectedWalletAddress) {
+      showNotification("error", "Connect the creator wallet before deleting a CSV version.");
+      return;
+    }
+
+    if (compareVersionSelected === "0") {
+      showNotification("error", "Select a historical CSV version first.");
+      return;
+    }
+
+    const versionToDelete = Number(compareVersionSelected);
+    if (!Number.isFinite(versionToDelete) || versionToDelete <= 0) {
+      showNotification("error", "Invalid CSV version selected.");
+      return;
+    }
+
+    const confirmed = window.confirm(`Delete CSV version ${versionToDelete}? This cannot be undone.`);
+    if (!confirmed) return;
+
+    try {
+      await api.delete("/csv/version", {
+        data: {
+          version: versionToDelete,
+          uploader: connectedWalletAddress,
+        },
+      });
+
+      showNotification("success", `CSV version ${versionToDelete} deleted.`);
+      setCompareVersionSelected("0");
+      setCsvDiffResult(null);
+      fetchCsvVersions();
+    } catch (err: any) {
+      showNotification("error", err.response?.data?.error || err?.message || "Failed to delete CSV version.");
+    }
+  }, [compareVersionSelected, connectedWalletAddress, fetchCsvVersions, showNotification]);
 
   const handleAnalyzeDiff = async (mode: "create" | "edit") => {
     const csvText = mode === "create" ? csvCreateText : csvEditText;
@@ -190,7 +301,8 @@ export default function Home({ initialStreams = [] }: Props) {
     try {
       const payload: any = {
         csvText,
-        mode
+        mode,
+        uploader: connectedWalletAddress || undefined,
       };
       if (compareVersionSelected !== "0") {
         payload.compareVersion = Number(compareVersionSelected);
@@ -221,6 +333,11 @@ export default function Home({ initialStreams = [] }: Props) {
   }, [showNotification]);
 
   useEffect(() => {
+    setCompareVersionSelected("0");
+    fetchCsvVersions();
+  }, [connectedWalletAddress, fetchCsvVersions]);
+
+  useEffect(() => {
     fetchStreams();
     fetchCsvVersions();
     const interval = setInterval(fetchStreams, 15000);
@@ -237,7 +354,7 @@ export default function Home({ initialStreams = [] }: Props) {
         if (tab === "withdraw") setWithdrawForm(prev => ({ ...prev, streamId }));
         if (tab === "cancel") setCancelForm(prev => ({ ...prev, streamId }));
         if (tab === "unlock_milestone") setUnlockForm(prev => ({ ...prev, streamId }));
-        if (tab === "edit_milestone") setEditMilestoneForm(prev => ({ ...prev, streamId }));
+        if (tab === "edit_milestone") setEditMilestoneForm(prev => ({ ...prev, streamId, amounts: prev.amounts }));
         if (tab === "edit_linear") setEditLinearForm(prev => ({ ...prev, streamId }));
         if (tab === "edit_cliff") setEditCliffForm(prev => ({ ...prev, streamId }));
       }
@@ -279,6 +396,21 @@ export default function Home({ initialStreams = [] }: Props) {
     return () => clearInterval(interval);
   }, []);
 
+  useEffect(() => {
+    if (activeTab !== "edit_milestone") return;
+    if (!editMilestoneForm.streamId || editMilestoneForm.totalAmount) return;
+
+    const stream = streams.find((item) => String(item?.id || "") === editMilestoneForm.streamId);
+    if (!stream) return;
+
+    setEditMilestoneForm((prev) => ({
+      ...prev,
+      amounts: buildMilestoneAmountsFromStream(stream),
+      totalAmount: String(stream?.totalAmount ?? ""),
+      mintDecimals: typeof stream?.mintDecimals === "number" ? stream.mintDecimals : null,
+    }));
+  }, [activeTab, editMilestoneForm.streamId, editMilestoneForm.totalAmount, streams]);
+
   const handleMilestoneCountChange = useCallback((val: string) => {
     setCreateForm((prev) => ({ ...prev, milestoneCount: val }));
 
@@ -297,35 +429,66 @@ export default function Home({ initialStreams = [] }: Props) {
   const parseCsv = (csvText: string) => {
     const lines = csvText.trim().split("\n");
     if (lines.length < 2) return [];
-    const headers = lines[0].split(",").map(h => h.trim());
-    return lines.slice(1).map((line, lineIdx) => {
-      const values = line.split(",").map(v => v.trim());
+
+    const headers = lines[0].split(",").map((header) => header.trim().toLowerCase());
+
+    return lines.slice(1).map((line) => {
+      const values = line.split(",").map((value) => value.trim());
       const obj: any = {};
+
       headers.forEach((header, index) => {
-        if (values[index] !== undefined) {
-          obj[header] = values[index] === "true" ? true : values[index] === "false" ? false : values[index];
+        if (values[index] === undefined) return;
+
+        const rawValue = values[index];
+        const parsedValue = rawValue === "true" ? true : rawValue === "false" ? false : rawValue;
+
+        if (header === "cliff_duration" || header === "cliffduration") {
+          obj.cliffDuration = parsedValue;
+          return;
         }
+
+        if (header === "milestone_count" || header === "milestonecount") {
+          obj.milestoneCount = parsedValue;
+          return;
+        }
+
+        if (header === "milestones") {
+          obj.milestones = values
+            .slice(index)
+            .map((value) => value.trim())
+            .filter(Boolean)
+            .join(";");
+          return;
+        }
+
+        obj[header] = parsedValue;
       });
 
-      // Handle Milestone-Based Vesting type 2 allocations
-      if (Number(obj.type) === 2) {
-        if (obj.milestones) {
-          const parts = String(obj.milestones).split(";").map(Number).filter(n => !isNaN(n));
-          obj.milestoneCount = parts.length;
-          const sum = parts.reduce((a, b) => a + b, 0);
-          if (sum !== Number(obj.amount)) {
-            showNotification("error", `CSV Row #${lineIdx + 1}: Milestone sum (${sum.toLocaleString()}) does not match total amount (${Number(obj.amount).toLocaleString()})!`);
-          }
-        } else {
-          // Auto-distribute into 4 equal milestones if none provided
-          obj.milestoneCount = 4;
-          const amt = Number(obj.amount || 0);
-          const part = Math.floor(amt / 4);
-          obj.milestones = Array(4).fill(part).join(";");
-        }
-      }
       return obj;
     });
+  };
+
+  const buildCsvCreateInput = (item: any, index: number) => {
+    const milestones = String(item.milestones || "")
+      .split(";")
+      .map((value: string) => value.trim())
+      .filter(Boolean);
+
+    if (Number(item.type) === 2 && milestones.length === 0) {
+      throw new Error(`CSV Row #${index + 1}: milestone streams require a semicolon-separated milestones column.`);
+    }
+
+    return {
+      recipient: String(item.recipient || "").trim(),
+      amount: String(item.amount ?? "").trim(),
+      mint: String(item.mint || defaultMint).trim(),
+      type: String(item.type ?? 0).trim(),
+      duration: String(item.duration ?? 0).trim(),
+      cliffDuration: String(item.cliffDuration ?? 0).trim(),
+      milestoneCount: String(item.milestoneCount ?? milestones.length).trim(),
+      milestoneAmounts: milestones,
+      nonce: Date.now() + index,
+    };
   };
 
   // CSV File Reader / Selection handlers
@@ -351,7 +514,7 @@ export default function Home({ initialStreams = [] }: Props) {
   const downloadTemplate = (mode: "create" | "edit") => {
     const headers = mode === "create"
       ? buildCreateStreamCsvTemplate(endpoint)
-      : "id,amount,duration,cliff_duration,cancelable,milestones\nStreamCSV-XXXXX,1800,10800,0,false,";
+      : "id,amount,duration,cliff_duration,milestones\nStreamCSV-XXXXX,1800,10800,0,";
 
     const blob = new Blob([headers], { type: "text/csv;charset=utf-8;" });
     const url = URL.createObjectURL(blob);
@@ -373,7 +536,7 @@ export default function Home({ initialStreams = [] }: Props) {
 
   // Simulators / Submit Handlers
   const handleAction = async (actionName: string, data: any) => {
-    if (useMultisig && !["create_stream", "withdraw"].includes(actionName)) {
+    if (useMultisig && !["create_stream", "withdraw", "create_stream_csv"].includes(actionName)) {
       showNotification("success", `Squads Multisig proposal created successfully! Redirecting you to Streams page...`);
       setTimeout(() => {
         router.push("/streams");
@@ -401,7 +564,6 @@ export default function Home({ initialStreams = [] }: Props) {
             cliffDuration: data.cliffDuration,
             milestoneCount: data.milestoneCount,
             milestoneAmounts,
-            cancelable: data.cancelable,
           },
         });
 
@@ -503,8 +665,13 @@ export default function Home({ initialStreams = [] }: Props) {
       return;
     }
 
-    // Direct CSV Bulk Deploy with Versioning
+    // CSV bulk deploy with versioning
     if (actionName === "create_stream_csv") {
+      if (!wallet) {
+        showNotification("error", "Connect a Solana wallet before bulk creating streams.");
+        return;
+      }
+
       try {
         const parsedItems = parseCsv(csvCreateText);
         if (parsedItems.length === 0) {
@@ -512,16 +679,52 @@ export default function Home({ initialStreams = [] }: Props) {
           return;
         }
 
-        // 1. Persist file contents in Prisma version history
+        const normalizedItems = parsedItems.map((item, index) => {
+          if (!item.recipient) {
+            throw new Error(`CSV Row #${index + 1}: recipient is required.`);
+          }
+
+          if (item.amount === undefined || item.amount === null || String(item.amount).trim() === "") {
+            throw new Error(`CSV Row #${index + 1}: amount is required.`);
+          }
+
+          if (item.type === undefined || item.type === null || String(item.type).trim() === "") {
+            throw new Error(`CSV Row #${index + 1}: type is required.`);
+          }
+
+          if (item.duration === undefined || item.duration === null || String(item.duration).trim() === "") {
+            throw new Error(`CSV Row #${index + 1}: duration is required.`);
+          }
+
+          return buildCsvCreateInput(item, index);
+        });
+
+        const batchResult = await createStreamBatchOnChain({
+          wallet,
+          endpoint,
+          inputs: normalizedItems,
+          maxStreamsPerBatch: 2,
+        });
+
+        if (batchResult.streamAddresses.length === 0) {
+          throw new Error("No streams were created on-chain, so the CSV version was not saved.");
+        }
+
+        // 1. Persist file contents in Prisma version history only after the on-chain deploy succeeds.
         await api.post("/csv/upload", {
           content: csvCreateText,
           filename: `bulk_create_v${csvVersions.length + 1}.csv`,
-          uploader: "System Uploader"
+          uploader: connectedWalletAddress || "Anonymous"
         });
 
-        // 2. Direct deploy
-        await api.post("/streams/bulk", { items: parsedItems });
-        showNotification("success", `Successfully versioned (v${csvVersions.length + 1}) and deployed ${parsedItems.length} CSV bulk streams!`);
+        if (batchResult.streamAddresses.length > 0) {
+          await api.post("/streams/mark-origin", {
+            ids: batchResult.streamAddresses,
+            isCsvCreated: true,
+          });
+        }
+
+        showNotification("success", `Successfully versioned (v${csvVersions.length + 1}) and deployed ${batchResult.streamAddresses.length} CSV bulk streams on-chain in ${batchResult.batches.length} versioned transaction(s)!`);
         
         // Reset state
         setCsvDiffResult(null);
@@ -529,7 +732,7 @@ export default function Home({ initialStreams = [] }: Props) {
         fetchStreams();
         setActiveTab("streams");
       } catch (err: any) {
-        showNotification("error", err.response?.data?.error || "Bulk deployment failed.");
+        showNotification("error", err.response?.data?.error || err?.message || "Bulk deployment failed.");
       }
       return;
     }
@@ -543,15 +746,14 @@ export default function Home({ initialStreams = [] }: Props) {
           return;
         }
 
-        // 1. Persist edit contents in Prisma version history
+        await api.post("/streams/edit-csv", { items: parsedItems });
+
+        // 1. Persist edit contents in Prisma version history only after the update succeeds.
         await api.post("/csv/upload", {
           content: csvEditText,
           filename: `bulk_edit_v${csvVersions.length + 1}.csv`,
-          uploader: "System Uploader"
+          uploader: connectedWalletAddress || "Anonymous"
         });
-
-        // 2. Execute bulk updates
-        await api.post("/streams/edit-csv", { items: parsedItems });
         showNotification("success", `Successfully versioned (v${csvVersions.length + 1}) and applied CSV bulk edits!`);
         
         // Reset state
@@ -567,16 +769,98 @@ export default function Home({ initialStreams = [] }: Props) {
 
     if (actionName === "edit_linear") {
       try {
-        await api.post("/streams/edit-linear", {
-          streamId: data.streamId,
-          newEndTs: data.newEndTs || undefined,
-          topupAmount: data.topupAmount || undefined
+        if (!wallet) {
+          showNotification("error", "Connect the creator wallet before editing a linear stream.");
+          return;
+        }
+
+        await editLinearOnChain({
+          wallet,
+          endpoint,
+          input: {
+            streamAddress: data.streamId,
+            newEndDuration: data.newEndDuration,
+            topupAmount: data.topupAmount,
+          },
         });
         showNotification("success", `Linear stream timeline extended and topped up successfully!`);
         fetchStreams();
         setActiveTab("streams");
       } catch (err: any) {
-        showNotification("error", err.response?.data?.error || "Failed to update linear stream.");
+        showNotification("error", err?.message || "Failed to update linear stream.");
+      }
+      return;
+    }
+
+    if (actionName === "edit_milestone") {
+      try {
+        if (!wallet) {
+          showNotification("error", "Connect the creator wallet before editing a milestone.");
+          return;
+        }
+
+        const amounts = Array.isArray(data.amounts) ? data.amounts : [];
+        if (amounts.length === 0) {
+          throw new Error("Milestone amounts are required.");
+        }
+
+        const stream = streams.find((item) => String(item?.id || "") === String(data.streamId || ""));
+        if (stream) {
+          const mintDecimals = typeof stream.mintDecimals === "number" ? stream.mintDecimals : 0;
+          const currentTotalAmount = parseBaseUnits(stream.totalAmount);
+          const editedTotalAmount = amounts.reduce(
+            (sum: bigint, amount: any) => sum + parseTokenAmountToBaseUnits(String(amount ?? "0"), mintDecimals),
+            BigInt(0)
+          );
+
+          if (editedTotalAmount !== currentTotalAmount) {
+            throw new Error(
+              `Milestone allocations must sum to ${formatBaseUnitsToTokenAmount(currentTotalAmount, mintDecimals)}.`
+            );
+          }
+        }
+
+        for (let index = 0; index < amounts.length; index += 1) {
+          await editMilestoneOnChain({
+            wallet,
+            endpoint,
+            input: {
+              streamAddress: data.streamId,
+              milestoneIndex: index,
+              newAmount: amounts[index],
+            },
+          });
+        }
+
+        showNotification("success", `Milestone allocations updated successfully!`);
+        fetchStreams();
+        setActiveTab("streams");
+      } catch (err: any) {
+        showNotification("error", err?.message || "Failed to update milestone allocation.");
+      }
+      return;
+    }
+
+    if (actionName === "edit_cliff") {
+      try {
+        if (!wallet) {
+          showNotification("error", "Connect the creator wallet before editing a cliff stream.");
+          return;
+        }
+
+        await editCliffOnChain({
+          wallet,
+          endpoint,
+          input: {
+            streamAddress: data.streamId,
+            newCliffDuration: data.newCliffDuration,
+          },
+        });
+        showNotification("success", `Cliff timestamp updated successfully!`);
+        fetchStreams();
+        setActiveTab("streams");
+      } catch (err: any) {
+        showNotification("error", err?.message || "Failed to update cliff timestamp.");
       }
       return;
     }
@@ -586,14 +870,35 @@ export default function Home({ initialStreams = [] }: Props) {
   };
 
   // Pre-fill helpers to easily act on a stream
-  const prefillAction = (tab: TabId, streamId: string) => {
+  const prefillAction = (tab: TabId, streamOrId: any) => {
+    const streamId = typeof streamOrId === "string" ? streamOrId : String(streamOrId?.id || "");
+    const stream = typeof streamOrId === "string"
+      ? streams.find((item) => String(item?.id || "") === streamId)
+      : streamOrId;
     setActiveTab(tab);
     if (tab === "withdraw") setWithdrawForm({ streamId });
     if (tab === "cancel") setCancelForm({ streamId });
     if (tab === "unlock_milestone") setUnlockForm({ streamId });
-    if (tab === "edit_milestone") setEditMilestoneForm({ streamId, index: "0", newAmount: "250" });
-    if (tab === "edit_linear") setEditLinearForm({ streamId, newEndTs: "", topupAmount: "" });
-    if (tab === "edit_cliff") setEditCliffForm({ streamId, newCliffTs: "" });
+    if (tab === "edit_milestone") {
+      setEditMilestoneForm(
+        stream
+          ? {
+              streamId,
+              amounts: buildMilestoneAmountsFromStream(stream),
+              totalAmount: String(stream?.totalAmount ?? ""),
+              mintDecimals: typeof stream?.mintDecimals === "number" ? stream.mintDecimals : null,
+            }
+          : { streamId, amounts: ["250", "250", "250", "250"], totalAmount: "", mintDecimals: null }
+      );
+    }
+    if (tab === "edit_linear") {
+      const duration = stream && stream.endTs && stream.startTs ? String(Number(stream.endTs) - Number(stream.startTs)) : "";
+      setEditLinearForm({ streamId, newEndDuration: duration, topupAmount: "" });
+    }
+    if (tab === "edit_cliff") {
+      const duration = stream && stream.cliffTs && stream.startTs ? String(Number(stream.cliffTs) - Number(stream.startTs)) : "";
+      setEditCliffForm({ streamId, newCliffDuration: duration });
+    }
     
     // Close Drawer
     setSelectedStream(null);
@@ -651,6 +956,7 @@ export default function Home({ initialStreams = [] }: Props) {
                 compareVersionSelected={compareVersionSelected}
                 setCompareVersionSelected={setCompareVersionSelected}
                 csvVersions={csvVersions}
+                handleDeleteCsvVersion={handleDeleteCsvVersion}
                 csvDiffResult={csvDiffResult}
                 setCsvDiffResult={setCsvDiffResult}
                 loadingDiff={loadingDiff}
@@ -693,6 +999,10 @@ export default function Home({ initialStreams = [] }: Props) {
         </section>
 
       </div>
+
+      {/* Chatbot Assistant */}
+      <ChatbotWidget />
+
     </main>
   );
 }

@@ -15,6 +15,35 @@ export const CsvDiffPanel = memo(function CsvDiffPanel({
 }) {
   if (!csvDiffResult) return null;
 
+  const formatType = (type: unknown) => {
+    const value = Number(type);
+    if (value === 0) return "Linear";
+    if (value === 1) return "Cliff";
+    return "Milestone";
+  };
+
+  const isMilestoneType = (type: unknown) => Number(type) === 2;
+  const isCliffType = (type: unknown) => Number(type) === 1;
+
+  const formatFieldName = (field: string) => {
+    if (field === "cliffDuration") return "Cliff Duration";
+    if (field === "cancelable") return "Cancelable";
+    if (field === "milestones") return "Milestones";
+    if (field === "duration") return "Duration";
+    if (field === "amount") return "Amount";
+    if (field === "type") return "Type";
+    return field;
+  };
+
+  const formatFieldValue = (field: string, value: any) => {
+    if (field === "amount") return `${Number(value || 0).toLocaleString()} Tokens`;
+    if (field === "type") return formatType(value);
+    if (field === "cancelable") return value ? "true" : "false";
+    if (field === "milestones") return value || "None";
+    if (field === "duration" || field === "cliffDuration") return `${Number(value || 0)}s`;
+    return String(value ?? "None");
+  };
+
   return (
     <div className="mt-8 bg-zinc-950 border border-zinc-900 rounded-3xl p-6 relative overflow-hidden animate-in fade-in duration-300">
       <div className="absolute top-0 right-0 p-4">
@@ -81,12 +110,20 @@ export const CsvDiffPanel = memo(function CsvDiffPanel({
                   </div>
                   <div>
                     <span className="block text-[9px] text-zinc-500 font-black uppercase">Type</span>
-                    <span className="block text-xs font-bold text-zinc-350">{item.type === 0 ? "Linear" : item.type === 1 ? "Cliff" : "Milestone"}</span>
+                    <span className="block text-xs font-bold text-zinc-350">{formatType(item.type)}</span>
                   </div>
-                  <div>
-                    <span className="block text-[9px] text-zinc-500 font-black uppercase">Duration</span>
-                    <span className="block text-xs font-bold text-zinc-350">{item.duration}s</span>
-                  </div>
+                  {!isMilestoneType(item.type) && (
+                    <div>
+                      <span className="block text-[9px] text-zinc-500 font-black uppercase">Duration</span>
+                      <span className="block text-xs font-bold text-zinc-350">{item.duration}s</span>
+                    </div>
+                  )}
+                  {isCliffType(item.type) && (
+                    <div>
+                      <span className="block text-[9px] text-zinc-500 font-black uppercase">Cliff Duration</span>
+                      <span className="block text-xs font-bold text-zinc-350">{item.cliffDuration}s</span>
+                    </div>
+                  )}
                   {Number(item.type) === 2 && (
                     <div className="col-span-2">
                       <span className="block text-[9px] text-zinc-500 font-black uppercase">Milestones</span>
@@ -116,17 +153,92 @@ export const CsvDiffPanel = memo(function CsvDiffPanel({
                 <div className="text-[10px] text-zinc-400 font-mono mt-0.5">
                   Recipient: <span className="text-zinc-200 font-bold select-all">{item.recipient}</span>
                 </div>
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mt-1">
+                  <div>
+                    <span className="block text-[9px] text-zinc-500 font-black uppercase">Current Type</span>
+                    <span className="block text-xs font-bold text-zinc-300">{formatType(item.details?.type ?? item.type)}</span>
+                  </div>
+                  {!isMilestoneType(item.details?.type ?? item.type) && (
+                    <div>
+                      <span className="block text-[9px] text-zinc-500 font-black uppercase">Current Duration</span>
+                      <span className="block text-xs font-bold text-zinc-300">{Number(item.details?.duration ?? item.duration ?? 0)}s</span>
+                    </div>
+                  )}
+                  {isCliffType(item.details?.type ?? item.type) && (
+                    <div>
+                      <span className="block text-[9px] text-zinc-500 font-black uppercase">Current Cliff Duration</span>
+                      <span className="block text-xs font-bold text-zinc-300">{Number(item.details?.cliffDuration ?? item.cliffDuration ?? 0)}s</span>
+                    </div>
+                  )}
+                  {isMilestoneType(item.details?.type ?? item.type) && (
+                    <div className="col-span-2 sm:col-span-1">
+                      <span className="block text-[9px] text-zinc-500 font-black uppercase">Current Milestones</span>
+                      <span className="block text-xs font-bold text-zinc-300 truncate">{item.details?.milestones || item.milestones || "None"}</span>
+                    </div>
+                  )}
+                </div>
                 <div className="grid gap-2 mt-2 border-t border-zinc-900/50 pt-2">
                   {item.changes.map((ch: any, cIdx: number) => (
                     <div key={cIdx} className="flex justify-between items-center text-xs">
-                      <span className="text-[10px] text-zinc-500 uppercase font-black">{ch.field}</span>
+                      <span className="text-[10px] text-zinc-500 uppercase font-black">{formatFieldName(ch.field)}</span>
                       <div className="flex items-center gap-2 font-semibold">
-                        <span className="text-zinc-500 line-through">{ch.field === "amount" ? `${ch.oldVal.toLocaleString()} Tokens` : ch.field === "type" ? (Number(ch.oldVal) === 0 ? "Linear" : Number(ch.oldVal) === 1 ? "Cliff" : "Milestone") : String(ch.oldVal || "None")}</span>
+                        <span className="text-zinc-500 line-through">{formatFieldValue(ch.field, ch.oldVal)}</span>
                         <span className="text-zinc-500">→</span>
-                        <span className="text-amber-400 font-bold">{ch.field === "amount" ? `${ch.newVal.toLocaleString()} Tokens` : ch.field === "type" ? (Number(ch.newVal) === 0 ? "Linear" : Number(ch.newVal) === 1 ? "Cliff" : "Milestone") : String(ch.newVal || "None")}</span>
+                        <span className="text-amber-400 font-bold">{formatFieldValue(ch.field, ch.newVal)}</span>
                       </div>
                     </div>
                   ))}
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+
+        {csvDiffResult.unchanged.length > 0 && (
+          <div className="space-y-3">
+            <div className="text-[10px] text-zinc-500 font-bold uppercase tracking-widest mb-1.5 flex items-center gap-1.5">
+              <span className="w-1.5 h-1.5 rounded-full bg-zinc-500" />
+              Unchanged Streams ({csvDiffResult.unchanged.length})
+            </div>
+            {csvDiffResult.unchanged.map((item: any, idx: number) => (
+              <div key={`unch-${idx}`} className="bg-zinc-950/40 border border-zinc-800 rounded-2xl p-4 flex flex-col gap-2 opacity-85 animate-in slide-in-from-bottom-2 duration-200">
+                <div className="flex justify-between items-center">
+                  <span className="text-[9px] bg-zinc-900 text-zinc-300 border border-zinc-800 font-black px-2 py-0.5 rounded-md uppercase tracking-wider">
+                    = Unchanged Stream
+                  </span>
+                  <span className="text-[10px] font-mono text-zinc-500 font-semibold">{shorten(item.id)}</span>
+                </div>
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mt-1">
+                  <div>
+                    <span className="block text-[9px] text-zinc-500 font-black uppercase">Recipient</span>
+                    <span className="block text-xs font-mono font-medium text-zinc-300 select-all truncate">{item.recipient}</span>
+                  </div>
+                  <div>
+                    <span className="block text-[9px] text-zinc-500 font-black uppercase">Amount</span>
+                    <span className="block text-xs font-bold text-zinc-300">{item.amount.toLocaleString()} Tokens</span>
+                  </div>
+                  <div>
+                    <span className="block text-[9px] text-zinc-500 font-black uppercase">Type</span>
+                    <span className="block text-xs font-bold text-zinc-300">{formatType(item.type)}</span>
+                  </div>
+                  {!isMilestoneType(item.type) && (
+                    <div>
+                      <span className="block text-[9px] text-zinc-500 font-black uppercase">Duration</span>
+                      <span className="block text-xs font-bold text-zinc-300">{item.duration}s</span>
+                    </div>
+                  )}
+                  {isCliffType(item.type) && (
+                    <div>
+                      <span className="block text-[9px] text-zinc-500 font-black uppercase">Cliff Duration</span>
+                      <span className="block text-xs font-bold text-zinc-300">{item.cliffDuration}s</span>
+                    </div>
+                  )}
+                  {isMilestoneType(item.type) && (
+                    <div className="col-span-2">
+                      <span className="block text-[9px] text-zinc-500 font-black uppercase">Milestones</span>
+                      <span className="block text-xs font-bold text-zinc-300 truncate">{item.milestones || "None"}</span>
+                    </div>
+                  )}
                 </div>
               </div>
             ))}
@@ -158,8 +270,20 @@ export const CsvDiffPanel = memo(function CsvDiffPanel({
                   </div>
                   <div>
                     <span className="block text-[9px] text-zinc-650 font-black uppercase">Original Type</span>
-                    <span className="block text-xs font-bold text-zinc-500">{item.type === 0 ? "Linear" : item.type === 1 ? "Cliff" : "Milestone"}</span>
+                    <span className="block text-xs font-bold text-zinc-500">{formatType(item.type)}</span>
                   </div>
+                  {!isMilestoneType(item.type) && (
+                    <div>
+                      <span className="block text-[9px] text-zinc-650 font-black uppercase">Original Duration</span>
+                      <span className="block text-xs font-bold text-zinc-500">{item.duration}s</span>
+                    </div>
+                  )}
+                  {isCliffType(item.type) && (
+                    <div>
+                      <span className="block text-[9px] text-zinc-650 font-black uppercase">Original Cliff Duration</span>
+                      <span className="block text-xs font-bold text-zinc-500">{item.cliffDuration}s</span>
+                    </div>
+                  )}
                   {Number(item.type) === 2 && (
                     <div className="col-span-2">
                       <span className="block text-[9px] text-zinc-650 font-black uppercase">Original Milestones</span>
