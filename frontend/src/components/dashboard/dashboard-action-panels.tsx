@@ -19,6 +19,35 @@ function normalizeDecimalInput(value: string) {
   return `${parts[0]}.${parts.slice(1).join("")}`;
 }
 
+function parseTokenAmountToBaseUnits(value: string, decimals: number) {
+  const trimmed = String(value ?? "").trim().replace(/,/g, ".");
+
+  if (trimmed === "" || !/^\d+(\.\d+)?$/.test(trimmed)) {
+    return BigInt(0);
+  }
+
+  const [wholePart, fractionPart = ""] = trimmed.split(".");
+  const normalizedFraction = fractionPart.slice(0, decimals).padEnd(decimals, "0");
+  const raw = `${wholePart}${normalizedFraction}`.replace(/^0+(?=\d)/, "");
+
+  try {
+    return BigInt(raw || "0");
+  } catch {
+    return BigInt(0);
+  }
+}
+
+function formatBaseUnitsToTokenAmount(amount: bigint, decimals: number) {
+  if (decimals <= 0) return amount.toString();
+
+  const negative = amount < BigInt(0);
+  const unsigned = negative ? (amount * BigInt(-1)).toString() : amount.toString();
+  const padded = unsigned.padStart(decimals + 1, "0");
+  const whole = padded.slice(0, -decimals) || "0";
+  const fraction = padded.slice(-decimals).replace(/0+$/, "");
+  return `${negative ? "-" : ""}${whole}${fraction ? `.${fraction}` : ""}`;
+}
+
 type Props = {
   activeTab: string;
   useMultisig: boolean;
@@ -126,6 +155,45 @@ export function DashboardActionPanels(props: Props) {
   const durationSeconds = Number(createForm.duration || 0);
   const cliffDurationSeconds = Number(createForm.cliffDuration || 0);
   const cliffExceedsDuration = createForm.type === "1" && cliffDurationSeconds > durationSeconds;
+
+  const editMilestoneDecimals = Number.isFinite(Number(editMilestoneForm?.mintDecimals))
+    ? Number(editMilestoneForm.mintDecimals)
+    : 0;
+  const editMilestoneAmounts = Array.isArray(editMilestoneForm?.amounts) ? editMilestoneForm.amounts : [];
+  const editMilestoneSum = useMemo(
+    () => editMilestoneAmounts.reduce(
+      (sum: bigint, amount: string) => sum + parseTokenAmountToBaseUnits(String(amount || "0"), editMilestoneDecimals),
+      BigInt(0)
+    ),
+    [editMilestoneAmounts, editMilestoneDecimals]
+  );
+  const editMilestoneTargetTotal = useMemo(
+    () => {
+      const rawTotal = editMilestoneForm?.totalAmount;
+
+      if (typeof rawTotal === "bigint") return rawTotal;
+      if (typeof rawTotal === "number") return BigInt(Math.trunc(rawTotal));
+      if (typeof rawTotal === "string" && rawTotal.trim() !== "") {
+        try {
+          return BigInt(rawTotal.trim());
+        } catch {
+          return BigInt(0);
+        }
+      }
+
+      return BigInt(0);
+    },
+    [editMilestoneForm?.totalAmount]
+  );
+  const editMilestoneHasTargetTotal =
+    (typeof editMilestoneForm?.totalAmount === "string" && editMilestoneForm.totalAmount.trim() !== "") ||
+    typeof editMilestoneForm?.totalAmount === "bigint" ||
+    typeof editMilestoneForm?.totalAmount === "number";
+  const editMilestoneHasInvalidAmounts = useMemo(
+    () => editMilestoneAmounts.some((value: string) => !value || Number(value) <= 0 || !Number.isFinite(Number(value))),
+    [editMilestoneAmounts]
+  );
+  const editMilestoneMatchesTotal = editMilestoneHasTargetTotal ? editMilestoneSum === editMilestoneTargetTotal : true;
 
   const selectedMintPreset = mintPresets.find((preset) => preset.mint === createForm.mint) ?? null;
   const mobileNarrowFormClass = "mx-auto w-full max-w-[22rem] sm:max-w-none sm:mx-0";
@@ -380,13 +448,6 @@ export function DashboardActionPanels(props: Props) {
                 </div>
               )}
 
-              {/* Hardcoded in smart contract — hidden until configurable
-              <div className="md:col-span-2 flex min-w-0 items-start gap-3 mt-2">
-                <input type="checkbox" id="cancelable" checked={createForm.cancelable} onChange={(e) => setCreateForm({ ...createForm, cancelable: e.target.checked })} className="w-4 h-4 rounded border-zinc-800 text-indigo-600 bg-zinc-950 focus:ring-0 focus:ring-offset-0" />
-                <label htmlFor="cancelable" className="text-xs leading-5 font-semibold text-zinc-350 cursor-pointer select-none">Stream is cancelable by creator</label>
-              </div>
-              */}
-
               <button
                 disabled={createForm.type === "2" && (hasInvalidMilestones || !milestonesMatchTotal)}
                 onClick={() => handleAction("create_stream", createForm)}
@@ -512,8 +573,68 @@ export function DashboardActionPanels(props: Props) {
       {activeTab === "edit_milestone" && (
         <div className="animate-in fade-in-30 duration-200">
           <div className="border-b border-zinc-900 pb-4 mb-6"><h2 className="text-2xl font-extrabold tracking-tight">Edit Milestone Structure</h2><p className="text-xs text-zinc-400">Modify milestone details or adjust allocated milestone target amounts</p></div>
-          {isStreamCsvCreated(editMilestoneForm.streamId) ? <div className="bg-red-950/45 border border-red-500/30 rounded-2xl p-5 text-red-300 flex items-start gap-4 mb-6"><Lock className="w-6 h-6 text-red-400 shrink-0 mt-0.5" /><div><h4 className="text-sm font-extrabold">Manual Edit Locked!</h4><p className="text-xs text-red-400/80 mt-1 leading-relaxed">This stream was created via CSV Import. To comply with consistency requirements, CSV-created streams must be edited exclusively using the Bulk Edit CSV console.</p></div></div> : <div className="grid gap-4 sm:grid-cols-3"><div className="sm:col-span-3"><label className="block text-xs font-semibold text-zinc-400 uppercase tracking-wider mb-1.5">Stream ID (PDA Address)</label><input type="text" value={editMilestoneForm.streamId} onChange={(e) => setEditMilestoneForm({ ...editMilestoneForm, streamId: e.target.value })} className="w-full bg-zinc-950 border border-zinc-800 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:border-indigo-500 font-mono" /></div><div><label className="block text-xs font-semibold text-zinc-400 uppercase tracking-wider mb-1.5">Milestone Index</label><input type="number" value={editMilestoneForm.index} onChange={(e) => setEditMilestoneForm({ ...editMilestoneForm, index: e.target.value })} className="w-full bg-zinc-950 border border-zinc-800 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:border-indigo-500 font-mono" /></div><div className="sm:col-span-2"><label className="block text-xs font-semibold text-zinc-400 uppercase tracking-wider mb-1.5">New Allocation Amount</label><input type="number" value={editMilestoneForm.newAmount} onChange={(e) => setEditMilestoneForm({ ...editMilestoneForm, newAmount: e.target.value })} className="w-full bg-zinc-950 border border-zinc-800 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:border-indigo-500" /></div></div>}
-          <button disabled={isStreamCsvCreated(editMilestoneForm.streamId)} onClick={() => handleAction("edit_milestone", editMilestoneForm)} className={`w-full mt-6 text-white font-bold text-xs py-3 rounded-xl transition-all shadow-lg ${isStreamCsvCreated(editMilestoneForm.streamId) ? "bg-zinc-850 border border-zinc-800 text-zinc-550 cursor-not-allowed opacity-50" : "bg-indigo-600 hover:bg-indigo-700 hover:shadow-indigo-500/20"}`}>Apply Milestone Edits</button>
+          {isStreamCsvCreated(editMilestoneForm.streamId) ? (
+            <div className="bg-red-950/45 border border-red-500/30 rounded-2xl p-5 text-red-300 flex items-start gap-4 mb-6">
+              <Lock className="w-6 h-6 text-red-400 shrink-0 mt-0.5" />
+              <div>
+                <h4 className="text-sm font-extrabold">Manual Edit Locked!</h4>
+                <p className="text-xs text-red-400/80 mt-1 leading-relaxed">This stream was created via CSV Import. To comply with consistency requirements, CSV-created streams must be edited exclusively using the Bulk Edit CSV console.</p>
+              </div>
+            </div>
+          ) : (
+            <div className="grid gap-4 sm:grid-cols-2">
+              <div className="sm:col-span-2">
+                <label className="block text-xs font-semibold text-zinc-400 uppercase tracking-wider mb-1.5">Stream ID (PDA Address)</label>
+                <input
+                  type="text"
+                  value={editMilestoneForm.streamId}
+                  onChange={(e) => setEditMilestoneForm({ ...editMilestoneForm, streamId: e.target.value })}
+                  className="w-full bg-zinc-950 border border-zinc-800 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:border-indigo-500 font-mono"
+                />
+              </div>
+
+              {(Array.isArray(editMilestoneForm.amounts) ? editMilestoneForm.amounts : []).map((amount: string, index: number) => (
+                <div key={index}>
+                  <label className="block text-xs font-semibold text-zinc-400 uppercase tracking-wider mb-1.5">Milestone #{index} Amount</label>
+                  <input
+                    type="text"
+                    inputMode="decimal"
+                    lang="en"
+                    value={amount}
+                    onChange={(e) => {
+                      const next = [...(Array.isArray(editMilestoneForm.amounts) ? editMilestoneForm.amounts : [])];
+                      const normalized = normalizeDecimalInput(e.target.value);
+                      next[index] = normalized === "" ? "0" : normalized;
+                      setEditMilestoneForm({ ...editMilestoneForm, amounts: next });
+                    }}
+                    className="w-full bg-zinc-950 border border-zinc-800 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:border-indigo-500 font-mono"
+                    placeholder="0"
+                  />
+                </div>
+              ))}
+
+              <div className="sm:col-span-2 rounded-2xl border border-zinc-900 bg-zinc-950/60 px-4 py-3 text-[11px] font-mono text-zinc-400">
+                {editMilestoneHasInvalidAmounts ? (
+                  <span className="text-rose-400">Every milestone amount must be filled and greater than zero.</span>
+                ) : editMilestoneHasTargetTotal ? (
+                  editMilestoneMatchesTotal ? (
+                    <span className="text-emerald-400">Milestone sum {formatBaseUnitsToTokenAmount(editMilestoneSum, editMilestoneDecimals)} matches the stream total {formatBaseUnitsToTokenAmount(editMilestoneTargetTotal, editMilestoneDecimals)}.</span>
+                  ) : (
+                    <span className="text-amber-400">Milestone sum {formatBaseUnitsToTokenAmount(editMilestoneSum, editMilestoneDecimals)} must match total {formatBaseUnitsToTokenAmount(editMilestoneTargetTotal, editMilestoneDecimals)} before saving.</span>
+                  )
+                ) : (
+                  <span>Prefilled milestone amounts are ready for editing.</span>
+                )}
+              </div>
+            </div>
+          )}
+          <button
+            disabled={isStreamCsvCreated(editMilestoneForm.streamId) || editMilestoneHasInvalidAmounts || (editMilestoneHasTargetTotal && !editMilestoneMatchesTotal)}
+            onClick={() => handleAction("edit_milestone", editMilestoneForm)}
+            className={`w-full mt-6 text-white font-bold text-xs py-3 rounded-xl transition-all shadow-lg ${isStreamCsvCreated(editMilestoneForm.streamId) || editMilestoneHasInvalidAmounts || (editMilestoneHasTargetTotal && !editMilestoneMatchesTotal) ? "bg-zinc-850 border border-zinc-800 text-zinc-550 cursor-not-allowed opacity-50" : "bg-indigo-600 hover:bg-indigo-700 hover:shadow-indigo-500/20"}`}
+          >
+            Apply All Milestone Edits
+          </button>
         </div>
       )}
 
@@ -536,7 +657,7 @@ export function DashboardActionPanels(props: Props) {
       <div className={`mt-12 bg-zinc-950 border border-zinc-900 rounded-2xl p-4 font-mono text-[11px] relative overflow-hidden ${mobileNarrowFormClass}`}>
         <div className="absolute top-0 right-0 p-3 flex gap-2"><span className="w-2.5 h-2.5 rounded-full bg-red-500/60" /><span className="w-2.5 h-2.5 rounded-full bg-amber-500/60" /><span className="w-2.5 h-2.5 rounded-full bg-green-500/60" /></div>
         <div className="flex items-center gap-2 text-indigo-400 font-bold mb-2"><Terminal className="w-4 h-4 shrink-0" /><span>Equivalent CLI / Agent Skill Call</span></div>
-        <div className="text-zinc-400 select-all overflow-hidden whitespace-normal break-words py-1 sm:overflow-x-auto sm:whitespace-nowrap sm:break-normal">{activeTab === "create_streams" && <span>{createMode === "manual" ? `$ unified-flow create-stream --recipient ${createForm.recipient || "<address>"} --amount ${createForm.amount} --type ${createForm.type === "0" ? "linear" : createForm.type === "1" ? "milestone" : "cliff"} --duration ${createForm.duration}` : `$ unified-flow create-bulk --csv ./vesting_list.csv --endpoint devnet`}</span>}{activeTab === "edit_csv" && <span>$ unified-flow edit-bulk --csv ./vesting_edits.csv --endpoint devnet</span>}{activeTab === "withdraw" && <span>$ unified-flow claim-tokens --stream {withdrawForm.streamId || "<stream_pda>"}</span>}{activeTab === "cancel" && <span>$ unified-flow cancel-stream --stream {cancelForm.streamId || "<stream_pda>"}</span>}{activeTab === "unlock_milestone" && <span>$ unified-flow unlock-milestone --stream {unlockForm.streamId || "<stream_pda>"}</span>}{activeTab === "edit_milestone" && <span>$ unified-flow edit-milestone --stream {editMilestoneForm.streamId || "<stream_pda>"} --index {editMilestoneForm.index} --amount {editMilestoneForm.newAmount}</span>}{activeTab === "edit_linear" && <span>$ unified-flow edit-linear --stream {editLinearForm.streamId || "<stream_pda>"} {editLinearForm.newEndTs ? `--end-ts ${editLinearForm.newEndTs}` : ""} {editLinearForm.topupAmount ? `--topup ${editLinearForm.topupAmount}` : ""}</span>}{activeTab === "edit_cliff" && <span>$ unified-flow edit-cliff --stream {editCliffForm.streamId || "<stream_pda>"} --cliff-ts {editCliffForm.newCliffTs || "<timestamp>"}</span>}</div>
+        <div className="text-zinc-400 select-all overflow-hidden whitespace-normal break-words py-1 sm:overflow-x-auto sm:whitespace-nowrap sm:break-normal">{activeTab === "create_streams" && <span>{createMode === "manual" ? `$ unified-flow create-stream --recipient ${createForm.recipient || "<address>"} --amount ${createForm.amount} --type ${createForm.type === "0" ? "linear" : createForm.type === "1" ? "milestone" : "cliff"} --duration ${createForm.duration}` : `$ unified-flow create-bulk --csv ./vesting_list.csv --endpoint devnet`}</span>}{activeTab === "edit_csv" && <span>$ unified-flow edit-bulk --csv ./vesting_edits.csv --endpoint devnet</span>}{activeTab === "withdraw" && <span>$ unified-flow claim-tokens --stream {withdrawForm.streamId || "<stream_pda>"}</span>}{activeTab === "cancel" && <span>$ unified-flow cancel-stream --stream {cancelForm.streamId || "<stream_pda>"}</span>}{activeTab === "unlock_milestone" && <span>$ unified-flow unlock-milestone --stream {unlockForm.streamId || "<stream_pda>"}</span>}{activeTab === "edit_milestone" && <span>$ unified-flow edit-milestone --stream {editMilestoneForm.streamId || "<stream_pda>"} --all-indexes</span>}{activeTab === "edit_linear" && <span>$ unified-flow edit-linear --stream {editLinearForm.streamId || "<stream_pda>"} {editLinearForm.newEndTs ? `--end-ts ${editLinearForm.newEndTs}` : ""} {editLinearForm.topupAmount ? `--topup ${editLinearForm.topupAmount}` : ""}</span>}{activeTab === "edit_cliff" && <span>$ unified-flow edit-cliff --stream {editCliffForm.streamId || "<stream_pda>"} --cliff-ts {editCliffForm.newCliffTs || "<timestamp>"}</span>}</div>
       </div>
     </>
   );

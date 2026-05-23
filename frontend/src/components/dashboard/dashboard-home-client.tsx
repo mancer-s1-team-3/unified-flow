@@ -11,6 +11,9 @@ import { StreamDetailsDrawer } from "@/components/dashboard/stream-details-drawe
 import { DashboardStreamsPanel } from "@/components/dashboard/dashboard-streams-panel";
 import type { TabId } from "@/components/dashboard/types";
 import { createStreamBatchOnChain, createStreamOnChain } from "@/lib/solana/create-stream";
+import { editCliffOnChain } from "@/lib/solana/edit-cliff";
+import { editLinearOnChain } from "@/lib/solana/edit-linear";
+import { editMilestoneOnChain } from "@/lib/solana/edit-milestone";
 import { withdrawFromStreamOnChain } from "@/lib/solana/withdraw";
 import { cancelStreamOnChain } from "@/lib/solana/cancel";
 import { unlockMilestoneOnChain } from "@/lib/solana/unlock-milestone";
@@ -50,6 +53,18 @@ function formatBaseUnitsToTokenAmount(amount: bigint, decimals: number) {
   return `${negative ? "-" : ""}${whole}${fraction ? `.${fraction}` : ""}`;
 }
 
+function parseBaseUnits(value: unknown) {
+  try {
+    if (typeof value === "bigint") return value;
+    if (typeof value === "number") return BigInt(Math.trunc(value));
+    if (typeof value === "string" && value.trim() !== "") return BigInt(value.trim());
+  } catch {
+    // Fall back to zero for values we cannot interpret as base units.
+  }
+
+  return BigInt(0);
+}
+
 function buildEvenMilestoneAmounts(amount: string, count: number, decimals: number) {
   if (!Number.isFinite(count) || count <= 0) return [];
 
@@ -69,6 +84,59 @@ function buildEvenMilestoneAmounts(amount: string, count: number, decimals: numb
   return Array.from({ length: normalizedCount }, (_, index) =>
     formatBaseUnitsToTokenAmount(base + (BigInt(index) < remainder ? BigInt(1) : BigInt(0)), decimals)
   );
+}
+
+function buildEvenMilestoneAmountsFromBaseUnits(totalBaseUnits: bigint, count: number, decimals: number) {
+  if (!Number.isFinite(count) || count <= 0) return [];
+
+  const normalizedCount = Math.floor(count);
+  if (normalizedCount <= 0) return [];
+
+  const divisor = BigInt(normalizedCount);
+
+  if (totalBaseUnits < divisor) {
+    return Array.from({ length: normalizedCount }, () => formatBaseUnitsToTokenAmount(BigInt(0), decimals));
+  }
+
+  const base = totalBaseUnits / divisor;
+  const remainder = totalBaseUnits % divisor;
+
+  return Array.from({ length: normalizedCount }, (_, index) =>
+    formatBaseUnitsToTokenAmount(base + (BigInt(index) < remainder ? BigInt(1) : BigInt(0)), decimals)
+  );
+}
+
+function buildMilestoneAmountsFromStream(stream: any) {
+  const count = Number(stream?.milestoneCount || 0);
+  if (!Number.isFinite(count) || count <= 0) {
+    return [] as string[];
+  }
+
+  const decimals = typeof stream?.mintDecimals === "number" ? stream.mintDecimals : 0;
+  const totalBaseUnits = parseBaseUnits(stream?.totalAmount);
+
+  const rawMilestones = String(stream?.milestones || "").trim();
+  if (rawMilestones !== "") {
+    const parsed = rawMilestones
+      .split(";")
+      .map((value: string) => value.trim())
+      .filter(Boolean);
+
+    if (parsed.length > 0) {
+      while (parsed.length < count) {
+        parsed.push("0");
+      }
+
+      const trimmed = parsed.slice(0, count);
+      const parsedSum = trimmed.reduce((sum, amount) => sum + parseTokenAmountToBaseUnits(amount, decimals), BigInt(0));
+
+      if (parsedSum === totalBaseUnits) {
+        return trimmed;
+      }
+    }
+  }
+
+  return buildEvenMilestoneAmountsFromBaseUnits(totalBaseUnits, count, decimals);
 }
 
 type Props = {
@@ -105,7 +173,7 @@ export default function Home({ initialStreams = [] }: Props) {
   const [createMode, setCreateMode] = useState<"manual" | "csv">("manual");
   const [csvCreateText, setCsvCreateText] = useState(() => buildCreateStreamCsvTemplate(endpoint));
   const [csvEditText, setCsvEditText] = useState(
-    "id,amount,duration,cliff_duration,cancelable,milestones\nStreamCSV-XXXXX,1800,10800,0,false,"
+    "id,amount,duration,cliff_duration,milestones\nStreamCSV-XXXXX,1800,10800,0,"
   );
 
   const fileInputCreateRef = useRef<HTMLInputElement>(null);
@@ -118,7 +186,6 @@ export default function Home({ initialStreams = [] }: Props) {
     mint: defaultMint,
     type: "0", // 0: Linear, 1: Cliff, 2: Milestone
     duration: "3600",
-    cancelable: true,
     cliffDuration: "600",
     milestoneCount: "4",
   });
@@ -128,7 +195,12 @@ export default function Home({ initialStreams = [] }: Props) {
   const [withdrawForm, setWithdrawForm] = useState({ streamId: "" });
   const [cancelForm, setCancelForm] = useState({ streamId: "" });
   const [unlockForm, setUnlockForm] = useState({ streamId: "" });
-  const [editMilestoneForm, setEditMilestoneForm] = useState({ streamId: "", index: "0", newAmount: "250" });
+  const [editMilestoneForm, setEditMilestoneForm] = useState({
+    streamId: "",
+    amounts: ["250", "250", "250", "250"],
+    totalAmount: "",
+    mintDecimals: null as number | null,
+  });
   const [editLinearForm, setEditLinearForm] = useState({ streamId: "", newEndTs: "", topupAmount: "" });
   const [editCliffForm, setEditCliffForm] = useState({ streamId: "", newCliffTs: "" });
 
@@ -281,7 +353,7 @@ export default function Home({ initialStreams = [] }: Props) {
         if (tab === "withdraw") setWithdrawForm(prev => ({ ...prev, streamId }));
         if (tab === "cancel") setCancelForm(prev => ({ ...prev, streamId }));
         if (tab === "unlock_milestone") setUnlockForm(prev => ({ ...prev, streamId }));
-        if (tab === "edit_milestone") setEditMilestoneForm(prev => ({ ...prev, streamId }));
+        if (tab === "edit_milestone") setEditMilestoneForm(prev => ({ ...prev, streamId, amounts: prev.amounts }));
         if (tab === "edit_linear") setEditLinearForm(prev => ({ ...prev, streamId }));
         if (tab === "edit_cliff") setEditCliffForm(prev => ({ ...prev, streamId }));
       }
@@ -322,6 +394,21 @@ export default function Home({ initialStreams = [] }: Props) {
 
     return () => clearInterval(interval);
   }, []);
+
+  useEffect(() => {
+    if (activeTab !== "edit_milestone") return;
+    if (!editMilestoneForm.streamId || editMilestoneForm.totalAmount) return;
+
+    const stream = streams.find((item) => String(item?.id || "") === editMilestoneForm.streamId);
+    if (!stream) return;
+
+    setEditMilestoneForm((prev) => ({
+      ...prev,
+      amounts: buildMilestoneAmountsFromStream(stream),
+      totalAmount: String(stream?.totalAmount ?? ""),
+      mintDecimals: typeof stream?.mintDecimals === "number" ? stream.mintDecimals : null,
+    }));
+  }, [activeTab, editMilestoneForm.streamId, editMilestoneForm.totalAmount, streams]);
 
   const handleMilestoneCountChange = useCallback((val: string) => {
     setCreateForm((prev) => ({ ...prev, milestoneCount: val }));
@@ -399,7 +486,6 @@ export default function Home({ initialStreams = [] }: Props) {
       cliffDuration: String(item.cliffDuration ?? 0).trim(),
       milestoneCount: String(item.milestoneCount ?? milestones.length).trim(),
       milestoneAmounts: milestones,
-      cancelable: item.cancelable !== undefined ? Boolean(item.cancelable) : true,
       nonce: Date.now() + index,
     };
   };
@@ -427,7 +513,7 @@ export default function Home({ initialStreams = [] }: Props) {
   const downloadTemplate = (mode: "create" | "edit") => {
     const headers = mode === "create"
       ? buildCreateStreamCsvTemplate(endpoint)
-      : "id,amount,duration,cliff_duration,cancelable,milestones\nStreamCSV-XXXXX,1800,10800,0,false,";
+      : "id,amount,duration,cliff_duration,milestones\nStreamCSV-XXXXX,1800,10800,0,";
 
     const blob = new Blob([headers], { type: "text/csv;charset=utf-8;" });
     const url = URL.createObjectURL(blob);
@@ -477,7 +563,6 @@ export default function Home({ initialStreams = [] }: Props) {
             cliffDuration: data.cliffDuration,
             milestoneCount: data.milestoneCount,
             milestoneAmounts,
-            cancelable: data.cancelable,
           },
         });
 
@@ -683,16 +768,98 @@ export default function Home({ initialStreams = [] }: Props) {
 
     if (actionName === "edit_linear") {
       try {
-        await api.post("/streams/edit-linear", {
-          streamId: data.streamId,
-          newEndTs: data.newEndTs || undefined,
-          topupAmount: data.topupAmount || undefined
+        if (!wallet) {
+          showNotification("error", "Connect the creator wallet before editing a linear stream.");
+          return;
+        }
+
+        await editLinearOnChain({
+          wallet,
+          endpoint,
+          input: {
+            streamAddress: data.streamId,
+            newEndTs: data.newEndTs,
+            topupAmount: data.topupAmount,
+          },
         });
         showNotification("success", `Linear stream timeline extended and topped up successfully!`);
         fetchStreams();
         setActiveTab("streams");
       } catch (err: any) {
-        showNotification("error", err.response?.data?.error || "Failed to update linear stream.");
+        showNotification("error", err?.message || "Failed to update linear stream.");
+      }
+      return;
+    }
+
+    if (actionName === "edit_milestone") {
+      try {
+        if (!wallet) {
+          showNotification("error", "Connect the creator wallet before editing a milestone.");
+          return;
+        }
+
+        const amounts = Array.isArray(data.amounts) ? data.amounts : [];
+        if (amounts.length === 0) {
+          throw new Error("Milestone amounts are required.");
+        }
+
+        const stream = streams.find((item) => String(item?.id || "") === String(data.streamId || ""));
+        if (stream) {
+          const mintDecimals = typeof stream.mintDecimals === "number" ? stream.mintDecimals : 0;
+          const currentTotalAmount = parseBaseUnits(stream.totalAmount);
+          const editedTotalAmount = amounts.reduce(
+            (sum, amount) => sum + parseTokenAmountToBaseUnits(String(amount ?? "0"), mintDecimals),
+            BigInt(0)
+          );
+
+          if (editedTotalAmount !== currentTotalAmount) {
+            throw new Error(
+              `Milestone allocations must sum to ${formatBaseUnitsToTokenAmount(currentTotalAmount, mintDecimals)}.`
+            );
+          }
+        }
+
+        for (let index = 0; index < amounts.length; index += 1) {
+          await editMilestoneOnChain({
+            wallet,
+            endpoint,
+            input: {
+              streamAddress: data.streamId,
+              milestoneIndex: index,
+              newAmount: amounts[index],
+            },
+          });
+        }
+
+        showNotification("success", `Milestone allocations updated successfully!`);
+        fetchStreams();
+        setActiveTab("streams");
+      } catch (err: any) {
+        showNotification("error", err?.message || "Failed to update milestone allocation.");
+      }
+      return;
+    }
+
+    if (actionName === "edit_cliff") {
+      try {
+        if (!wallet) {
+          showNotification("error", "Connect the creator wallet before editing a cliff stream.");
+          return;
+        }
+
+        await editCliffOnChain({
+          wallet,
+          endpoint,
+          input: {
+            streamAddress: data.streamId,
+            newCliffTs: data.newCliffTs,
+          },
+        });
+        showNotification("success", `Cliff timestamp updated successfully!`);
+        fetchStreams();
+        setActiveTab("streams");
+      } catch (err: any) {
+        showNotification("error", err?.message || "Failed to update cliff timestamp.");
       }
       return;
     }
@@ -702,12 +869,27 @@ export default function Home({ initialStreams = [] }: Props) {
   };
 
   // Pre-fill helpers to easily act on a stream
-  const prefillAction = (tab: TabId, streamId: string) => {
+  const prefillAction = (tab: TabId, streamOrId: any) => {
+    const streamId = typeof streamOrId === "string" ? streamOrId : String(streamOrId?.id || "");
+    const stream = typeof streamOrId === "string"
+      ? streams.find((item) => String(item?.id || "") === streamId)
+      : streamOrId;
     setActiveTab(tab);
     if (tab === "withdraw") setWithdrawForm({ streamId });
     if (tab === "cancel") setCancelForm({ streamId });
     if (tab === "unlock_milestone") setUnlockForm({ streamId });
-    if (tab === "edit_milestone") setEditMilestoneForm({ streamId, index: "0", newAmount: "250" });
+    if (tab === "edit_milestone") {
+      setEditMilestoneForm(
+        stream
+          ? {
+              streamId,
+              amounts: buildMilestoneAmountsFromStream(stream),
+              totalAmount: String(stream?.totalAmount ?? ""),
+              mintDecimals: typeof stream?.mintDecimals === "number" ? stream.mintDecimals : null,
+            }
+          : { streamId, amounts: ["250", "250", "250", "250"], totalAmount: "", mintDecimals: null }
+      );
+    }
     if (tab === "edit_linear") setEditLinearForm({ streamId, newEndTs: "", topupAmount: "" });
     if (tab === "edit_cliff") setEditCliffForm({ streamId, newCliffTs: "" });
     
