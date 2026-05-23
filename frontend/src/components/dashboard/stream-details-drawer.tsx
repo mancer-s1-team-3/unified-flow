@@ -20,7 +20,7 @@ export const StreamDetailsDrawer = memo(function StreamDetailsDrawer({
   loadingDetails: boolean;
   copiedId: string | null;
   copyToClipboard: (text: string, id: string) => void;
-  prefillAction: (tab: any, streamId: string) => void;
+  prefillAction: (tab: any, streamOrId: string | Record<string, any>) => void;
   setActiveTab: (tab: any) => void;
   setCsvEditText: (value: string) => void;
   setSelectedStream: (value: any) => void;
@@ -316,7 +316,7 @@ export const StreamDetailsDrawer = memo(function StreamDetailsDrawer({
                 <button
                   onClick={() => {
                     setActiveTab("edit_csv");
-                    setCsvEditText(`id,amount,duration,cancelable\n${selectedStream.id},${selectedStream.totalAmount},3600,${selectedStream.cancelable}`);
+                    setCsvEditText(`id,amount,duration\n${selectedStream.id},${selectedStream.totalAmount},3600`);
                     setSelectedStream(null);
                   }}
                   className="sm:col-span-2 flex items-center justify-center gap-1.5 bg-emerald-600 hover:bg-emerald-700 text-white py-2.5 rounded-xl transition-all"
@@ -336,7 +336,7 @@ export const StreamDetailsDrawer = memo(function StreamDetailsDrawer({
                   <button
                     onClick={() => {
                       const tab = selectedStream.vestingType === 0 ? "edit_linear" : selectedStream.vestingType === 1 ? "edit_cliff" : "edit_milestone";
-                      prefillAction(tab, selectedStream.id);
+                      prefillAction(tab, tab === "edit_milestone" ? selectedStream : selectedStream.id);
                     }}
                     className="sm:col-span-2 flex items-center justify-center gap-1.5 bg-zinc-900 hover:bg-zinc-800 text-zinc-400 hover:text-zinc-200 border border-zinc-850 hover:border-zinc-750 py-2.5 rounded-xl transition-all"
                   >

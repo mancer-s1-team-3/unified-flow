@@ -449,9 +449,13 @@ describe("edit", () => {
 
     const streamAfter = await program.account.streamAccount.fetch(streamPda);
     const milestoneAfter = await program.account.milestoneAccount.fetch(milestonePda);
+    const milestoneSum = (await Promise.all(
+      milestonePdas.map((pda) => program.account.milestoneAccount.fetch(pda))
+    )).reduce((sum, item) => sum + item.amount.toNumber(), 0);
 
     expect(milestoneBefore.amount.toNumber()).to.equal(250_000);
     expect(milestoneAfter.amount.toNumber()).to.equal(newAmount.toNumber());
+    expect(milestoneSum).to.equal(streamAfter.totalAmount.toNumber());
     expect(streamAfter.totalAmount.toNumber()).to.equal(streamBefore.totalAmount.toNumber() + 50_000);
     expect(await getTokenBalance(context, vaultAta)).to.equal(vaultBefore + BigInt(50_000));
     expect(await getTokenBalance(context, creatorAta)).to.equal(creatorBefore - BigInt(50_000));
