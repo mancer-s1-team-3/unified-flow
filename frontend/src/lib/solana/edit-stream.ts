@@ -30,6 +30,7 @@ type StreamAccountView = {
   vault: PublicKey;
   milestoneCount: number;
   totalAmount: anchor.BN | bigint | number | string;
+  startTs: anchor.BN | bigint | number | string;
   endTs: anchor.BN | bigint | number | string;
   cliffTs: anchor.BN | bigint | number | string;
   status: number;
@@ -54,13 +55,13 @@ type ExecuteInstructionParams = {
 
 export type EditLinearInput = Readonly<{
   streamAddress: string;
-  newEndTs?: string;
+  newEndDuration?: string;
   topupAmount?: string;
 }>;
 
 export type EditCliffInput = Readonly<{
   streamAddress: string;
-  newCliffTs: string;
+  newCliffDuration: string;
 }>;
 
 export type EditMilestoneInput = Readonly<{
@@ -253,13 +254,18 @@ export async function editLinearOnChain({
 
   const mint = streamState.mint as PublicKey;
   const mintDecimals = await getMintDecimals(connection, mint, commitment);
+  
+  const startTs = new anchor.BN(String(streamState.startTs || "0"));
   const currentEndTs = new anchor.BN(String(streamState.endTs));
-  const newEndTsRaw = input.newEndTs?.trim() ?? "";
-  if (newEndTsRaw !== "" && !/^\d+$/.test(newEndTsRaw)) {
-    throw new Error("New end timestamp must be a valid integer.");
+  
+  const newEndDurationRaw = input.newEndDuration?.trim() ?? "";
+  if (newEndDurationRaw !== "" && !/^\d+$/.test(newEndDurationRaw)) {
+    throw new Error("New end duration must be a valid integer.");
   }
 
-  const parsedNewEndTs = newEndTsRaw !== "" ? new anchor.BN(newEndTsRaw) : currentEndTs;
+  const parsedNewEndTs = newEndDurationRaw !== "" 
+    ? startTs.add(new anchor.BN(newEndDurationRaw)) 
+    : currentEndTs;
 
   const parsedTopupAmount = input.topupAmount?.trim()
     ? parseTokenAmount(input.topupAmount, mintDecimals, "Top-up amount")
@@ -332,15 +338,23 @@ export async function editCliffOnChain({
     throw new Error("Connected wallet is not the creator for this stream.");
   }
 
-  const newCliffTsRaw = input.newCliffTs.trim();
-  if (!/^\d+$/.test(newCliffTsRaw)) {
-    throw new Error("New cliff timestamp must be a valid integer.");
+  const newCliffDurationRaw = input.newCliffDuration.trim();
+  if (!/^\d+$/.test(newCliffDurationRaw)) {
+    throw new Error("New cliff duration must be a valid integer.");
   }
 
-  const newCliffTs = Number.parseInt(newCliffTsRaw, 10);
+  const startTs = new anchor.BN(String(streamState.startTs || "0"));
+  const endTs = new anchor.BN(String(streamState.endTs || "0"));
+  
+  const newCliffDurationBn = new anchor.BN(newCliffDurationRaw);
+  const newCliffBn = startTs.add(newCliffDurationBn);
+
+  if (newCliffBn.lt(startTs) || newCliffBn.gt(endTs)) {
+    throw new Error(`Cliff timestamp must be between stream start time (${startTs.toString()}) and end time (${endTs.toString()}).`);
+  }
 
   const anchorInstruction = await program.methods
-    .editCliff(new anchor.BN(newCliffTs))
+    .editCliff(newCliffBn)
     .accounts({
       creator,
       stream: streamAddress,

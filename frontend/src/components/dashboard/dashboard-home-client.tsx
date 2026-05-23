@@ -201,8 +201,8 @@ export default function Home({ initialStreams = [] }: Props) {
     totalAmount: "",
     mintDecimals: null as number | null,
   });
-  const [editLinearForm, setEditLinearForm] = useState({ streamId: "", newEndTs: "", topupAmount: "" });
-  const [editCliffForm, setEditCliffForm] = useState({ streamId: "", newCliffTs: "" });
+  const [editLinearForm, setEditLinearForm] = useState({ streamId: "", newEndDuration: "", topupAmount: "" });
+  const [editCliffForm, setEditCliffForm] = useState({ streamId: "", newCliffDuration: "" });
 
   // Notifications
   const [notification, setNotification] = useState<{
@@ -778,7 +778,7 @@ export default function Home({ initialStreams = [] }: Props) {
           endpoint,
           input: {
             streamAddress: data.streamId,
-            newEndTs: data.newEndTs,
+            newEndDuration: data.newEndDuration,
             topupAmount: data.topupAmount,
           },
         });
@@ -852,7 +852,7 @@ export default function Home({ initialStreams = [] }: Props) {
           endpoint,
           input: {
             streamAddress: data.streamId,
-            newCliffTs: data.newCliffTs,
+            newCliffDuration: data.newCliffDuration,
           },
         });
         showNotification("success", `Cliff timestamp updated successfully!`);
@@ -890,8 +890,14 @@ export default function Home({ initialStreams = [] }: Props) {
           : { streamId, amounts: ["250", "250", "250", "250"], totalAmount: "", mintDecimals: null }
       );
     }
-    if (tab === "edit_linear") setEditLinearForm({ streamId, newEndTs: "", topupAmount: "" });
-    if (tab === "edit_cliff") setEditCliffForm({ streamId, newCliffTs: "" });
+    if (tab === "edit_linear") {
+      const duration = stream && stream.endTs && stream.startTs ? String(Number(stream.endTs) - Number(stream.startTs)) : "";
+      setEditLinearForm({ streamId, newEndDuration: duration, topupAmount: "" });
+    }
+    if (tab === "edit_cliff") {
+      const duration = stream && stream.cliffTs && stream.startTs ? String(Number(stream.cliffTs) - Number(stream.startTs)) : "";
+      setEditCliffForm({ streamId, newCliffDuration: duration });
+    }
     
     // Close Drawer
     setSelectedStream(null);
