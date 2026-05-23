@@ -159,7 +159,6 @@ export const DashboardSidebar = memo(function DashboardSidebar({
         onClick={() => setActiveTab("edit_milestone")}
         icon={<Settings className="w-4 h-4" />}
         label="Edit Milestone Struct"
-        badge="WIP"
       />
 
       <TabButton
@@ -167,7 +166,6 @@ export const DashboardSidebar = memo(function DashboardSidebar({
         onClick={() => setActiveTab("edit_linear")}
         icon={<Clock className="w-4 h-4" />}
         label="Edit Linear Timeline"
-        badge="WIP"
       />
 
       <TabButton
@@ -175,7 +173,6 @@ export const DashboardSidebar = memo(function DashboardSidebar({
         onClick={() => setActiveTab("edit_cliff")}
         icon={<Shield className="w-4 h-4" />}
         label="Edit Cliff Conditions"
-        badge="WIP"
       />
       </aside>
     </>
