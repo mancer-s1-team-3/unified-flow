@@ -9,6 +9,7 @@ import { DashboardSidebar } from "@/components/dashboard/dashboard-sidebar";
 import { NotificationBanner } from "@/components/dashboard/notification-banner";
 import { StreamDetailsDrawer } from "@/components/dashboard/stream-details-drawer";
 import { DashboardStreamsPanel } from "@/components/dashboard/dashboard-streams-panel";
+import { ChatbotWidget } from "@/components/dashboard/chatbot-widget";
 import type { TabId } from "@/components/dashboard/types";
 import { createStreamBatchOnChain, createStreamOnChain } from "@/lib/solana/create-stream";
 import { editCliffOnChain } from "@/lib/solana/edit-cliff";
@@ -998,6 +999,10 @@ export default function Home({ initialStreams = [] }: Props) {
         </section>
 
       </div>
+
+      {/* Chatbot Assistant */}
+      <ChatbotWidget />
+
     </main>
   );
 }
