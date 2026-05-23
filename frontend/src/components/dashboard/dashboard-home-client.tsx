@@ -808,7 +808,7 @@ export default function Home({ initialStreams = [] }: Props) {
           const mintDecimals = typeof stream.mintDecimals === "number" ? stream.mintDecimals : 0;
           const currentTotalAmount = parseBaseUnits(stream.totalAmount);
           const editedTotalAmount = amounts.reduce(
-            (sum, amount) => sum + parseTokenAmountToBaseUnits(String(amount ?? "0"), mintDecimals),
+            (sum: bigint, amount: any) => sum + parseTokenAmountToBaseUnits(String(amount ?? "0"), mintDecimals),
             BigInt(0)
           );
 
