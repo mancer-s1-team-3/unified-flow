@@ -691,11 +691,11 @@ pub fn edit_cliff(ctx: Context<EditCliff>, new_cliff_ts: i64) -> Result<()> {
         );
         require!(
             new_cliff_ts >= stream.start_ts,
-            ErrorCode::InvalidSchedule
+            ErrorCode::InvalidCliff
         );
         require!(
             new_cliff_ts <= stream.end_ts,
-            ErrorCode::InvalidSchedule
+            ErrorCode::InvalidCliff
         );
         require!(
             new_cliff_ts >= now,
@@ -1284,6 +1284,9 @@ pub enum ErrorCode {
 
     #[msg("End date must be after start date")]
     InvalidSchedule,
+
+    #[msg("Cliff date must be between start and end dates")]
+    InvalidCliff,
 
     #[msg("End date must be in the future")]
     InvalidEndDate,
