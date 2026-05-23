@@ -167,3 +167,67 @@ export function normalizeStreamCancelled(event: Record<string, unknown>) {
         timestamp,
     };
 }
+
+export function normalizeMilestoneEdited(event: Record<string, unknown>) {
+    const stream = asString(firstDefined(event, ["stream"]));
+    const milestone = asString(firstDefined(event, ["milestone"]));
+    const index = asNumber(firstDefined(event, ["index"]), 0);
+    const oldAmount = asBigInt(firstDefined(event, ["old_amount", "oldAmount"]));
+    const newAmount = asBigInt(firstDefined(event, ["new_amount", "newAmount"]));
+    const timestamp = asBigInt(firstDefined(event, ["timestamp"]));
+
+    if (!stream || !milestone || index === null || oldAmount === null || newAmount === null || timestamp === null) {
+        return null;
+    }
+
+    return {
+        stream,
+        milestone,
+        index,
+        oldAmount,
+        newAmount,
+        timestamp,
+    };
+}
+
+export function normalizeLinearEdited(event: Record<string, unknown>) {
+    const stream = asString(firstDefined(event, ["stream"]));
+    const oldEndTs = asBigInt(firstDefined(event, ["old_end_ts", "oldEndTs"]));
+    const newEndTs = asBigInt(firstDefined(event, ["new_end_ts", "newEndTs"]));
+    const oldTotalAmount = asBigInt(firstDefined(event, ["old_total_amount", "oldTotalAmount"]));
+    const newTotalAmount = asBigInt(firstDefined(event, ["new_total_amount", "newTotalAmount"]));
+    const topupAmount = asBigInt(firstDefined(event, ["topup_amount", "topupAmount"]));
+    const timestamp = asBigInt(firstDefined(event, ["timestamp"]));
+
+    if (!stream || oldEndTs === null || newEndTs === null || oldTotalAmount === null || newTotalAmount === null || topupAmount === null || timestamp === null) {
+        return null;
+    }
+
+    return {
+        stream,
+        oldEndTs,
+        newEndTs,
+        oldTotalAmount,
+        newTotalAmount,
+        topupAmount,
+        timestamp,
+    };
+}
+
+export function normalizeCliffEdited(event: Record<string, unknown>) {
+    const stream = asString(firstDefined(event, ["stream"]));
+    const oldCliffTs = asBigInt(firstDefined(event, ["old_cliff_ts", "oldCliffTs"]));
+    const newCliffTs = asBigInt(firstDefined(event, ["new_cliff_ts", "newCliffTs"]));
+    const timestamp = asBigInt(firstDefined(event, ["timestamp"]));
+
+    if (!stream || oldCliffTs === null || newCliffTs === null || timestamp === null) {
+        return null;
+    }
+
+    return {
+        stream,
+        oldCliffTs,
+        newCliffTs,
+        timestamp,
+    };
+}

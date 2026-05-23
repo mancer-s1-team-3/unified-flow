@@ -8,6 +8,9 @@ import {
     normalizeMilestoneUnlocked,
     normalizeStreamCreated,
     normalizeTokensClaimed,
+    normalizeMilestoneEdited,
+    normalizeLinearEdited,
+    normalizeCliffEdited,
 } from "./eventNormalizer";
 
 dotenv.config();
@@ -72,6 +75,12 @@ export async function startIndexer() {
                             tx,
                             logInfo.signature
                         );
+                    } else if (event.name === "MilestoneEdited") {
+                        await handleMilestoneEdited(event.data, tx, logInfo.signature);
+                    } else if (event.name === "LinearEdited") {
+                        await handleLinearEdited(event.data, tx, logInfo.signature);
+                    } else if (event.name === "CliffEdited") {
+                        await handleCliffEdited(event.data, tx, logInfo.signature);
                     }
                 }
             } catch (err) {
@@ -292,4 +301,120 @@ async function handleStreamCancelled(
     });
 
     console.log(`Indexed cancel for stream ${streamId}: vested ${normalized.vestedAmount.toString()} tokens`);
+}
+
+async function handleMilestoneEdited(event: any, tx: any, signature: string) {
+    console.log("MILESTONE EDITED:", event);
+
+    const normalized = normalizeMilestoneEdited(event);
+    if (!normalized) {
+        console.warn("Skipping MilestoneEdited event with missing fields:", event);
+        return;
+    }
+
+    const streamId = normalized.stream;
+    const stream = await prisma.stream.findUnique({ where: { id: streamId } });
+
+    if (stream) {
+        const diff = normalized.newAmount - normalized.oldAmount;
+        const updatedTotal = stream.totalAmount + diff;
+
+        let milestonesArr = stream.milestones ? stream.milestones.split(";") : [];
+        while (milestonesArr.length <= normalized.index) {
+            milestonesArr.push("0");
+        }
+        milestonesArr[normalized.index] = normalized.newAmount.toString();
+
+        await prisma.stream.update({
+            where: { id: streamId },
+            data: {
+                totalAmount: updatedTotal,
+                milestones: milestonesArr.join(";"),
+            }
+        });
+    }
+
+    await prisma.transaction.upsert({
+        where: { signature },
+        update: {},
+        create: {
+            id: signature,
+            signature,
+            slot: BigInt(tx.slot),
+            streamId: stream ? streamId : null,
+            type: "MILESTONE_EDITED",
+            raw: JSON.parse(JSON.stringify(tx)),
+        }
+    });
+}
+
+async function handleLinearEdited(event: any, tx: any, signature: string) {
+    console.log("LINEAR EDITED:", event);
+
+    const normalized = normalizeLinearEdited(event);
+    if (!normalized) {
+        console.warn("Skipping LinearEdited event with missing fields:", event);
+        return;
+    }
+
+    const streamId = normalized.stream;
+    const stream = await prisma.stream.findUnique({ where: { id: streamId } });
+
+    if (stream) {
+        await prisma.stream.update({
+            where: { id: streamId },
+            data: {
+                endTs: normalized.newEndTs,
+                totalAmount: normalized.newTotalAmount,
+            }
+        });
+    }
+
+    await prisma.transaction.upsert({
+        where: { signature },
+        update: {},
+        create: {
+            id: signature,
+            signature,
+            slot: BigInt(tx.slot),
+            streamId: stream ? streamId : null,
+            type: "LINEAR_EDITED",
+            raw: JSON.parse(JSON.stringify(tx)),
+        }
+    });
+}
+
+async function handleCliffEdited(event: any, tx: any, signature: string) {
+    console.log("CLIFF EDITED:", event);
+
+    const normalized = normalizeCliffEdited(event);
+    if (!normalized) {
+        console.warn("Skipping CliffEdited event with missing fields:", event);
+        return;
+    }
+
+    const streamId = normalized.stream;
+    const stream = await prisma.stream.findUnique({ where: { id: streamId } });
+
+    if (stream) {
+        await prisma.stream.update({
+            where: { id: streamId },
+            data: {
+                cliffTs: normalized.newCliffTs,
+            }
+        });
+    }
+
+    await prisma.transaction.upsert({
+        where: { signature },
+        update: {},
+        create: {
+            id: signature,
+            signature,
+            slot: BigInt(tx.slot),
+            streamId: stream ? streamId : null,
+            type: "CLIFF_EDITED",
+            raw: JSON.parse(JSON.stringify(tx)),
+        }
+    });
 }
