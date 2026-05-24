@@ -349,6 +349,8 @@ export function DashboardActionPanels(props: Props) {
 
   const mintPickerRef = useRef<HTMLDivElement | null>(null);
   const [mintMenuOpen, setMintMenuOpen] = useState(false);
+  const [cliffInputMode, setCliffInputMode] = useState<"duration" | "date">("duration");
+  const [durationInputMode, setDurationInputMode] = useState<"duration" | "date">("duration");
 
   const milestoneSum = useMemo(
     () => milestoneAmounts.reduce((acc, curr) => acc + Number(curr || 0), 0),
@@ -363,6 +365,24 @@ export function DashboardActionPanels(props: Props) {
   const durationSeconds = Number(createForm.duration || 0);
   const cliffDurationSeconds = Number(createForm.cliffDuration || 0);
   const cliffExceedsDuration = createForm.type === "1" && cliffDurationSeconds > durationSeconds;
+  const cliffDateInLocalIso = (() => {
+    if (createForm.cliffDate) return createForm.cliffDate;
+    const seconds = Number(createForm.cliffDuration || 0);
+    if (!Number.isFinite(seconds) || seconds <= 0) return "";
+    const d = new Date(Date.now() + seconds * 1000);
+    const pad = (n: number) => String(n).padStart(2, "0");
+    return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+  })();
+  const cliffDateInPast = createForm.type === "1" && cliffDurationSeconds <= 0;
+  const endDateInLocalIso = (() => {
+    if (createForm.endDate) return createForm.endDate;
+    const seconds = Number(createForm.duration || 0);
+    if (!Number.isFinite(seconds) || seconds <= 0) return "";
+    const d = new Date(Date.now() + seconds * 1000);
+    const pad = (n: number) => String(n).padStart(2, "0");
+    return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+  })();
+  const endDateInPast = createForm.type !== "2" && durationSeconds <= 0;
 
   const editMilestoneDecimals = Number.isFinite(Number(editMilestoneForm?.mintDecimals))
     ? Number(editMilestoneForm.mintDecimals)
@@ -421,6 +441,8 @@ export function DashboardActionPanels(props: Props) {
   const createDisabled =
     !createRequiredValid ||
     cliffExceedsDuration ||
+    cliffDateInPast ||
+    endDateInPast ||
     (createForm.type === "2" && (hasInvalidMilestones || !milestonesMatchTotal)) ||
     activeTxAction === "create_stream";
   const withdrawDisabled = !withdrawForm.streamId?.trim() || activeTxAction === "withdraw";
@@ -630,7 +652,9 @@ export function DashboardActionPanels(props: Props) {
                 </div>
               </div>
               <div className="min-w-0 max-w-full">
-                <label className="block text-[10px] sm:text-xs font-semibold text-zinc-400 uppercase tracking-wider mb-1.5">Type</label>
+                <div className="flex items-center justify-between gap-2 mb-1.5 min-h-[26px]">
+                  <label className="block text-[10px] sm:text-xs font-semibold text-zinc-400 uppercase tracking-wider">Type</label>
+                </div>
                 <select value={createForm.type} onChange={(e) => setCreateForm({ ...createForm, type: e.target.value })} className="block w-full max-w-full min-w-0 bg-zinc-950 border border-zinc-800 rounded-xl px-3.5 py-2.5 sm:px-4 sm:py-3 text-sm focus:outline-none focus:border-indigo-500 font-medium">
                   <option value="0">Linear Vesting</option>
                   <option value="1">Cliff Vesting</option>
@@ -639,18 +663,134 @@ export function DashboardActionPanels(props: Props) {
               </div>
               {createForm.type !== "2" && (
                 <div className="min-w-0 max-w-full">
-                  <label className="block text-[10px] sm:text-xs font-semibold text-zinc-400 uppercase tracking-wider mb-1.5">Duration</label>
-                  <input type="number" value={createForm.duration} onChange={(e) => setCreateForm({ ...createForm, duration: e.target.value })} className="block w-full max-w-full min-w-0 bg-zinc-950 border border-zinc-800 rounded-xl px-3.5 py-2.5 sm:px-4 sm:py-3 text-sm focus:outline-none focus:border-indigo-500 font-mono" />
+                  <div className="flex items-center justify-between gap-2 mb-1.5 min-h-[26px]">
+                    <label className="block text-[10px] sm:text-xs font-semibold text-zinc-400 uppercase tracking-wider">{durationInputMode === "duration" ? "Duration" : "End Date"}</label>
+                    <div className="inline-flex rounded-lg border border-zinc-800 bg-zinc-950 p-0.5 text-[9px] font-black uppercase tracking-wider">
+                      <button
+                        type="button"
+                        onClick={() => setDurationInputMode("duration")}
+                        className={`px-2 py-1 rounded-md transition-colors ${durationInputMode === "duration" ? "bg-indigo-600 text-white" : "text-zinc-400 hover:text-zinc-200"}`}
+                      >
+                        Duration
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setDurationInputMode("date")}
+                        className={`px-2 py-1 rounded-md transition-colors ${durationInputMode === "date" ? "bg-indigo-600 text-white" : "text-zinc-400 hover:text-zinc-200"}`}
+                      >
+                        Date
+                      </button>
+                    </div>
+                  </div>
+                  {durationInputMode === "duration" ? (
+                    <div className="relative">
+                      <input
+                        type="number"
+                        min="0"
+                        value={createForm.duration}
+                        onChange={(e) => setCreateForm({ ...createForm, duration: e.target.value, endDate: "" })}
+                        placeholder="Seconds from now"
+                        className="block w-full max-w-full min-w-0 bg-zinc-950 border border-zinc-800 rounded-xl px-3.5 py-2.5 sm:px-4 sm:py-3 pr-14 text-sm focus:outline-none focus:border-indigo-500 font-mono"
+                      />
+                      <span className="absolute inset-y-0 right-3 flex items-center text-[10px] font-black uppercase tracking-wider text-zinc-500">sec</span>
+                    </div>
+                  ) : (
+                    <input
+                      type="datetime-local"
+                      value={endDateInLocalIso}
+                      onChange={(e) => {
+                        const value = e.target.value;
+                        if (!value) {
+                          setCreateForm({ ...createForm, endDate: "", duration: "" });
+                          return;
+                        }
+                        const target = new Date(value).getTime();
+                        const seconds = Math.max(0, Math.floor((target - Date.now()) / 1000));
+                        setCreateForm({ ...createForm, endDate: value, duration: String(seconds) });
+                      }}
+                      className="block w-full max-w-full min-w-0 bg-zinc-950 border border-zinc-800 rounded-xl px-3.5 py-2.5 sm:px-4 sm:py-3 text-sm focus:outline-none focus:border-indigo-500 font-mono [color-scheme:dark]"
+                    />
+                  )}
+                  {durationSeconds > 0 && (
+                    <div className="mt-1.5 text-[10px] font-mono text-zinc-500">
+                      {durationInputMode === "duration"
+                        ? `≈ ends ${new Date(Date.now() + durationSeconds * 1000).toLocaleString()}`
+                        : `≈ ${durationSeconds.toLocaleString()}s from now`}
+                    </div>
+                  )}
+                  {endDateInPast && durationInputMode === "date" && (
+                    <div className="mt-2 text-[10px] font-semibold text-rose-400">
+                      End date must be in the future.
+                    </div>
+                  )}
                 </div>
               )}
 
               {createForm.type === "1" && (
                 <div className="min-w-0 max-w-full">
-                  <label className="block text-[10px] sm:text-xs font-semibold text-zinc-400 uppercase tracking-wider mb-1.5">Cliff</label>
-                  <input type="number" value={createForm.cliffDuration} onChange={(e) => setCreateForm({ ...createForm, cliffDuration: e.target.value })} className="block w-full max-w-full min-w-0 bg-zinc-950 border border-zinc-800 rounded-xl px-3.5 py-2.5 sm:px-4 sm:py-3 text-sm focus:outline-none focus:border-indigo-500 font-mono" />
+                  <div className="flex items-center justify-between gap-2 mb-1.5 min-h-[26px]">
+                    <label className="block text-[10px] sm:text-xs font-semibold text-zinc-400 uppercase tracking-wider">Cliff</label>
+                    <div className="inline-flex rounded-lg border border-zinc-800 bg-zinc-950 p-0.5 text-[9px] font-black uppercase tracking-wider">
+                      <button
+                        type="button"
+                        onClick={() => setCliffInputMode("duration")}
+                        className={`px-2 py-1 rounded-md transition-colors ${cliffInputMode === "duration" ? "bg-indigo-600 text-white" : "text-zinc-400 hover:text-zinc-200"}`}
+                      >
+                        Duration
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setCliffInputMode("date")}
+                        className={`px-2 py-1 rounded-md transition-colors ${cliffInputMode === "date" ? "bg-indigo-600 text-white" : "text-zinc-400 hover:text-zinc-200"}`}
+                      >
+                        Date
+                      </button>
+                    </div>
+                  </div>
+                  {cliffInputMode === "duration" ? (
+                    <div className="relative">
+                      <input
+                        type="number"
+                        min="0"
+                        value={createForm.cliffDuration}
+                        onChange={(e) => setCreateForm({ ...createForm, cliffDuration: e.target.value, cliffDate: "" })}
+                        placeholder="Seconds from now"
+                        className="block w-full max-w-full min-w-0 bg-zinc-950 border border-zinc-800 rounded-xl px-3.5 py-2.5 sm:px-4 sm:py-3 pr-14 text-sm focus:outline-none focus:border-indigo-500 font-mono"
+                      />
+                      <span className="absolute inset-y-0 right-3 flex items-center text-[10px] font-black uppercase tracking-wider text-zinc-500">sec</span>
+                    </div>
+                  ) : (
+                    <input
+                      type="datetime-local"
+                      value={cliffDateInLocalIso}
+                      onChange={(e) => {
+                        const value = e.target.value;
+                        if (!value) {
+                          setCreateForm({ ...createForm, cliffDate: "", cliffDuration: "" });
+                          return;
+                        }
+                        const target = new Date(value).getTime();
+                        const seconds = Math.max(0, Math.floor((target - Date.now()) / 1000));
+                        setCreateForm({ ...createForm, cliffDate: value, cliffDuration: String(seconds) });
+                      }}
+                      className="block w-full max-w-full min-w-0 bg-zinc-950 border border-zinc-800 rounded-xl px-3.5 py-2.5 sm:px-4 sm:py-3 text-sm focus:outline-none focus:border-indigo-500 font-mono [color-scheme:dark]"
+                    />
+                  )}
+                  {cliffDurationSeconds > 0 && (
+                    <div className="mt-1.5 text-[10px] font-mono text-zinc-500">
+                      {cliffInputMode === "duration"
+                        ? `≈ unlocks ${new Date(Date.now() + cliffDurationSeconds * 1000).toLocaleString()}`
+                        : `≈ ${cliffDurationSeconds.toLocaleString()}s from now`}
+                    </div>
+                  )}
+                  {cliffDateInPast && cliffInputMode === "date" && (
+                    <div className="mt-2 text-[10px] font-semibold text-rose-400">
+                      Cliff date must be in the future.
+                    </div>
+                  )}
                   {cliffExceedsDuration && (
                     <div className="mt-2 text-[10px] font-semibold text-amber-400">
-                      Cliff duration must be less than or equal to the stream duration.
+                      Cliff must occur before the stream ends ({durationSeconds.toLocaleString()}s from now).
                     </div>
                   )}
                 </div>

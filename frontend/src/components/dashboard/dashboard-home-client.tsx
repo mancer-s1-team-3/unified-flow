@@ -191,7 +191,9 @@ export default function Home({ initialStreams = [] }: Props) {
     mint: defaultMint,
     type: "0", // 0: Linear, 1: Cliff, 2: Milestone
     duration: "3600",
+    endDate: "",
     cliffDuration: "600",
+    cliffDate: "",
     milestoneCount: "4",
   });
 
