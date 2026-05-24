@@ -15,6 +15,7 @@ import { createStreamBatchOnChain, createStreamOnChain } from "@/lib/solana/crea
 import { editCliffOnChain } from "@/lib/solana/edit-cliff";
 import { editLinearOnChain } from "@/lib/solana/edit-linear";
 import { editMilestoneOnChain } from "@/lib/solana/edit-milestone";
+import { editStreamBatchOnChain } from "@/lib/solana/edit-stream";
 import { withdrawFromStreamOnChain } from "@/lib/solana/withdraw";
 import { cancelStreamOnChain } from "@/lib/solana/cancel";
 import { unlockMilestoneOnChain } from "@/lib/solana/unlock-milestone";
@@ -318,7 +319,7 @@ export default function Home({ initialStreams = [] }: Props) {
       }
 
       const res = await api.post("/csv/diff", payload);
-      setCsvDiffResult(res.data);
+      setCsvDiffResult({ ...res.data, mode });
       showNotification("success", "CSV structural diff computed successfully!");
     } catch (err: any) {
       showNotification("error", err.response?.data?.error || "Failed to calculate CSV diff.");
@@ -523,7 +524,12 @@ export default function Home({ initialStreams = [] }: Props) {
   const downloadTemplate = (mode: "create" | "edit") => {
     const headers = mode === "create"
       ? buildCreateStreamCsvTemplate(endpoint)
-      : "id,amount,duration,cliff_duration,milestones\nStreamCSV-XXXXX,1800,10800,0,";
+      : [
+          "id,type,amount,duration,cliff_duration,milestones",
+          "LinearStreamId,0,250,10800,,",
+          "CliffStreamId,1,,,3600,",
+          "MilestoneStreamId,2,,,,400;300;300",
+        ].join("\n");
 
     const blob = new Blob([headers], { type: "text/csv;charset=utf-8;" });
     const url = URL.createObjectURL(blob);
@@ -773,13 +779,31 @@ export default function Home({ initialStreams = [] }: Props) {
     // CSV Bulk Edit with Versioning
     if (actionName === "edit_stream_csv") {
       try {
+        if (!wallet) {
+          showNotification("error", "Connect the creator wallet before bulk editing streams.");
+          return;
+        }
+
         const parsedItems = parseCsv(csvEditText);
         if (parsedItems.length === 0) {
           showNotification("error", "CSV format invalid. Please provide correct headers.");
           return;
         }
 
-        await api.post("/streams/edit-csv", { items: parsedItems });
+        const batchEditResult = await editStreamBatchOnChain({
+          wallet,
+          endpoint,
+          inputs: parsedItems.map((item: any) => ({
+            id: String(item.id || ""),
+            amount: item.amount,
+            duration: item.duration,
+            cliffDuration: item.cliffDuration,
+            milestones: item.milestones,
+          })),
+        });
+        if (batchEditResult.signatures.length === 0) {
+          throw new Error("No editable rows found. Provide duration, cliff_duration, or milestones columns for CSV-created streams.");
+        }
 
         // 1. Persist edit contents in Prisma version history only after the update succeeds.
         await api.post("/csv/upload", {
@@ -787,7 +811,7 @@ export default function Home({ initialStreams = [] }: Props) {
           filename: `bulk_edit_v${csvVersions.length + 1}.csv`,
           uploader: connectedWalletAddress || "Anonymous"
         });
-        showNotification("success", `Successfully versioned (v${csvVersions.length + 1}) and applied CSV bulk edits!`);
+        showNotification("success", `Successfully versioned (v${csvVersions.length + 1}) and applied ${batchEditResult.streamAddresses.length} on-chain CSV bulk edits in ${batchEditResult.signatures.length} transaction(s)!`);
         
         // Reset state
         setCsvDiffResult(null);
@@ -795,7 +819,7 @@ export default function Home({ initialStreams = [] }: Props) {
         fetchStreams();
         setActiveTab("streams");
       } catch (err: any) {
-        showNotification("error", err.response?.data?.error || "Bulk edit failed.");
+        showParsedTxError(err, "Bulk edit failed.");
       }
       return;
     }

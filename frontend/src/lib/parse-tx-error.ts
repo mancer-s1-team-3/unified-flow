@@ -34,6 +34,12 @@ const ANCHOR_ERROR_MAP: Record<number, { title: string; detail: string }> = {
 
 const ANCHOR_ERROR_NAME_MAP: Record<string, { title: string; detail: string }> = {
   FullyVested: { title: "Stream Fully Vested", detail: "This stream is already fully vested/ended and can no longer be cancelled." },
+  InvalidAmount: { title: "Invalid Amount", detail: "Amount must be greater than zero or valid for this edit operation." },
+  InvalidEndDate: { title: "Invalid End Date", detail: "End date must be in the future and extend the stream." },
+  StreamExpired: { title: "Stream Expired", detail: "This stream has expired and can no longer be edited." },
+  InsufficientBalance: { title: "Insufficient Balance", detail: "Creator token balance is not enough for the requested top-up." },
+  InvalidVestingType: { title: "Invalid Vesting Type", detail: "This edit action is not valid for the stream vesting type." },
+  StreamNotActive: { title: "Stream Not Active", detail: "This stream is no longer active, so it cannot be edited." },
 };
 
 // ─── Known raw message fragments → friendly messages ─────────────────────

@@ -325,8 +325,23 @@ export const StreamDetailsDrawer = memo(function StreamDetailsDrawer({
               {isCreatorWallet && selectedStream.isCsvCreated ? (
                 <button
                   onClick={() => {
+                    const vestingType = Number(selectedStream.vestingType || 0);
+                    const duration = Math.max(Number(selectedStream.endTs || 0) - Number(selectedStream.startTs || 0), 0);
+                    const cliffDuration = Math.max(Number(selectedStream.cliffTs || 0) - Number(selectedStream.startTs || 0), 0);
+                    const milestones = String(selectedStream.milestones || "");
+                    const header = "id,type,amount,duration,cliff_duration,milestones";
+                    let row = `${selectedStream.id},${vestingType},${selectedStream.totalAmount},,,`;
+
+                    if (vestingType === 0) {
+                      row = `${selectedStream.id},0,${selectedStream.totalAmount},${duration},,`;
+                    } else if (vestingType === 1) {
+                      row = `${selectedStream.id},1,${selectedStream.totalAmount},,${cliffDuration},`;
+                    } else if (vestingType === 2) {
+                      row = `${selectedStream.id},2,${selectedStream.totalAmount},,,${milestones}`;
+                    }
+
                     setActiveTab("edit_csv");
-                    setCsvEditText(`id,amount,duration\n${selectedStream.id},${selectedStream.totalAmount},3600`);
+                    setCsvEditText(`${header}\n${row}`);
                     setSelectedStream(null);
                   }}
                   className="sm:col-span-2 flex items-center justify-center gap-1.5 bg-emerald-600 hover:bg-emerald-700 text-white py-2.5 rounded-xl transition-all"

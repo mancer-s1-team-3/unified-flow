@@ -14,6 +14,9 @@ export const CsvDiffPanel = memo(function CsvDiffPanel({
   onClose: () => void;
 }) {
   if (!csvDiffResult) return null;
+  const mode = csvDiffResult.mode === "edit" ? "edit" : "create";
+  const showAdded = mode === "create";
+  const showModified = mode === "edit";
 
   const formatType = (type: unknown) => {
     const value = Number(type);
@@ -65,19 +68,19 @@ export const CsvDiffPanel = memo(function CsvDiffPanel({
         </div>
       </div>
 
-      <div className="grid grid-cols-4 gap-3 mb-6">
-        <div className="bg-emerald-950/20 border border-emerald-900/40 rounded-xl p-3 text-center">
-          <span className="block text-[9px] text-emerald-400 font-black uppercase tracking-wider">Added</span>
-          <span className="block text-lg font-extrabold text-emerald-300 mt-1">{csvDiffResult.added.length}</span>
-        </div>
-        <div className="bg-amber-950/20 border border-amber-900/40 rounded-xl p-3 text-center">
-          <span className="block text-[9px] text-amber-400 font-black uppercase tracking-wider">Modified</span>
-          <span className="block text-lg font-extrabold text-amber-300 mt-1">{csvDiffResult.modified.length}</span>
-        </div>
-        <div className="bg-rose-950/20 border border-rose-900/40 rounded-xl p-3 text-center">
-          <span className="block text-[9px] text-rose-400 font-black uppercase tracking-wider">Removed</span>
-          <span className="block text-lg font-extrabold text-rose-300 mt-1">{csvDiffResult.deleted.length}</span>
-        </div>
+      <div className={`grid ${mode === "create" ? "grid-cols-2" : "grid-cols-2"} gap-3 mb-6`}>
+        {showAdded && (
+          <div className="bg-emerald-950/20 border border-emerald-900/40 rounded-xl p-3 text-center">
+            <span className="block text-[9px] text-emerald-400 font-black uppercase tracking-wider">Added</span>
+            <span className="block text-lg font-extrabold text-emerald-300 mt-1">{csvDiffResult.added.length}</span>
+          </div>
+        )}
+        {showModified && (
+          <div className="bg-amber-950/20 border border-amber-900/40 rounded-xl p-3 text-center">
+            <span className="block text-[9px] text-amber-400 font-black uppercase tracking-wider">Modified</span>
+            <span className="block text-lg font-extrabold text-amber-300 mt-1">{csvDiffResult.modified.length}</span>
+          </div>
+        )}
         <div className="bg-zinc-900/40 border border-zinc-850 rounded-xl p-3 text-center">
           <span className="block text-[9px] text-zinc-400 font-black uppercase tracking-wider">Unchanged</span>
           <span className="block text-lg font-extrabold text-zinc-350 mt-1">{csvDiffResult.unchanged.length}</span>
@@ -85,7 +88,7 @@ export const CsvDiffPanel = memo(function CsvDiffPanel({
       </div>
 
       <div className="space-y-4 max-h-[350px] overflow-y-auto pr-1">
-        {csvDiffResult.added.length > 0 && (
+        {showAdded && csvDiffResult.added.length > 0 && (
           <div className="space-y-3">
             <div className="text-[10px] text-zinc-500 font-bold uppercase tracking-widest mb-1.5 flex items-center gap-1.5">
               <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
@@ -136,7 +139,7 @@ export const CsvDiffPanel = memo(function CsvDiffPanel({
           </div>
         )}
 
-        {csvDiffResult.modified.length > 0 && (
+        {showModified && csvDiffResult.modified.length > 0 && (
           <div className="space-y-3">
             <div className="text-[10px] text-zinc-500 font-bold uppercase tracking-widest mb-1.5 flex items-center gap-1.5">
               <span className="w-1.5 h-1.5 rounded-full bg-amber-500" />
@@ -245,56 +248,6 @@ export const CsvDiffPanel = memo(function CsvDiffPanel({
           </div>
         )}
 
-        {csvDiffResult.deleted.length > 0 && (
-          <div className="space-y-3">
-            <div className="text-[10px] text-zinc-500 font-bold uppercase tracking-widest mb-1.5 flex items-center gap-1.5">
-              <span className="w-1.5 h-1.5 rounded-full bg-rose-500" />
-              Streams Removed in this CSV ({csvDiffResult.deleted.length})
-            </div>
-            {csvDiffResult.deleted.map((item: any, idx: number) => (
-              <div key={`del-${idx}`} className="bg-rose-950/5 border border-rose-900/30 rounded-2xl p-4 flex flex-col gap-2 opacity-75 animate-in slide-in-from-bottom-2 duration-200">
-                <div className="flex justify-between items-center">
-                  <span className="text-[9px] bg-rose-950/40 text-rose-400 border border-rose-900/60 font-black px-2 py-0.5 rounded-md uppercase tracking-wider">
-                    - Removed Stream
-                  </span>
-                  <span className="text-[10px] font-mono text-zinc-650 font-semibold">{shorten(item.id)}</span>
-                </div>
-                <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 mt-1">
-                  <div>
-                    <span className="block text-[9px] text-zinc-650 font-black uppercase">Recipient</span>
-                    <span className="block text-xs font-mono font-medium text-zinc-500 select-all truncate">{item.recipient}</span>
-                  </div>
-                  <div>
-                    <span className="block text-[9px] text-zinc-650 font-black uppercase">Original Amount</span>
-                    <span className="block text-xs font-bold text-rose-400/90">{item.amount.toLocaleString()} Tokens</span>
-                  </div>
-                  <div>
-                    <span className="block text-[9px] text-zinc-650 font-black uppercase">Original Type</span>
-                    <span className="block text-xs font-bold text-zinc-500">{formatType(item.type)}</span>
-                  </div>
-                  {!isMilestoneType(item.type) && (
-                    <div>
-                      <span className="block text-[9px] text-zinc-650 font-black uppercase">Original Duration</span>
-                      <span className="block text-xs font-bold text-zinc-500">{item.duration}s</span>
-                    </div>
-                  )}
-                  {isCliffType(item.type) && (
-                    <div>
-                      <span className="block text-[9px] text-zinc-650 font-black uppercase">Original Cliff Duration</span>
-                      <span className="block text-xs font-bold text-zinc-500">{item.cliffDuration}s</span>
-                    </div>
-                  )}
-                  {Number(item.type) === 2 && (
-                    <div className="col-span-2">
-                      <span className="block text-[9px] text-zinc-650 font-black uppercase">Original Milestones</span>
-                      <span className="block text-xs font-bold text-rose-450/90 truncate">{item.milestones || "None"}</span>
-                    </div>
-                  )}
-                </div>
-              </div>
-            ))}
-          </div>
-        )}
       </div>
     </div>
   );

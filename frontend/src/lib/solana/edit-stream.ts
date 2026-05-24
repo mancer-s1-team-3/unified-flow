@@ -76,6 +76,19 @@ export type EditStreamResult = Readonly<{
   simulationLogs: string[];
 }>;
 
+export type BatchEditCsvInput = Readonly<{
+  id: string;
+  amount?: string | number;
+  duration?: string | number;
+  cliffDuration?: string | number;
+  milestones?: string;
+}>;
+
+export type BatchEditCsvResult = Readonly<{
+  signatures: string[];
+  streamAddresses: string[];
+}>;
+
 function parsePublicKey(value: string, label: string) {
   try {
     return new PublicKey(value.trim());
@@ -480,4 +493,112 @@ export async function editMilestoneOnChain({
     explorerUrl: `https://explorer.solana.com/tx/${signature}?cluster=${getExplorerCluster(endpoint)}`,
     simulationLogs,
   };
+}
+
+export async function editStreamBatchOnChain({
+  wallet,
+  endpoint,
+  commitment = "confirmed",
+  inputs,
+}: {
+  wallet: WalletSession;
+  endpoint: string;
+  commitment?: Commitment;
+  inputs: BatchEditCsvInput[];
+}): Promise<BatchEditCsvResult> {
+  const signatures: string[] = [];
+  const streamAddresses: string[] = [];
+  const { program } = await getStreamProgram(wallet, endpoint, commitment);
+  const programAny = program as any;
+
+  for (const item of inputs) {
+    const streamAddress = String(item.id || "").trim();
+    if (!streamAddress) continue;
+    const streamPubkey = parsePublicKey(streamAddress, "stream address");
+    const streamState: StreamAccountView = await programAny.account.streamAccount.fetch(streamPubkey);
+    const vestingType = Number(streamState.vestingType);
+    const durationRaw = String(item.duration ?? "").trim();
+    const cliffRaw = String(item.cliffDuration ?? "").trim();
+    const amountRaw = String(item.amount ?? "").trim();
+    const hasDuration = durationRaw !== "" && durationRaw !== "0";
+    const hasCliffDuration = cliffRaw !== "" && cliffRaw !== "0";
+    const hasAmount = amountRaw !== "" && amountRaw !== "0";
+
+    if (vestingType === 0) {
+      if (!hasDuration && !hasAmount) {
+        continue;
+      }
+
+      const startTs = new anchor.BN(String(streamState.startTs || "0"));
+      const currentEndTs = new anchor.BN(String(streamState.endTs || "0"));
+      const currentTotalAmount = new anchor.BN(String(streamState.totalAmount || "0"));
+      const targetTotalAmount = hasAmount ? new anchor.BN(amountRaw) : currentTotalAmount;
+      const topupAmount = targetTotalAmount.gt(currentTotalAmount)
+        ? targetTotalAmount.sub(currentTotalAmount).toString()
+        : "0";
+      const targetEndTs = hasDuration
+        ? startTs.add(new anchor.BN(durationRaw))
+        : currentEndTs;
+
+      if (hasDuration && !targetEndTs.gt(currentEndTs) && topupAmount === "0") {
+        throw new Error(`Linear stream ${streamAddress}: new duration must extend end time, or amount must increase total allocation.`);
+      }
+
+      const linearResult = await editLinearOnChain({
+        wallet,
+        endpoint,
+        commitment,
+        input: {
+          streamAddress,
+          newEndDuration: hasDuration ? durationRaw : undefined,
+          topupAmount,
+        },
+      });
+      signatures.push(linearResult.signature);
+      streamAddresses.push(streamAddress);
+      continue;
+    }
+
+    if (vestingType === 1) {
+      if (!hasCliffDuration) {
+        continue;
+      }
+      const cliffResult = await editCliffOnChain({
+        wallet,
+        endpoint,
+        commitment,
+        input: {
+          streamAddress,
+          newCliffDuration: cliffRaw,
+        },
+      });
+      signatures.push(cliffResult.signature);
+      streamAddresses.push(streamAddress);
+      continue;
+    }
+
+    if (vestingType === 2 && item.milestones && item.milestones.trim() !== "") {
+      const amounts = item.milestones
+        .split(";")
+        .map((value) => value.trim())
+        .filter(Boolean);
+      for (let index = 0; index < amounts.length; index += 1) {
+        const milestoneResult = await editMilestoneOnChain({
+          wallet,
+          endpoint,
+          commitment,
+          input: {
+            streamAddress,
+            milestoneIndex: index,
+            newAmount: amounts[index],
+          },
+        });
+        signatures.push(milestoneResult.signature);
+      }
+      streamAddresses.push(streamAddress);
+      continue;
+    }
+  }
+
+  return { signatures, streamAddresses };
 }
