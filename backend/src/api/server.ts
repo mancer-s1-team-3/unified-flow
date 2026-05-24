@@ -7,6 +7,7 @@ import { PublicKey } from "@solana/web3.js";
 import prisma from "../db/prisma";
 import { connection } from "../services/rpc";
 import { parseCsvText, computeCsvDiff, mapCsvRowsToStreams } from "../services/csvDiff";
+import idl from "../idl/solana_program.json";
 
 const app = express();
 
@@ -198,6 +199,15 @@ app.post("/streams/bulk", async (req, res) => {
 app.post("/streams/edit-csv", async (req, res) => {
     const items = req.body.items || [];
     try {
+        const instructionNames = new Set((idl as any)?.instructions?.map((ix: any) => ix?.name) ?? []);
+        const supportsBulkEdit =
+            instructionNames.has("edit_linear") &&
+            instructionNames.has("edit_cliff") &&
+            instructionNames.has("edit_milestone");
+        if (!supportsBulkEdit) {
+            return res.status(400).send({ error: "IDL is missing required edit instructions for bulk CSV edit." });
+        }
+
         const updated = [];
         for (const item of items) {
             const existing = await prisma.stream.findUnique({
@@ -212,17 +222,36 @@ app.post("/streams/edit-csv", async (req, res) => {
                 });
             }
 
+            const nextTotalAmount = item.amount ? BigInt(item.amount) : existing.totalAmount;
+            const nextEndTs = item.duration ? BigInt(Math.floor(Number(existing.startTs) + Number(item.duration))) : existing.endTs;
+            const nextMilestones = item.milestones !== undefined ? String(item.milestones) : existing.milestones;
+            const nextMilestoneCount = item.milestones !== undefined
+                ? item.milestones.split(";").filter(Boolean).length
+                : existing.milestoneCount;
+
+            const hasChanges =
+                nextTotalAmount !== existing.totalAmount ||
+                nextEndTs !== existing.endTs ||
+                nextMilestones !== existing.milestones ||
+                Number(nextMilestoneCount) !== Number(existing.milestoneCount);
+
+            if (!hasChanges) {
+                continue;
+            }
+
             const stream = await prisma.stream.update({
                 where: { id: item.id },
                 data: {
-                    totalAmount: item.amount ? BigInt(item.amount) : undefined,
-                    endTs: item.duration ? BigInt(Math.floor(Number(existing.startTs) + Number(item.duration))) : undefined,
-                    cancelable: item.cancelable !== undefined ? Boolean(item.cancelable) : undefined,
-                    milestones: item.milestones !== undefined ? String(item.milestones) : undefined,
-                    milestoneCount: item.milestones !== undefined ? item.milestones.split(";").filter(Boolean).length : undefined,
+                    totalAmount: nextTotalAmount,
+                    endTs: nextEndTs,
+                    milestones: nextMilestones,
+                    milestoneCount: nextMilestoneCount,
                 }
             });
             updated.push(stream);
+        }
+        if (updated.length === 0) {
+            return res.status(400).send({ error: "No CSV-created streams were modified. Nothing to apply." });
         }
         res.send(JSON.stringify({ success: true, count: updated.length, streams: updated }, bigintReplacer));
     } catch (err: any) {
@@ -356,7 +385,12 @@ app.post("/csv/diff", async (req, res) => {
         } else {
             // Compare against current live database streams, scoped to the connected creator when available.
             refStreams = await prisma.stream.findMany({
-                where: uploaderFilter ? { creator: uploaderFilter } : undefined,
+                where: mode === "edit"
+                    ? {
+                        ...(uploaderFilter ? { creator: uploaderFilter } : {}),
+                        isCsvCreated: true,
+                    }
+                    : (uploaderFilter ? { creator: uploaderFilter } : undefined),
             });
         }
 
