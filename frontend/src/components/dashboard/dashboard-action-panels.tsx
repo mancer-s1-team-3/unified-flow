@@ -424,6 +424,27 @@ export function DashboardActionPanels(props: Props) {
     (createForm.type === "2" && (hasInvalidMilestones || !milestonesMatchTotal)) ||
     activeTxAction === "create_stream";
   const withdrawDisabled = !withdrawForm.streamId?.trim() || activeTxAction === "withdraw";
+  const unlockDisabled = !unlockForm.streamId?.trim() || activeTxAction === "unlock_milestone";
+  const createCsvDisabled = !csvCreateText?.trim() || activeTxAction === "create_stream_csv";
+  const editCsvDisabled = !csvEditText?.trim() || activeTxAction === "edit_stream_csv";
+  const editMilestoneDisabled =
+    isStreamCsvCreated(editMilestoneForm.streamId) ||
+    !editMilestoneForm.streamId?.trim() ||
+    editMilestoneAmounts.length === 0 ||
+    editMilestoneHasInvalidAmounts ||
+    (editMilestoneHasTargetTotal && !editMilestoneMatchesTotal) ||
+    activeTxAction === "edit_milestone";
+  const editLinearDisabled =
+    isStreamCsvCreated(editLinearForm.streamId) ||
+    !editLinearForm.streamId?.trim() ||
+    !String(editLinearForm.newEndDuration ?? "").trim() ||
+    !String(editLinearForm.topupAmount ?? "").trim() ||
+    activeTxAction === "edit_linear";
+  const editCliffDisabled =
+    isStreamCsvCreated(editCliffForm.streamId) ||
+    !editCliffForm.streamId?.trim() ||
+    !String(editCliffForm.newCliffDuration ?? "").trim() ||
+    activeTxAction === "edit_cliff";
 
   useEffect(() => {
     const handlePointerDown = (event: MouseEvent | PointerEvent) => {
@@ -721,7 +742,13 @@ export function DashboardActionPanels(props: Props) {
 
       <CsvDiffPanel csvDiffResult={csvDiffResult} compareVersionSelected={compareVersionSelected} onClose={() => setCsvDiffResult(null)} />
 
-              <button onClick={() => handleAction("create_stream_csv", null)} className="w-full mt-4 bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs py-3 rounded-xl transition-all shadow-lg hover:shadow-indigo-500/20">Approve & Apply CSV Revision (Creates v{csvVersions.length + 1})</button>
+              <button
+                disabled={createCsvDisabled}
+                onClick={() => handleAction("create_stream_csv", null)}
+                className={`w-full mt-4 text-white font-bold text-xs py-3 rounded-xl transition-all shadow-lg ${createCsvDisabled ? "bg-zinc-800 text-zinc-500 cursor-not-allowed shadow-none" : "bg-indigo-600 hover:bg-indigo-700 hover:shadow-indigo-500/20"}`}
+              >
+                Approve & Apply CSV Revision (Creates v{csvVersions.length + 1})
+              </button>
             </div>
           )}
         </div>
@@ -769,7 +796,13 @@ export function DashboardActionPanels(props: Props) {
 
             <CsvDiffPanel csvDiffResult={csvDiffResult} compareVersionSelected={compareVersionSelected} onClose={() => setCsvDiffResult(null)} />
 
-            <button onClick={() => handleAction("edit_stream_csv", null)} className="w-full mt-4 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs py-3 rounded-xl transition-all shadow-lg hover:shadow-emerald-500/20">Approve & Apply CSV Revision (Creates v{csvVersions.length + 1})</button>
+            <button
+              disabled={editCsvDisabled}
+              onClick={() => handleAction("edit_stream_csv", null)}
+              className={`w-full mt-4 text-white font-bold text-xs py-3 rounded-xl transition-all shadow-lg ${editCsvDisabled ? "bg-zinc-800 text-zinc-500 cursor-not-allowed shadow-none" : "bg-emerald-600 hover:bg-emerald-700 hover:shadow-emerald-500/20"}`}
+            >
+              Approve & Apply CSV Revision
+            </button>
           </div>
         </div>
       )}
@@ -803,7 +836,13 @@ export function DashboardActionPanels(props: Props) {
         <div className="animate-in fade-in-30 duration-200">
           <div className="border-b border-zinc-900 pb-4 mb-6"><h2 className="text-2xl font-extrabold tracking-tight">Unlock Milestone</h2><p className="text-xs text-zinc-400">Release milestone allocations sequentially based on milestones attained</p></div>
           <div><label className="block text-xs font-semibold text-zinc-400 uppercase tracking-wider mb-1.5">Stream ID (PDA Address)</label><input type="text" value={unlockForm.streamId} onChange={(e) => setUnlockForm({ ...unlockForm, streamId: e.target.value })} className="w-full bg-zinc-950 border border-zinc-800 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:border-indigo-500 font-mono" /></div>
-          <button onClick={() => handleAction("unlock_milestone", unlockForm)} className="w-full mt-6 bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs py-3 rounded-xl transition-all shadow-lg hover:shadow-indigo-500/20">Unlock Milestone</button>
+          <button
+            disabled={unlockDisabled}
+            onClick={() => handleAction("unlock_milestone", unlockForm)}
+            className={`w-full mt-6 text-white font-bold text-xs py-3 rounded-xl transition-all shadow-lg ${unlockDisabled ? "bg-zinc-800 text-zinc-500 cursor-not-allowed shadow-none" : "bg-indigo-600 hover:bg-indigo-700 hover:shadow-indigo-500/20"}`}
+          >
+            Unlock Milestone
+          </button>
         </div>
       )}
 
@@ -866,9 +905,9 @@ export function DashboardActionPanels(props: Props) {
             </div>
           )}
           <button
-            disabled={isStreamCsvCreated(editMilestoneForm.streamId) || editMilestoneHasInvalidAmounts || (editMilestoneHasTargetTotal && !editMilestoneMatchesTotal)}
+            disabled={editMilestoneDisabled}
             onClick={() => handleAction("edit_milestone", editMilestoneForm)}
-            className={`w-full mt-6 text-white font-bold text-xs py-3 rounded-xl transition-all shadow-lg ${isStreamCsvCreated(editMilestoneForm.streamId) || editMilestoneHasInvalidAmounts || (editMilestoneHasTargetTotal && !editMilestoneMatchesTotal) ? "bg-zinc-850 border border-zinc-800 text-zinc-550 cursor-not-allowed opacity-50" : "bg-indigo-600 hover:bg-indigo-700 hover:shadow-indigo-500/20"}`}
+            className={`w-full mt-6 text-white font-bold text-xs py-3 rounded-xl transition-all shadow-lg ${editMilestoneDisabled ? "bg-zinc-850 border border-zinc-800 text-zinc-550 cursor-not-allowed opacity-50" : "bg-indigo-600 hover:bg-indigo-700 hover:shadow-indigo-500/20"}`}
           >
             Apply All Milestone Edits
           </button>
@@ -879,7 +918,7 @@ export function DashboardActionPanels(props: Props) {
         <div className="animate-in fade-in-30 duration-200">
           <div className="border-b border-zinc-900 pb-4 mb-6"><h2 className="text-2xl font-extrabold tracking-tight">Edit Linear Timeline</h2><p className="text-xs text-zinc-400">Modify linear timelines or extend stream end thresholds</p></div>
           {isStreamCsvCreated(editLinearForm.streamId) ? <div className="bg-red-950/45 border border-red-500/30 rounded-2xl p-5 text-red-300 flex items-start gap-4 mb-6"><Lock className="w-6 h-6 text-red-400 shrink-0 mt-0.5" /><div><h4 className="text-sm font-extrabold">Manual Edit Locked!</h4><p className="text-xs text-red-400/80 mt-1 leading-relaxed">This stream was created via CSV Import. To comply with consistency requirements, CSV-created streams must be edited exclusively using the Bulk Edit CSV console.</p></div></div> : <div className="grid gap-4"><div><label className="block text-xs font-semibold text-zinc-400 uppercase tracking-wider mb-1.5">Stream ID (PDA Address)</label><input type="text" value={editLinearForm.streamId} onChange={(e) => setEditLinearForm({ ...editLinearForm, streamId: e.target.value })} className="w-full bg-zinc-950 border border-zinc-800 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:border-indigo-500 font-mono" /></div><div><label className="block text-xs font-semibold text-zinc-400 uppercase tracking-wider mb-1.5">New Stream Duration (Seconds from Start)</label><input type="number" value={editLinearForm.newEndDuration} onChange={(e) => setEditLinearForm({ ...editLinearForm, newEndDuration: e.target.value })} className="w-full bg-zinc-950 border border-zinc-800 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:border-indigo-500 font-mono" /></div><div><label className="block text-xs font-semibold text-zinc-400 uppercase tracking-wider mb-1.5">Top-up Amount (Tokens to Add)</label><input type="number" value={editLinearForm.topupAmount} onChange={(e) => setEditLinearForm({ ...editLinearForm, topupAmount: e.target.value })} className="w-full bg-zinc-950 border border-zinc-800 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:border-indigo-500 font-mono" /></div></div>}
-          <button disabled={isStreamCsvCreated(editLinearForm.streamId)} onClick={() => handleAction("edit_linear", editLinearForm)} className={`w-full mt-6 text-white font-bold text-xs py-3 rounded-xl transition-all shadow-lg ${isStreamCsvCreated(editLinearForm.streamId) ? "bg-zinc-850 border border-zinc-800 text-zinc-550 cursor-not-allowed opacity-50" : "bg-indigo-600 hover:bg-indigo-700 hover:shadow-indigo-500/20"}`}>Update End Timeline & Top-up Stream</button>
+          <button disabled={editLinearDisabled} onClick={() => handleAction("edit_linear", editLinearForm)} className={`w-full mt-6 text-white font-bold text-xs py-3 rounded-xl transition-all shadow-lg ${editLinearDisabled ? "bg-zinc-850 border border-zinc-800 text-zinc-550 cursor-not-allowed opacity-50" : "bg-indigo-600 hover:bg-indigo-700 hover:shadow-indigo-500/20"}`}>Update End Timeline & Top-up Stream</button>
         </div>
       )}
 
@@ -887,7 +926,7 @@ export function DashboardActionPanels(props: Props) {
         <div className="animate-in fade-in-30 duration-200">
           <div className="border-b border-zinc-900 pb-4 mb-6"><div className="flex items-center gap-2"><h2 className="text-2xl font-extrabold tracking-tight">Edit Cliff Conditions</h2></div><p className="text-xs text-zinc-400">Modify cliff release durations or shift lockup parameters</p></div>
           {isStreamCsvCreated(editCliffForm.streamId) ? <div className="bg-red-950/45 border border-red-500/30 rounded-2xl p-5 text-red-300 flex items-start gap-4 mb-6"><Lock className="w-6 h-6 text-red-400 shrink-0 mt-0.5" /><div><h4 className="text-sm font-extrabold">Manual Edit Locked!</h4><p className="text-xs text-red-400/80 mt-1 leading-relaxed">This stream was created via CSV Import. To comply with consistency requirements, CSV-created streams must be edited exclusively using the Bulk Edit CSV console.</p></div></div> : <div className="grid gap-4"><div><label className="block text-xs font-semibold text-zinc-400 uppercase tracking-wider mb-1.5">Stream ID (PDA Address)</label><input type="text" value={editCliffForm.streamId} onChange={(e) => setEditCliffForm({ ...editCliffForm, streamId: e.target.value })} className="w-full bg-zinc-950 border border-zinc-800 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:border-indigo-500 font-mono" /></div><div><label className="block text-xs font-semibold text-zinc-400 uppercase tracking-wider mb-1.5">New Cliff Duration (Seconds from Start)</label><input type="number" value={editCliffForm.newCliffDuration} onChange={(e) => setEditCliffForm({ ...editCliffForm, newCliffDuration: e.target.value })} className="w-full bg-zinc-950 border border-zinc-800 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:border-indigo-500 font-mono" /></div></div>}
-          <button disabled={isStreamCsvCreated(editCliffForm.streamId)} onClick={() => handleAction("edit_cliff", editCliffForm)} className={`w-full mt-6 text-white font-bold text-xs py-3 rounded-xl transition-all shadow-lg ${isStreamCsvCreated(editCliffForm.streamId) ? "bg-zinc-850 border border-zinc-800 text-zinc-550 cursor-not-allowed opacity-50" : "bg-indigo-600 hover:bg-indigo-700 hover:shadow-indigo-500/20"}`}>Adjust Cliff Timestamp</button>
+          <button disabled={editCliffDisabled} onClick={() => handleAction("edit_cliff", editCliffForm)} className={`w-full mt-6 text-white font-bold text-xs py-3 rounded-xl transition-all shadow-lg ${editCliffDisabled ? "bg-zinc-850 border border-zinc-800 text-zinc-550 cursor-not-allowed opacity-50" : "bg-indigo-600 hover:bg-indigo-700 hover:shadow-indigo-500/20"}`}>Adjust Cliff Timestamp</button>
         </div>
       )}
 

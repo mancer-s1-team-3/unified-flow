@@ -54,6 +54,7 @@ export interface CsvDiffResult {
   modified: DiffItem[];
   deleted: any[];
   unchanged: any[];
+  mode?: "create" | "edit";
 }
 
 function toNumber(value: unknown, fallback = 0) {
@@ -294,10 +295,60 @@ export function computeCsvDiff(
       });
     });
 
-    return { added, modified, deleted, unchanged };
+    return { added, modified, deleted: [], unchanged, mode };
   }
 
   normalizedNewRows.forEach((row, idx) => {
+    if (mode === "edit" && row.id) {
+      const normalizedRowId = row.id.trim();
+      const refIndexById = normalizedRefRows.findIndex(
+        (refRow, refIndex) =>
+          !consumedRefIndexes.has(refIndex) &&
+          String(refRow.id || "").trim() === normalizedRowId
+      );
+
+      if (refIndexById >= 0) {
+        consumedRefIndexes.add(refIndexById);
+        const matchedStream = normalizedRefRows[refIndexById];
+        const changes: DiffChange[] = [];
+
+        pushChange(changes, "amount", matchedStream.amount, row.amount);
+        pushChange(changes, "duration", matchedStream.duration, row.duration);
+        pushChange(changes, "cliffDuration", matchedStream.cliffDuration, row.cliffDuration);
+        pushChange(changes, "milestones", matchedStream.milestones, row.milestones);
+
+        if (changes.length > 0) {
+          modified.push({
+            id: matchedStream.id || normalizedRowId || `StreamCSV-MOD-${idx}`,
+            recipient: matchedStream.recipient,
+            changes,
+            details: {
+              creator: matchedStream.creator,
+              mint: matchedStream.mint,
+              type: matchedStream.type,
+              amount: row.amount,
+              duration: row.duration,
+              cliffDuration: row.cliffDuration,
+              milestones: row.milestones,
+            },
+          });
+        } else {
+          unchanged.push({
+            id: matchedStream.id || normalizedRowId || `StreamCSV-UNCH-${idx}`,
+            recipient: matchedStream.recipient,
+            amount: matchedStream.amount,
+            duration: matchedStream.duration,
+            cliffDuration: matchedStream.cliffDuration,
+            cancelable: matchedStream.cancelable,
+            type: matchedStream.type,
+            milestones: matchedStream.milestones,
+          });
+        }
+      }
+
+      return;
+    }
+
     const exactKey = buildExactRecordKey(normalizeCsvRecord(row));
     const identityKey = buildIdentityRecordKey(normalizeCsvRecord(row));
 
@@ -322,18 +373,7 @@ export function computeCsvDiff(
     const identityCandidateIndex = takeFirstUnusedIndex(refIdentityKeyBuckets.get(identityKey) || []);
 
     if (!identityCandidateIndex && identityCandidateIndex !== 0) {
-      added.push({
-        id: row.id || `StreamCSV-NEW-${idx}-${Math.random().toString(36).substring(2, 6).toUpperCase()}`,
-        recipient: row.recipient || "Unknown Recipient",
-        amount: row.amount,
-        mint: row.mint || "Unknown Mint",
-        type: row.type,
-        duration: row.duration,
-        cliffDuration: row.cliffDuration,
-        cancelable: row.cancelable,
-        milestones: row.milestones,
-        isNew: true,
-      });
+      // Edit mode represents updates to existing on-chain streams only.
       return;
     }
 
@@ -343,7 +383,6 @@ export function computeCsvDiff(
     const changes: DiffChange[] = [];
 
     pushChange(changes, "amount", matchedStream.amount, row.amount);
-    pushChange(changes, "cancelable", matchedStream.cancelable, row.cancelable);
     pushChange(changes, "duration", matchedStream.duration, row.duration);
     pushChange(changes, "cliffDuration", matchedStream.cliffDuration, row.cliffDuration);
 
@@ -379,22 +418,7 @@ export function computeCsvDiff(
     }
   });
 
-  normalizedRefRows.forEach((stream, index) => {
-    if (!consumedRefIndexes.has(index)) {
-      deleted.push({
-        id: stream.id,
-        recipient: stream.recipient,
-        amount: stream.amount,
-        duration: stream.duration,
-        cliffDuration: stream.cliffDuration,
-        cancelable: stream.cancelable,
-        type: stream.type,
-        milestones: stream.milestones,
-      });
-    }
-  });
-
-  return { added, modified, deleted, unchanged };
+  return { added: [], modified, deleted: [], unchanged, mode };
 }
 
 /**

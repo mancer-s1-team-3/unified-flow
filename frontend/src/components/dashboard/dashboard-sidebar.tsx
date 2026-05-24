@@ -151,7 +151,6 @@ export const DashboardSidebar = memo(function DashboardSidebar({
         icon={<FileText className="w-4 h-4 text-emerald-400" />}
         label="Bulk Edit CSV"
         highlight="font-bold text-emerald-400"
-        badge="WIP"
       />
 
       <TabButton
