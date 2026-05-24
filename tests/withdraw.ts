@@ -187,7 +187,6 @@ describe("withdraw", () => {
   const TOKEN_AMOUNT = 1_000_000; // 1 token (6 decimals)
 
   let nonceCounter = 0;
-  let withdrawCallCounter = 0; // ensures unique tx signatures across withdraw calls
 
   // ─── one-time setup ────────────────────────────────────────────────────────
 
@@ -246,6 +245,22 @@ describe("withdraw", () => {
 
     // Create SPL mint with 6 decimals (via bankrun directly)
     mint = await createTestMint(context, admin, admin.publicKey, 6);
+  });
+
+  beforeEach(async () => {
+    // Ensure paused state never leaks across tests.
+    const PAUSED_BYTE_OFFSET = 72;
+    const configRaw = await context.banksClient.getAccount(configPda);
+    if (!configRaw) return;
+    const configData = Buffer.from(configRaw.data);
+    if (configData.readUInt8(PAUSED_BYTE_OFFSET) !== 0) {
+      context.setAccount(configPda, {
+        lamports: Number(configRaw.lamports),
+        data: Buffer.from(configData).fill(0, PAUSED_BYTE_OFFSET, PAUSED_BYTE_OFFSET + 1),
+        owner: program.programId,
+        executable: false,
+      });
+    }
   });
 
   // ─── helpers ──────────────────────────────────────────────────────────────
@@ -445,9 +460,8 @@ describe("withdraw", () => {
     const feeVault = opts.feeVaultOverride ?? feeVaultPda;
 
     // `stream` is typed as auto-resolved (circular PDA seeds) but must be supplied at runtime.
-    // Unique counter in _amount_to_withdraw (ignored by program) avoids duplicate tx signatures.
     return program.methods
-      .withdraw(new BN(withdrawCallCounter++))
+      .withdraw()
       .accounts({
         recipient: signer.publicKey,
         stream: streamPda,
@@ -675,12 +689,12 @@ describe("withdraw", () => {
     const strangerAta = await createAta(context, admin, mint, stranger.publicKey);
 
     await expectError(
-      program.methods.withdraw(new BN(0))
+      program.methods.withdraw()
         .accounts({
           recipient: stranger.publicKey,
           stream: streamPda,
           recipientAta: strangerAta,
-          feeReceiver: admin.publicKey,
+          feeVault: feeVaultPda,
           chainlinkFeed: SOL_USD_FEED,
           tokenProgram: TOKEN_PROGRAM_ID,
         } as any)
@@ -821,28 +835,30 @@ describe("withdraw", () => {
     const configData = Buffer.from(configRaw!.data);
     const lamports = Number(configRaw!.lamports);
 
-    // Flip paused = true
-    configData.writeUInt8(1, PAUSED_BYTE_OFFSET);
-    context.setAccount(configPda, {
-      lamports,
-      data: configData,
-      owner: program.programId,
-      executable: false,
-    });
+    try {
+      // Flip paused = true
+      configData.writeUInt8(1, PAUSED_BYTE_OFFSET);
+      context.setAccount(configPda, {
+        lamports,
+        data: configData,
+        owner: program.programId,
+        executable: false,
+      });
 
-    await expectError(
-      doWithdraw(streamPda, recipientAta),
-      "ProtocolPaused"
-    );
-
-    // Restore paused = false
-    configData.writeUInt8(0, PAUSED_BYTE_OFFSET);
-    context.setAccount(configPda, {
-      lamports,
-      data: configData,
-      owner: program.programId,
-      executable: false,
-    });
+      await expectError(
+        doWithdraw(streamPda, recipientAta),
+        "ProtocolPaused"
+      );
+    } finally {
+      // Restore paused = false even if assertion fails.
+      configData.writeUInt8(0, PAUSED_BYTE_OFFSET);
+      context.setAccount(configPda, {
+        lamports,
+        data: configData,
+        owner: program.programId,
+        executable: false,
+      });
+    }
   });
 
   // ══════════════════════════════════════════════════════════════════════════
@@ -972,12 +988,12 @@ describe("withdraw", () => {
     updateFeed(PRICE_RAW, PRICE_DECIMALS, now);
 
     await expectError(
-      program.methods.withdraw(new BN(0))
+      program.methods.withdraw()
         .accounts({
           recipient: poorRecipient.publicKey,
           stream: streamPda,
           recipientAta: poorAta,
-          feeReceiver: (await program.account.configAccount.fetch(configPda)).feeAuthority,
+          feeVault: feeVaultPda,
           chainlinkFeed: SOL_USD_FEED,
           tokenProgram: TOKEN_PROGRAM_ID,
         } as any)
