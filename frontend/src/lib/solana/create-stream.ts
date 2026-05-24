@@ -71,6 +71,8 @@ export type BulkCreateStreamResult = {
   vaultAddresses: string[];
 };
 
+export type TxProgressPhase = "wallet_approval" | "sending" | "confirming";
+
 function toBn(value: string | number | bigint) {
   return new anchor.BN(String(value));
 }
@@ -415,11 +417,13 @@ async function sendVersionedTransactionMessage({
   transactionMessage,
   commitment,
   walletSignerMode,
+  onStatus,
 }: {
   connection: Connection;
   transactionMessage: any;
   commitment: Commitment;
   walletSignerMode: string;
+  onStatus?: (phase: TxProgressPhase) => void;
 }) {
   const { blockhash, lastValidBlockHeight } = await connection.getLatestBlockhash(commitment);
 
@@ -431,6 +435,7 @@ async function sendVersionedTransactionMessage({
   let simulationLogs: string[] = [];
   let signature: string;
 
+  onStatus?.("sending");
   if (walletSignerMode === "send") {
     const sentSignature = await signAndSendTransactionMessageWithSigners(messageWithLifetime as any);
     signature = sentSignature.toString();
@@ -464,6 +469,7 @@ async function sendVersionedTransactionMessage({
     });
   }
 
+  onStatus?.("confirming");
   await connection.confirmTransaction({ blockhash, lastValidBlockHeight, signature }, commitment);
 
   return { signature, simulationLogs };
@@ -474,12 +480,15 @@ export async function createStreamOnChain({
   endpoint,
   commitment = "confirmed",
   input,
+  onStatus,
 }: {
   wallet: WalletSession;
   endpoint: string;
   commitment?: Commitment;
   input: CreateStreamInput;
+  onStatus?: (phase: TxProgressPhase) => void;
 }): Promise<CreateStreamResult> {
+  onStatus?.("wallet_approval");
   const creator = new PublicKey(wallet.account.address.toString());
   const recipient = parsePublicKey(input.recipient, "recipient address");
   const mint = parsePublicKey(input.mint, "mint address");
@@ -698,6 +707,7 @@ export async function createStreamOnChain({
   let simulationLogs: string[] = [];
   let signature: string;
 
+  onStatus?.("sending");
   if (walletSignerMode === "send") {
     const sentSignature = await signAndSendTransactionMessageWithSigners(transactionMessage);
     signature = sentSignature.toString();
@@ -731,6 +741,7 @@ export async function createStreamOnChain({
     });
   }
 
+  onStatus?.("confirming");
   await connection.confirmTransaction({ blockhash, lastValidBlockHeight, signature }, commitment);
 
   return {
@@ -748,13 +759,16 @@ export async function createStreamBatchOnChain({
   commitment = "confirmed",
   inputs,
   maxStreamsPerBatch = 2,
+  onStatus,
 }: {
   wallet: WalletSession;
   endpoint: string;
   commitment?: Commitment;
   inputs: CreateStreamInput[];
   maxStreamsPerBatch?: number;
+  onStatus?: (phase: TxProgressPhase) => void;
 }): Promise<BulkCreateStreamResult> {
+  onStatus?.("wallet_approval");
   if (!inputs.length) {
     throw new Error("At least one CSV row is required.");
   }
@@ -801,6 +815,7 @@ export async function createStreamBatchOnChain({
       transactionMessage,
       commitment,
       walletSignerMode,
+      onStatus,
     });
 
     batches.push({

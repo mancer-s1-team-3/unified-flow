@@ -37,6 +37,8 @@ export type UnlockMilestoneResult = Readonly<{
   milestoneAddress: string;
 }>;
 
+export type TxProgressPhase = "wallet_approval" | "sending" | "confirming";
+
 function parsePublicKey(value: string, label: string) {
   try {
     return new PublicKey(value.trim());
@@ -77,12 +79,15 @@ export async function unlockMilestoneOnChain({
   endpoint,
   commitment = "confirmed",
   input,
+  onStatus,
 }: {
   wallet: WalletSession;
   endpoint: string;
   commitment?: Commitment;
   input: UnlockMilestoneInput;
+  onStatus?: (phase: TxProgressPhase) => void;
 }): Promise<UnlockMilestoneResult> {
+  onStatus?.("wallet_approval");
   const creator = new PublicKey(wallet.account.address.toString());
   const streamAddress = parsePublicKey(input.streamAddress, "stream address");
   const { signer: walletSigner, mode: walletSignerMode } = createWalletTransactionSigner(wallet);
@@ -160,6 +165,7 @@ export async function unlockMilestoneOnChain({
   let simulationLogs: string[] = [];
   let signature: string;
 
+  onStatus?.("sending");
   if (walletSignerMode === "send") {
     const sentSignature = await signAndSendTransactionMessageWithSigners(transactionMessage);
     signature = sentSignature.toString();
@@ -191,6 +197,7 @@ export async function unlockMilestoneOnChain({
     });
   }
 
+  onStatus?.("confirming");
   await connection.confirmTransaction({ blockhash, lastValidBlockHeight, signature }, commitment);
 
   return {
