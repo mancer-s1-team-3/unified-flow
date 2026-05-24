@@ -29,6 +29,11 @@ const ANCHOR_ERROR_MAP: Record<number, { title: string; detail: string }> = {
   6013: { title: "Invalid Milestone Count", detail: "The number of milestones must match the provided milestone allocations." },
   6014: { title: "Unauthorized", detail: "You are not authorized to perform this action on this stream." },
   6015: { title: "Arithmetic Overflow", detail: "A numeric overflow occurred. Check your amounts and try again." },
+  6024: { title: "Stream Fully Vested", detail: "This stream is already fully vested/ended and can no longer be cancelled." },
+};
+
+const ANCHOR_ERROR_NAME_MAP: Record<string, { title: string; detail: string }> = {
+  FullyVested: { title: "Stream Fully Vested", detail: "This stream is already fully vested/ended and can no longer be cancelled." },
 };
 
 // ─── Known raw message fragments → friendly messages ─────────────────────
@@ -96,6 +101,11 @@ const FRAGMENT_MAP: { pattern: RegExp; title: string; detail: string }[] = [
     detail: "This stream has already been cancelled.",
   },
   {
+    pattern: /fully vested/i,
+    title: "Stream Fully Vested",
+    detail: "This stream is already fully vested/ended and can no longer be cancelled.",
+  },
+  {
     pattern: /no claimable tokens|not claimable/i,
     title: "Nothing to Claim",
     detail: "No tokens are currently unlocked for this stream. Check back later.",
@@ -120,13 +130,23 @@ function extractDetail(message: string, pattern: RegExp): string {
 }
 
 function parseAnchorErrorCode(message: string): { title: string; detail: string } | null {
-  // Anchor errors look like: "Error Code: 6000. Error Number: 6000. Error Message: …"
-  // or raw program error in logs: "Program log: AnchorError … Error Code: SomeName. Error Number: 6001."
-  const codeMatch = message.match(/error number[:\s]+(\d{4})/i) || message.match(/custom program error:\s*0x([0-9a-f]+)/i);
-  if (codeMatch) {
-    const code = codeMatch[1].startsWith("0x") || /^[0-9a-f]+$/i.test(codeMatch[1])
-      ? parseInt(codeMatch[1], 16)
-      : parseInt(codeMatch[1], 10);
+  // Anchor errors can appear as:
+  // - "Error Code: FullyVested. Error Number: 6024."
+  // - "custom program error: 0x1788"
+  const nameMatch = message.match(/error code:\s*([A-Za-z_][A-Za-z0-9_]*)/i);
+  if (nameMatch && ANCHOR_ERROR_NAME_MAP[nameMatch[1]]) {
+    return ANCHOR_ERROR_NAME_MAP[nameMatch[1]];
+  }
+
+  const numberMatch = message.match(/error number[:\s]+(\d{4})/i);
+  if (numberMatch) {
+    const code = parseInt(numberMatch[1], 10);
+    if (ANCHOR_ERROR_MAP[code]) return ANCHOR_ERROR_MAP[code];
+  }
+
+  const customProgramHexMatch = message.match(/custom program error:\s*0x([0-9a-f]+)/i);
+  if (customProgramHexMatch) {
+    const code = parseInt(customProgramHexMatch[1], 16);
     if (ANCHOR_ERROR_MAP[code]) return ANCHOR_ERROR_MAP[code];
   }
 
