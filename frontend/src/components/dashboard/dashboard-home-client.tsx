@@ -18,6 +18,7 @@ import { editMilestoneOnChain } from "@/lib/solana/edit-milestone";
 import { withdrawFromStreamOnChain } from "@/lib/solana/withdraw";
 import { cancelStreamOnChain } from "@/lib/solana/cancel";
 import { unlockMilestoneOnChain } from "@/lib/solana/unlock-milestone";
+import { parseTransactionError } from "@/lib/parse-tx-error";
 import {
   buildCreateStreamCsvTemplate,
   getClusterLabel,
@@ -149,6 +150,8 @@ const DashboardActionPanels = dynamic(
   { ssr: false, loading: () => null }
 );
 
+type TxPhase = "wallet_approval" | "sending" | "confirming";
+
 export default function Home({ initialStreams = [] }: Props) {
   const router = useRouter();
   const { wallet, connected } = useWalletConnection();
@@ -216,6 +219,10 @@ export default function Home({ initialStreams = [] }: Props) {
     setNotification({ type, message });
     setTimeout(() => setNotification({ type: null, message: "" }), 5000);
   }, []);
+  const showParsedTxError = useCallback((err: unknown, fallback: string) => {
+    const parsed = parseTransactionError(err);
+    showNotification("error", `${parsed.title}: ${parsed.detail || fallback}`);
+  }, [showNotification]);
 
   const copyToClipboard = useCallback((text: string, id: string) => {
     navigator.clipboard.writeText(text);
@@ -242,6 +249,8 @@ export default function Home({ initialStreams = [] }: Props) {
   const [compareVersionSelected, setCompareVersionSelected] = useState<string>("0"); // "0" means Live DB
   const [csvDiffResult, setCsvDiffResult] = useState<any | null>(null);
   const [loadingDiff, setLoadingDiff] = useState(false);
+  const [activeTxAction, setActiveTxAction] = useState<string | null>(null);
+  const [activeTxPhase, setActiveTxPhase] = useState<TxPhase | null>(null);
 
   const fetchCsvVersions = useCallback(async () => {
     try {
@@ -536,6 +545,15 @@ export default function Home({ initialStreams = [] }: Props) {
 
   // Simulators / Submit Handlers
   const handleAction = async (actionName: string, data: any) => {
+    const setTxStatus = (phase: TxPhase) => {
+      setActiveTxAction(actionName);
+      setActiveTxPhase(phase);
+    };
+    const clearTxStatus = () => {
+      setActiveTxAction(null);
+      setActiveTxPhase(null);
+    };
+
     if (useMultisig && !["create_stream", "withdraw", "create_stream_csv"].includes(actionName)) {
       showNotification("success", `Squads Multisig proposal created successfully! Redirecting you to Streams page...`);
       setTimeout(() => {
@@ -565,13 +583,16 @@ export default function Home({ initialStreams = [] }: Props) {
             milestoneCount: data.milestoneCount,
             milestoneAmounts,
           },
+          onStatus: setTxStatus,
         });
 
         showNotification("success", `Stream created on-chain. Signature: ${result.signature.slice(0, 8)}...`);
         fetchStreams();
         setActiveTab("streams");
       } catch (err: any) {
-        showNotification("error", err?.message || "Deployment failed.");
+        showParsedTxError(err, "Deployment failed.");
+      } finally {
+        clearTxStatus();
       }
       return;
     }
@@ -590,13 +611,16 @@ export default function Home({ initialStreams = [] }: Props) {
             streamAddress: data.streamId,
             amount: data.amount,
           },
+          onStatus: setTxStatus,
         });
 
         showNotification("success", `Tokens withdrawn on-chain. Signature: ${result.signature.slice(0, 8)}...`);
         fetchStreams();
         setActiveTab("streams");
       } catch (err: any) {
-        showNotification("error", err?.message || "Withdraw failed.");
+        showParsedTxError(err, "Withdraw failed.");
+      } finally {
+        clearTxStatus();
       }
       return;
     }
@@ -614,6 +638,7 @@ export default function Home({ initialStreams = [] }: Props) {
           input: {
             streamAddress: data.streamId,
           },
+          onStatus: setTxStatus,
         });
 
         setStreams((prev) =>
@@ -633,7 +658,9 @@ export default function Home({ initialStreams = [] }: Props) {
         fetchStreams();
         setActiveTab("streams");
       } catch (err: any) {
-        showNotification("error", err?.message || "Cancel failed.");
+        showParsedTxError(err, "Cancel failed.");
+      } finally {
+        clearTxStatus();
       }
       return;
     }
@@ -651,6 +678,7 @@ export default function Home({ initialStreams = [] }: Props) {
           input: {
             streamAddress: data.streamId,
           },
+          onStatus: setTxStatus,
         });
 
         showNotification(
@@ -660,7 +688,9 @@ export default function Home({ initialStreams = [] }: Props) {
         fetchStreams();
         setActiveTab("streams");
       } catch (err: any) {
-        showNotification("error", err?.message || "Unlock milestone failed.");
+        showParsedTxError(err, "Unlock milestone failed.");
+      } finally {
+        clearTxStatus();
       }
       return;
     }
@@ -704,6 +734,7 @@ export default function Home({ initialStreams = [] }: Props) {
           endpoint,
           inputs: normalizedItems,
           maxStreamsPerBatch: 2,
+          onStatus: setTxStatus,
         });
 
         if (batchResult.streamAddresses.length === 0) {
@@ -733,6 +764,8 @@ export default function Home({ initialStreams = [] }: Props) {
         setActiveTab("streams");
       } catch (err: any) {
         showNotification("error", err.response?.data?.error || err?.message || "Bulk deployment failed.");
+      } finally {
+        clearTxStatus();
       }
       return;
     }
@@ -979,6 +1012,8 @@ export default function Home({ initialStreams = [] }: Props) {
                 editCliffForm={editCliffForm}
                 setEditCliffForm={setEditCliffForm}
                 isStreamCsvCreated={isStreamCsvCreated}
+                activeTxAction={activeTxAction}
+                activeTxPhase={activeTxPhase}
               />
             )}
 
@@ -992,6 +1027,7 @@ export default function Home({ initialStreams = [] }: Props) {
               setCsvEditText={setCsvEditText}
               setSelectedStream={setSelectedStream}
               connectedWalletAddress={connectedWalletAddress}
+              currentTimeTs={nowTs}
             />
 
           </div>

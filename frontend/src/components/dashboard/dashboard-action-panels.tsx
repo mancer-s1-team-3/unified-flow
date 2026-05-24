@@ -185,10 +185,14 @@ function CancelPanel({
   cancelForm,
   setCancelForm,
   handleAction,
+  isSubmitting,
+  submitLabel,
 }: {
   cancelForm: { streamId: string };
   setCancelForm: (value: { streamId: string }) => void;
-  handleAction: (actionName: string, data: any) => void;
+  handleAction: (actionName: string, data: any) => Promise<void> | void;
+  isSubmitting: boolean;
+  submitLabel: string;
 }) {
   const [showDialog, setShowDialog] = useState(false);
 
@@ -228,11 +232,12 @@ function CancelPanel({
 
       {/* Trigger */}
       <button
+        disabled={!cancelForm.streamId.trim() || isSubmitting}
         onClick={() => setShowDialog(true)}
-        className="w-full bg-rose-950/30 hover:bg-rose-600 text-rose-400 hover:text-white border border-rose-500/30 hover:border-rose-600 font-bold text-xs py-3 rounded-xl transition-all shadow-lg hover:shadow-rose-900/30 flex items-center justify-center gap-2"
+        className="w-full bg-rose-950/30 hover:bg-rose-600 text-rose-400 hover:text-white border border-rose-500/30 hover:border-rose-600 font-bold text-xs py-3 rounded-xl transition-all shadow-lg hover:shadow-rose-900/30 flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
       >
-        <XCircle className="w-4 h-4" />
-        Cancel and Refund Stream
+        {isSubmitting ? <RefreshCw className="w-4 h-4 animate-spin" /> : <XCircle className="w-4 h-4" />}
+        {submitLabel}
       </button>
 
       {showDialog && (
@@ -290,6 +295,8 @@ type Props = {
   editCliffForm: any;
   setEditCliffForm: (value: any) => void;
   isStreamCsvCreated: (id: string) => boolean;
+  activeTxAction: string | null;
+  activeTxPhase: "wallet_approval" | "sending" | "confirming" | null;
 };
 
 export function DashboardActionPanels(props: Props) {
@@ -336,6 +343,8 @@ export function DashboardActionPanels(props: Props) {
     editCliffForm,
     setEditCliffForm,
     isStreamCsvCreated,
+    activeTxAction,
+    activeTxPhase,
   } = props;
 
   const mintPickerRef = useRef<HTMLDivElement | null>(null);
@@ -396,6 +405,25 @@ export function DashboardActionPanels(props: Props) {
 
   const selectedMintPreset = mintPresets.find((preset) => preset.mint === createForm.mint) ?? null;
   const mobileNarrowFormClass = "mx-auto w-full max-w-[22rem] sm:max-w-none sm:mx-0";
+  const getTxLabel = (action: string, idleLabel: string) => {
+    if (activeTxAction !== action || !activeTxPhase) return idleLabel;
+    if (activeTxPhase === "wallet_approval") return "Approve In Wallet...";
+    if (activeTxPhase === "sending") return "Sending Transaction...";
+    return "Confirming On-Chain...";
+  };
+  const createRequiredValid =
+    Boolean(createForm.recipient?.trim()) &&
+    Boolean(createForm.amount?.trim()) &&
+    Boolean(createForm.mint?.trim()) &&
+    Boolean(createForm.type?.trim()) &&
+    (createForm.type === "2" ? Boolean(createForm.milestoneCount?.trim()) : Boolean(createForm.duration?.trim())) &&
+    (createForm.type !== "1" || Boolean(createForm.cliffDuration?.trim()));
+  const createDisabled =
+    !createRequiredValid ||
+    cliffExceedsDuration ||
+    (createForm.type === "2" && (hasInvalidMilestones || !milestonesMatchTotal)) ||
+    activeTxAction === "create_stream";
+  const withdrawDisabled = !withdrawForm.streamId?.trim() || activeTxAction === "withdraw";
 
   useEffect(() => {
     const handlePointerDown = (event: MouseEvent | PointerEvent) => {
@@ -648,11 +676,12 @@ export function DashboardActionPanels(props: Props) {
               )}
 
               <button
-                disabled={createForm.type === "2" && (hasInvalidMilestones || !milestonesMatchTotal)}
+                disabled={createDisabled}
                 onClick={() => handleAction("create_stream", createForm)}
-                className={`md:col-span-2 w-full mt-4 text-white font-bold text-xs py-3 rounded-xl transition-all shadow-lg ${createForm.type === "2" && (hasInvalidMilestones || !milestonesMatchTotal) ? "bg-zinc-800 text-zinc-500 cursor-not-allowed shadow-none" : "bg-indigo-600 hover:bg-indigo-700 hover:shadow-indigo-500/20"}`}
+                className={`md:col-span-2 w-full mt-4 text-white font-bold text-xs py-3 rounded-xl transition-all shadow-lg flex items-center justify-center gap-2 ${createDisabled ? "bg-zinc-800 text-zinc-500 cursor-not-allowed shadow-none" : "bg-indigo-600 hover:bg-indigo-700 hover:shadow-indigo-500/20"}`}
               >
-                Simulate / Deploy Stream
+                {activeTxAction === "create_stream" && activeTxPhase ? <RefreshCw className="w-4 h-4 animate-spin" /> : null}
+                {getTxLabel("create_stream", "Simulate / Deploy Stream")}
               </button>
             </div>
           ) : (
@@ -749,7 +778,14 @@ export function DashboardActionPanels(props: Props) {
         <div className="animate-in fade-in-30 duration-200">
           <div className="border-b border-zinc-900 pb-4 mb-6"><h2 className="text-2xl font-extrabold tracking-tight">Withdraw Claim</h2><p className="text-xs text-zinc-400">Withdraw matured/unlocked tokens from an active vesting stream</p></div>
           <div className="grid gap-4"><div><label className="block text-xs font-semibold text-zinc-400 uppercase tracking-wider mb-1.5">Stream ID (PDA Address)</label><input type="text" value={withdrawForm.streamId} onChange={(e) => setWithdrawForm({ ...withdrawForm, streamId: e.target.value })} className="w-full bg-zinc-950 border border-zinc-800 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:border-indigo-500 font-mono" /></div></div>
-          <button onClick={() => handleAction("withdraw", withdrawForm)} className="w-full mt-6 bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs py-3 rounded-xl transition-all shadow-lg hover:shadow-indigo-500/20">Claim Claimable Tokens</button>
+          <button
+            disabled={withdrawDisabled}
+            onClick={() => handleAction("withdraw", withdrawForm)}
+            className={`w-full mt-6 text-white font-bold text-xs py-3 rounded-xl transition-all shadow-lg flex items-center justify-center gap-2 ${withdrawDisabled ? "bg-zinc-800 text-zinc-500 cursor-not-allowed shadow-none" : "bg-indigo-600 hover:bg-indigo-700 hover:shadow-indigo-500/20"}`}
+          >
+            {activeTxAction === "withdraw" && activeTxPhase ? <RefreshCw className="w-4 h-4 animate-spin" /> : null}
+            {getTxLabel("withdraw", "Claim Claimable Tokens")}
+          </button>
         </div>
       )}
 
@@ -758,6 +794,8 @@ export function DashboardActionPanels(props: Props) {
           cancelForm={cancelForm}
           setCancelForm={setCancelForm}
           handleAction={handleAction}
+          isSubmitting={activeTxAction === "cancel" && !!activeTxPhase}
+          submitLabel={getTxLabel("cancel", "Cancel and Refund Stream")}
         />
       )}
 

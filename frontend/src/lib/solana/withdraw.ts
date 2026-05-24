@@ -43,6 +43,8 @@ export type WithdrawStreamResult = Readonly<{
   withdrawnAmount: string;
 }>;
 
+export type TxProgressPhase = "wallet_approval" | "sending" | "confirming";
+
 const WITHDRAW_IDL = idl as unknown as anchor.Idl;
 
 function parsePublicKey(value: string, label: string) {
@@ -193,12 +195,15 @@ export async function withdrawFromStreamOnChain({
   endpoint,
   commitment = "confirmed",
   input,
+  onStatus,
 }: {
   wallet: WalletSession;
   endpoint: string;
   commitment?: Commitment;
   input: WithdrawStreamInput;
+  onStatus?: (phase: TxProgressPhase) => void;
 }): Promise<WithdrawStreamResult> {
+  onStatus?.("wallet_approval");
   const recipient = new PublicKey(wallet.account.address.toString());
   const streamAddress = parsePublicKey(input.streamAddress, "stream address");
   const { signer: walletSigner, mode: walletSignerMode } = createWalletTransactionSigner(wallet);
@@ -351,6 +356,7 @@ export async function withdrawFromStreamOnChain({
   let simulationLogs: string[] = [];
   let signature: string;
 
+  onStatus?.("sending");
   if (walletSignerMode === "send") {
     const sentSignature = await signAndSendTransactionMessageWithSigners(transactionMessage);
     signature = sentSignature.toString();
@@ -389,6 +395,7 @@ export async function withdrawFromStreamOnChain({
     });
   }
 
+  onStatus?.("confirming");
   await connection.confirmTransaction({ blockhash, lastValidBlockHeight, signature }, commitment);
 
   return {

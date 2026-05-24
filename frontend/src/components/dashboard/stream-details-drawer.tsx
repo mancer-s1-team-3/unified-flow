@@ -15,6 +15,7 @@ export const StreamDetailsDrawer = memo(function StreamDetailsDrawer({
   setCsvEditText,
   setSelectedStream,
   connectedWalletAddress,
+  currentTimeTs,
 }: {
   selectedStream: any;
   loadingDetails: boolean;
@@ -25,6 +26,7 @@ export const StreamDetailsDrawer = memo(function StreamDetailsDrawer({
   setCsvEditText: (value: string) => void;
   setSelectedStream: (value: any) => void;
   connectedWalletAddress: string | null;
+  currentTimeTs: number;
 }) {
   useEffect(() => {
     if (!selectedStream) return;
@@ -52,6 +54,14 @@ export const StreamDetailsDrawer = memo(function StreamDetailsDrawer({
   const cancelledAt = cancelledTx?.createdAt ?? selectedStream.updatedAt ?? null;
   const mintDecimals = typeof selectedStream.mintDecimals === "number" ? selectedStream.mintDecimals : null;
   const amountLabel = getAmountUnitLabel(selectedStream.mint);
+  const total = Number(selectedStream.totalAmount || 0);
+  const withdrawn = Number(selectedStream.withdrawn || 0);
+  const unlocked = Number(selectedStream.unlockedAmount || 0);
+  const end = Number(selectedStream.endTs || 0);
+  const isMilestoneCompleted = selectedStream.vestingType === 2 && (Number(selectedStream.completedAt || 0) > 0 || (total > 0 && unlocked >= total));
+  const isFullyClaimed = total > 0 && withdrawn >= total;
+  const isEnded = !isCancelled && (selectedStream.vestingType === 2 ? isMilestoneCompleted : currentTimeTs >= end);
+  const cancelDisabled = isCancelled || isEnded || isFullyClaimed;
 
   const drawer = (
     <div className="fixed inset-0 z-50 bg-zinc-950/95 sm:bg-black/60 backdrop-blur-md flex justify-end overflow-x-hidden animate-in fade-in duration-200">
@@ -298,14 +308,14 @@ export const StreamDetailsDrawer = memo(function StreamDetailsDrawer({
                 </div>
               )}
 
-              {isCreatorWallet && selectedStream.cancelable && !isCancelled && (
+              {isCreatorWallet && selectedStream.cancelable && !cancelDisabled && (
                 <button onClick={() => prefillAction("cancel", selectedStream.id)} className="flex items-center justify-center gap-1.5 bg-zinc-900 hover:bg-zinc-800 text-red-400 hover:text-red-300 border border-zinc-800 hover:border-zinc-700 py-2.5 rounded-xl transition-all">
                   <XCircle className="w-3.5 h-3.5" />
                   Cancel Stream
                 </button>
               )}
 
-              {isCreatorWallet && isCancelled && (
+              {isCreatorWallet && selectedStream.cancelable && cancelDisabled && (
                 <div className="flex items-center justify-center gap-1.5 bg-zinc-900 text-zinc-500 border border-zinc-800 py-2.5 rounded-xl text-center">
                   <XCircle className="w-3.5 h-3.5" />
                   Cancel Disabled

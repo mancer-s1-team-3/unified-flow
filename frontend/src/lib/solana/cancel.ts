@@ -33,6 +33,8 @@ export type CancelStreamResult = Readonly<{
   simulationLogs: string[];
 }>;
 
+export type TxProgressPhase = "wallet_approval" | "sending" | "confirming";
+
 function parsePublicKey(value: string, label: string) {
   try {
     return new PublicKey(value.trim());
@@ -66,12 +68,15 @@ export async function cancelStreamOnChain({
   endpoint,
   commitment = "confirmed",
   input,
+  onStatus,
 }: {
   wallet: WalletSession;
   endpoint: string;
   commitment?: Commitment;
   input: CancelStreamInput;
+  onStatus?: (phase: TxProgressPhase) => void;
 }): Promise<CancelStreamResult> {
+  onStatus?.("wallet_approval");
   const creator = new PublicKey(wallet.account.address.toString());
   const streamAddress = parsePublicKey(input.streamAddress, "stream address");
   const { signer: walletSigner, mode: walletSignerMode } = createWalletTransactionSigner(wallet);
@@ -153,6 +158,7 @@ export async function cancelStreamOnChain({
   let simulationLogs: string[] = [];
   let signature: string;
 
+  onStatus?.("sending");
   if (walletSignerMode === "send") {
     const sentSignature = await signAndSendTransactionMessageWithSigners(transactionMessage);
     signature = sentSignature.toString();
@@ -184,6 +190,7 @@ export async function cancelStreamOnChain({
     });
   }
 
+  onStatus?.("confirming");
   await connection.confirmTransaction({ blockhash, lastValidBlockHeight, signature }, commitment);
 
   return {
