@@ -75,24 +75,24 @@ function CancelConfirmDialog({
           </div>
 
           {/* What happens list */}
-         <ul className="space-y-2 mb-6">
-  {[
-    { color: "bg-red-400", text: "Vesting schedule will be permanently terminated" },
-    { color: "bg-orange-400", text: "Recipient loses access to all remaining unvested tokens" },
-    { color: "bg-yellow-300", text: "Unlocked but unclaimed tokens remain claimable by recipient" },
-    { color: "bg-green-400", text: "Locked tokens are refunded to creator wallet immediately" },
-  ].map(({ color, text }) => (
-    <li
-      key={text}
-      className="flex items-start gap-2.5 text-[11px] text-zinc-400"
-    >
-      <span
-        className={`mt-0.5 w-1.5 h-1.5 rounded-full shrink-0 ${color}`}
-      />
-      {text}
-    </li>
-  ))}
-</ul>
+          <ul className="space-y-2 mb-6">
+            {[
+              { color: "bg-red-400", text: "Vesting schedule will be permanently terminated" },
+              { color: "bg-orange-400", text: "Recipient loses access to all remaining unvested tokens" },
+              { color: "bg-yellow-300", text: "Unlocked but unclaimed tokens remain claimable by recipient" },
+              { color: "bg-green-400", text: "Locked tokens are refunded to creator wallet immediately" },
+            ].map(({ color, text }) => (
+              <li
+                key={text}
+                className="flex items-start gap-2.5 text-[11px] text-zinc-400"
+              >
+                <span
+                  className={`mt-0.5 w-1.5 h-1.5 rounded-full shrink-0 ${color}`}
+                />
+                {text}
+              </li>
+            ))}
+          </ul>
 
           {/* Typed confirmation */}
           <div className="mb-5">
@@ -357,6 +357,38 @@ export function DashboardActionPanels(props: Props) {
   const [cliffInputMode, setCliffInputMode] = useState<"duration" | "date">("duration");
   const [durationInputMode, setDurationInputMode] = useState<"duration" | "date">("duration");
 
+
+  useEffect(() => {
+    if (createForm.type === "2") return;
+
+    const getFutureIso = () => {
+      const d = new Date(Date.now() + 60_000); // 1 minute from now
+      const pad = (n: number) => String(n).padStart(2, "0");
+      return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+    };
+
+    // Set initial default if empty
+    if (!createForm.startDate) {
+      setCreateForm((prev: any) => ({ ...prev, startDate: getFutureIso() }));
+    }
+
+    // Every 30s: if the current startDate has fallen into the past, bump it forward
+    const interval = setInterval(() => {
+      setCreateForm((prev: any) => {
+        if (prev.type === "2") return prev;
+        if (!prev.startDate) return { ...prev, startDate: getFutureIso() };
+        const ms = new Date(prev.startDate).getTime();
+        if (Number.isFinite(ms) && ms <= Date.now()) {
+          return { ...prev, startDate: getFutureIso(), endDate: "", cliffDate: "" };
+        }
+        return prev;
+      });
+    }, 30_000);
+
+    return () => clearInterval(interval);
+  }, [createForm.type]); // eslint-disable-line react-hooks/exhaustive-deps
+  // ──────────────────────────────────────────────────────────────────────────────────────
+
   const milestoneSum = useMemo(
     () => milestoneAmounts.reduce((acc, curr) => acc + Number(curr || 0), 0),
     [milestoneAmounts]
@@ -375,7 +407,19 @@ export function DashboardActionPanels(props: Props) {
     return Number.isFinite(ms) ? ms : Date.now() + 10_000;
   })();
   const startDateInPast = createForm.type !== "2" && startDateMs <= Date.now();
+
+  // ─── FIX: cliffDateInPast & endDateInPast only fire when field actually has a value ───
   const cliffExceedsDuration = createForm.type === "1" && cliffDurationSeconds > durationSeconds;
+  const cliffDateInPast =
+    createForm.type === "1" &&
+    Boolean(createForm.cliffDuration?.trim()) &&
+    cliffDurationSeconds <= 0;
+  const endDateInPast =
+    createForm.type !== "2" &&
+    Boolean(createForm.duration?.trim()) &&
+    durationSeconds <= 0;
+  // ──────────────────────────────────────────────────────────────────────────────────────
+
   const startDateInLocalIso = (() => {
     if (createForm.startDate) return createForm.startDate;
     const d = new Date(Date.now() + 10_000);
@@ -390,7 +434,6 @@ export function DashboardActionPanels(props: Props) {
     const pad = (n: number) => String(n).padStart(2, "0");
     return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
   })();
-  const cliffDateInPast = createForm.type === "1" && cliffDurationSeconds <= 0;
   const endDateInLocalIso = (() => {
     if (createForm.endDate) return createForm.endDate;
     const seconds = Number(createForm.duration || 0);
@@ -399,7 +442,6 @@ export function DashboardActionPanels(props: Props) {
     const pad = (n: number) => String(n).padStart(2, "0");
     return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
   })();
-  const endDateInPast = createForm.type !== "2" && durationSeconds <= 0;
 
   const editMilestoneDecimals = Number.isFinite(Number(editMilestoneForm?.mintDecimals))
     ? Number(editMilestoneForm.mintDecimals)
@@ -897,21 +939,21 @@ export function DashboardActionPanels(props: Props) {
                   <input type="file" accept=".csv" ref={fileInputCreateRef} onChange={(e) => handleCsvUpload(e, "create")} className="hidden" />
                 </div>
                 <div className="flex min-w-0 flex-col gap-3 sm:flex-row sm:items-center">
-                <div className="flex min-w-0 flex-wrap items-center gap-2">
-                  <span className="text-[9px] text-zinc-500 font-black uppercase tracking-wider">Baseline:</span>
-                  <select value={compareVersionSelected} onChange={(e) => setCompareVersionSelected(e.target.value)} className="min-w-0 bg-zinc-900 border border-zinc-805 rounded-xl px-2.5 py-2 text-[10px] text-zinc-300 font-extrabold focus:outline-none focus:border-indigo-500">
-                    <option value="0">Live Active DB</option>
-                    {csvVersions.map((v) => <option key={v.id} value={v.version}>Version {v.version} ({v.filename})</option>)}
-                  </select>
-                  {compareVersionSelected !== "0" && (
-                    <button
-                      onClick={handleDeleteCsvVersion}
-                      className="rounded-xl border border-rose-900/60 bg-rose-950/20 px-3 py-2 text-[10px] font-black uppercase tracking-wider text-rose-300 hover:bg-rose-950/40 transition-all"
-                    >
-                      Hapus Version
-                    </button>
-                  )}
-                </div>
+                  <div className="flex min-w-0 flex-wrap items-center gap-2">
+                    <span className="text-[9px] text-zinc-500 font-black uppercase tracking-wider">Baseline:</span>
+                    <select value={compareVersionSelected} onChange={(e) => setCompareVersionSelected(e.target.value)} className="min-w-0 bg-zinc-900 border border-zinc-805 rounded-xl px-2.5 py-2 text-[10px] text-zinc-300 font-extrabold focus:outline-none focus:border-indigo-500">
+                      <option value="0">Live Active DB</option>
+                      {csvVersions.map((v) => <option key={v.id} value={v.version}>Version {v.version} ({v.filename})</option>)}
+                    </select>
+                    {compareVersionSelected !== "0" && (
+                      <button
+                        onClick={handleDeleteCsvVersion}
+                        className="rounded-xl border border-rose-900/60 bg-rose-950/20 px-3 py-2 text-[10px] font-black uppercase tracking-wider text-rose-300 hover:bg-rose-950/40 transition-all"
+                      >
+                        Hapus Version
+                      </button>
+                    )}
+                  </div>
                   <button onClick={() => handleAnalyzeDiff("create")} disabled={loadingDiff} className="flex items-center justify-center gap-1.5 px-3 py-2 bg-indigo-650 hover:bg-indigo-600 border border-indigo-700 rounded-xl text-[10px] font-black text-white transition-all disabled:opacity-40 sm:w-auto">
                     {loadingDiff ? <RefreshCw className="w-3 h-3 animate-spin text-white" /> : <Layers className="w-3 h-3" />}Analyze Diff
                   </button>
@@ -923,7 +965,7 @@ export function DashboardActionPanels(props: Props) {
                 <textarea rows={8} value={csvCreateText} onChange={(e) => setCsvCreateText(e.target.value)} className="w-full bg-zinc-950 border border-zinc-800 rounded-xl px-4 py-3 text-xs focus:outline-none focus:border-indigo-500 font-mono" />
               </div>
 
-      <CsvDiffPanel csvDiffResult={csvDiffResult} compareVersionSelected={compareVersionSelected} onClose={() => setCsvDiffResult(null)} />
+              <CsvDiffPanel csvDiffResult={csvDiffResult} compareVersionSelected={compareVersionSelected} onClose={() => setCsvDiffResult(null)} />
 
               <button
                 disabled={createCsvDisabled}
@@ -938,124 +980,122 @@ export function DashboardActionPanels(props: Props) {
       )}
 
       {activeTab === "edit_csv" && (
-       <div className="animate-in fade-in-30 duration-200">
-  <div className="border-b border-zinc-900 pb-4 mb-6">
-    <h2 className="text-2xl font-extrabold tracking-tight text-emerald-400">
-      Bulk Edit CSV
-    </h2>
-    <p className="text-xs text-zinc-400">
-      Modify multiple CSV-created streams simultaneously via CSV updates
-    </p>
-  </div>
+        <div className="animate-in fade-in-30 duration-200">
+          <div className="border-b border-zinc-900 pb-4 mb-6">
+            <h2 className="text-2xl font-extrabold tracking-tight text-emerald-400">
+              Bulk Edit CSV
+            </h2>
+            <p className="text-xs text-zinc-400">
+              Modify multiple CSV-created streams simultaneously via CSV updates
+            </p>
+          </div>
 
-  <div
-    className={`grid min-w-0 gap-4 max-w-full overflow-hidden ${mobileNarrowFormClass}`}
-  >
-    <div className="flex flex-col gap-3 rounded-2xl border border-zinc-900 bg-zinc-950 p-4 sm:flex-row sm:items-center sm:justify-between">
-      {/* Left actions */}
-      <div className="flex min-w-0 flex-col gap-2 sm:flex-row sm:items-center">
-        <button
-          onClick={() => downloadTemplate("edit")}
-          className="flex w-full items-center justify-center gap-1.5 px-3 py-2 border border-zinc-800 hover:border-zinc-700 bg-zinc-900/50 rounded-xl text-xs font-semibold text-zinc-350 transition-all sm:w-auto"
-        >
-          <Download className="w-3.5 h-3.5 text-emerald-400" />
-          Template
-        </button>
+          <div className={`grid min-w-0 gap-4 max-w-full overflow-hidden ${mobileNarrowFormClass}`}>
+            <div className="flex flex-col gap-3 rounded-2xl border border-zinc-900 bg-zinc-950 p-4 sm:flex-row sm:items-center sm:justify-between">
+              {/* Left actions */}
+              <div className="flex min-w-0 flex-col gap-2 sm:flex-row sm:items-center">
+                <button
+                  onClick={() => downloadTemplate("edit")}
+                  className="flex w-full items-center justify-center gap-1.5 px-3 py-2 border border-zinc-800 hover:border-zinc-700 bg-zinc-900/50 rounded-xl text-xs font-semibold text-zinc-350 transition-all sm:w-auto"
+                >
+                  <Download className="w-3.5 h-3.5 text-emerald-400" />
+                  Template
+                </button>
 
-        <button
-          onClick={() => fileInputEditRef.current?.click()}
-          className="flex w-full items-center justify-center gap-1.5 px-3 py-2 border border-emerald-900/60 bg-emerald-950/20 hover:bg-emerald-950/40 text-emerald-400 rounded-xl text-xs font-semibold transition-all sm:w-auto"
-        >
-          <Upload className="w-3.5 h-3.5" />
-          Upload CSV
-        </button>
+                <button
+                  onClick={() => fileInputEditRef.current?.click()}
+                  className="flex w-full items-center justify-center gap-1.5 px-3 py-2 border border-emerald-900/60 bg-emerald-950/20 hover:bg-emerald-950/40 text-emerald-400 rounded-xl text-xs font-semibold transition-all sm:w-auto"
+                >
+                  <Upload className="w-3.5 h-3.5" />
+                  Upload CSV
+                </button>
 
-        <input
-          type="file"
-          accept=".csv"
-          ref={fileInputEditRef}
-          onChange={(e) => handleCsvUpload(e, "edit")}
-          className="hidden"
-        />
-      </div>
+                <input
+                  type="file"
+                  accept=".csv"
+                  ref={fileInputEditRef}
+                  onChange={(e) => handleCsvUpload(e, "edit")}
+                  className="hidden"
+                />
+              </div>
 
-      {/* Right actions */}
-      <div className="flex min-w-0 flex-col gap-3 sm:flex-row sm:items-center">
-        <div className="flex min-w-0 flex-wrap items-center gap-2">
-          <span className="text-[9px] text-zinc-500 font-black uppercase tracking-wider">
-            Baseline:
-          </span>
+              {/* Right actions */}
+              <div className="flex min-w-0 flex-col gap-3 sm:flex-row sm:items-center">
+                <div className="flex min-w-0 flex-wrap items-center gap-2">
+                  <span className="text-[9px] text-zinc-500 font-black uppercase tracking-wider">
+                    Baseline:
+                  </span>
 
-          <select
-            value={compareVersionSelected}
-            onChange={(e) => setCompareVersionSelected(e.target.value)}
-            className="min-w-0 bg-zinc-900 border border-zinc-800 rounded-xl px-2.5 py-2 text-[10px] text-zinc-300 font-extrabold focus:outline-none focus:border-emerald-500"
-          >
-            <option value="0">Live Active DB</option>
-            {csvVersions.map((v) => (
-              <option key={v.id} value={v.version}>
-                Version {v.version} ({v.filename})
-              </option>
-            ))}
-          </select>
+                  <select
+                    value={compareVersionSelected}
+                    onChange={(e) => setCompareVersionSelected(e.target.value)}
+                    className="min-w-0 bg-zinc-900 border border-zinc-800 rounded-xl px-2.5 py-2 text-[10px] text-zinc-300 font-extrabold focus:outline-none focus:border-emerald-500"
+                  >
+                    <option value="0">Live Active DB</option>
+                    {csvVersions.map((v) => (
+                      <option key={v.id} value={v.version}>
+                        Version {v.version} ({v.filename})
+                      </option>
+                    ))}
+                  </select>
 
-          {compareVersionSelected !== "0" && (
+                  {compareVersionSelected !== "0" && (
+                    <button
+                      onClick={handleDeleteCsvVersion}
+                      className="rounded-xl border border-rose-900/60 bg-rose-950/20 px-3 py-2 text-[10px] font-black uppercase tracking-wider text-rose-300 hover:bg-rose-950/40 transition-all"
+                    >
+                      Hapus Version
+                    </button>
+                  )}
+                </div>
+
+                <button
+                  onClick={() => handleAnalyzeDiff("edit")}
+                  disabled={loadingDiff}
+                  className="flex items-center justify-center gap-1.5 px-3 py-2 bg-emerald-600 hover:bg-emerald-500 border border-emerald-700 rounded-xl text-[10px] font-black text-white transition-all disabled:opacity-40 sm:w-auto"
+                >
+                  {loadingDiff ? (
+                    <RefreshCw className="w-3 h-3 animate-spin text-white" />
+                  ) : (
+                    <Layers className="w-3 h-3" />
+                  )}
+                  Analyze Diff
+                </button>
+              </div>
+            </div>
+
+            <div>
+              <label className="block text-xs font-semibold text-zinc-400 uppercase tracking-wider mb-1.5">
+                CSV Edit Payload Preview / Editor
+              </label>
+
+              <textarea
+                rows={6}
+                value={csvEditText}
+                onChange={(e) => setCsvEditText(e.target.value)}
+                className="w-full bg-zinc-950 border border-zinc-800 rounded-xl px-4 py-3 text-xs focus:outline-none focus:border-emerald-500 font-mono"
+              />
+            </div>
+
+            <CsvDiffPanel
+              csvDiffResult={csvDiffResult}
+              compareVersionSelected={compareVersionSelected}
+              onClose={() => setCsvDiffResult(null)}
+            />
+
             <button
-              onClick={handleDeleteCsvVersion}
-              className="rounded-xl border border-rose-900/60 bg-rose-950/20 px-3 py-2 text-[10px] font-black uppercase tracking-wider text-rose-300 hover:bg-rose-950/40 transition-all"
+              disabled={editCsvDisabled}
+              onClick={() => handleAction("edit_stream_csv", null)}
+              className={`w-full mt-4 text-white font-bold text-xs py-3 rounded-xl transition-all shadow-lg ${
+                editCsvDisabled
+                  ? "bg-zinc-800 text-zinc-500 cursor-not-allowed shadow-none"
+                  : "bg-emerald-600 hover:bg-emerald-700 hover:shadow-emerald-500/20"
+              }`}
             >
-              Hapus Version
+              Approve & Apply CSV Revision
             </button>
-          )}
+          </div>
         </div>
-
-        <button
-          onClick={() => handleAnalyzeDiff("edit")}
-          disabled={loadingDiff}
-          className="flex items-center justify-center gap-1.5 px-3 py-2 bg-emerald-600 hover:bg-emerald-500 border border-emerald-700 rounded-xl text-[10px] font-black text-white transition-all disabled:opacity-40 sm:w-auto"
-        >
-          {loadingDiff ? (
-            <RefreshCw className="w-3 h-3 animate-spin text-white" />
-          ) : (
-            <Layers className="w-3 h-3" />
-          )}
-          Analyze Diff
-        </button>
-      </div>
-    </div>
-
-    <div>
-      <label className="block text-xs font-semibold text-zinc-400 uppercase tracking-wider mb-1.5">
-        CSV Edit Payload Preview / Editor
-      </label>
-
-      <textarea
-        rows={6}
-        value={csvEditText}
-        onChange={(e) => setCsvEditText(e.target.value)}
-        className="w-full bg-zinc-950 border border-zinc-800 rounded-xl px-4 py-3 text-xs focus:outline-none focus:border-emerald-500 font-mono"
-      />
-    </div>
-
-    <CsvDiffPanel
-      csvDiffResult={csvDiffResult}
-      compareVersionSelected={compareVersionSelected}
-      onClose={() => setCsvDiffResult(null)}
-    />
-
-    <button
-      disabled={editCsvDisabled}
-      onClick={() => handleAction("edit_stream_csv", null)}
-      className={`w-full mt-4 text-white font-bold text-xs py-3 rounded-xl transition-all shadow-lg ${
-        editCsvDisabled
-          ? "bg-zinc-800 text-zinc-500 cursor-not-allowed shadow-none"
-          : "bg-emerald-600 hover:bg-emerald-700 hover:shadow-emerald-500/20"
-      }`}
-    >
-      Approve & Apply CSV Revision
-    </button>
-  </div>
-</div>
       )}
 
       {activeTab === "withdraw" && (
