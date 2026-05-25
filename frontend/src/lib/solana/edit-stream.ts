@@ -16,8 +16,8 @@ import {
 } from "@solana/kit";
 import { type Commitment, Connection, PublicKey, VersionedTransaction } from "@solana/web3.js";
 import type { WalletSession } from "@solana/client";
+import { getExplorerClusterParam, getProgramIdForEndpoint } from "@/lib/solana/network-config";
 
-const PROGRAM_ID = new PublicKey(process.env.NEXT_PUBLIC_PROGRAM_ID ?? "8M5yieUh7pxwUi1YBByDF82nqoorZwaKi8dBoMVpurFa");
 const TOKEN_PROGRAM_ID = new PublicKey(TOKEN_PROGRAM_ADDRESS);
 const ASSOCIATED_TOKEN_PROGRAM_ID = new PublicKey(ASSOCIATED_TOKEN_PROGRAM_ADDRESS);
 
@@ -51,6 +51,7 @@ type ExecuteInstructionParams = {
   walletSigner: any;
   anchorInstructionData: Uint8Array | Buffer | number[];
   accounts: { address: string; role: AccountRole; signer?: any }[];
+  programId: PublicKey;
 };
 
 export type EditLinearInput = Readonly<{
@@ -138,13 +139,6 @@ function getAnchorWallet(session: WalletSession) {
   };
 }
 
-function getExplorerCluster(endpoint: string) {
-  if (endpoint.includes("devnet")) return "devnet";
-  if (endpoint.includes("testnet")) return "testnet";
-  if (endpoint.includes("mainnet")) return "mainnet-beta";
-  return "custom";
-}
-
 async function executeInstruction({
   connection,
   commitment,
@@ -152,6 +146,7 @@ async function executeInstruction({
   walletSigner,
   anchorInstructionData,
   accounts,
+  programId,
 }: ExecuteInstructionParams) {
   const { blockhash, lastValidBlockHeight } = await connection.getLatestBlockhash(commitment);
   const kitSigner = walletSigner as any;
@@ -160,7 +155,7 @@ async function executeInstruction({
     { blockhash: blockhash as any, lastValidBlockHeight: BigInt(lastValidBlockHeight) },
     appendTransactionMessageInstruction(
       {
-        programAddress: PROGRAM_ID.toBase58(),
+        programAddress: programId.toBase58(),
         accounts,
         data: anchorInstructionData,
       } as any,
@@ -226,13 +221,13 @@ async function getMintDecimals(connection: Connection, mint: PublicKey, commitme
   return mintDecimals;
 }
 
-async function getMilestoneAmounts(program: any, streamAddress: PublicKey, milestoneCount: number) {
+async function getMilestoneAmounts(program: any, streamAddress: PublicKey, milestoneCount: number, programId: PublicKey) {
   const milestoneAmounts: anchor.BN[] = [];
 
   for (let index = 0; index < milestoneCount; index += 1) {
     const [milestoneAddress] = PublicKey.findProgramAddressSync(
       [Buffer.from("milestone"), streamAddress.toBuffer(), Buffer.from([index])],
-      PROGRAM_ID
+      programId
     );
 
     const milestoneState = await program.account.milestoneAccount.fetch(milestoneAddress) as MilestoneAccountView;
@@ -253,6 +248,7 @@ export async function editLinearOnChain({
   commitment?: Commitment;
   input: EditLinearInput;
 }): Promise<EditStreamResult> {
+  const PROGRAM_ID = getProgramIdForEndpoint(endpoint);
   const creator = new PublicKey(wallet.account.address.toString());
   const streamAddress = parsePublicKey(input.streamAddress, "stream address");
   const { signer: walletSigner, mode: walletSignerMode } = createWalletTransactionSigner(wallet);
@@ -319,11 +315,12 @@ export async function editLinearOnChain({
       { address: creatorTokenAccount.toBase58(), role: AccountRole.WRITABLE },
       { address: TOKEN_PROGRAM_ID.toBase58(), role: AccountRole.READONLY },
     ],
+    programId: PROGRAM_ID,
   });
 
   return {
     signature,
-    explorerUrl: `https://explorer.solana.com/tx/${signature}?cluster=${getExplorerCluster(endpoint)}`,
+    explorerUrl: `https://explorer.solana.com/tx/${signature}?cluster=${getExplorerClusterParam(endpoint)}`,
     simulationLogs,
   };
 }
@@ -339,6 +336,7 @@ export async function editCliffOnChain({
   commitment?: Commitment;
   input: EditCliffInput;
 }): Promise<EditStreamResult> {
+  const PROGRAM_ID = getProgramIdForEndpoint(endpoint);
   const creator = new PublicKey(wallet.account.address.toString());
   const streamAddress = parsePublicKey(input.streamAddress, "stream address");
   const { signer: walletSigner, mode: walletSignerMode } = createWalletTransactionSigner(wallet);
@@ -384,11 +382,12 @@ export async function editCliffOnChain({
       { address: creator.toBase58(), role: AccountRole.WRITABLE_SIGNER, signer: walletSigner as any },
       { address: streamAddress.toBase58(), role: AccountRole.WRITABLE },
     ],
+    programId: PROGRAM_ID,
   });
 
   return {
     signature,
-    explorerUrl: `https://explorer.solana.com/tx/${signature}?cluster=${getExplorerCluster(endpoint)}`,
+    explorerUrl: `https://explorer.solana.com/tx/${signature}?cluster=${getExplorerClusterParam(endpoint)}`,
     simulationLogs,
   };
 }
@@ -404,6 +403,7 @@ export async function editMilestoneOnChain({
   commitment?: Commitment;
   input: EditMilestoneInput;
 }): Promise<EditStreamResult> {
+  const PROGRAM_ID = getProgramIdForEndpoint(endpoint);
   const creator = new PublicKey(wallet.account.address.toString());
   const streamAddress = parsePublicKey(input.streamAddress, "stream address");
   const { signer: walletSigner, mode: walletSignerMode } = createWalletTransactionSigner(wallet);
@@ -434,7 +434,7 @@ export async function editMilestoneOnChain({
     throw new Error("Milestone stream is missing milestone definitions.");
   }
 
-  const milestoneAmounts = await getMilestoneAmounts(programAny, streamAddress, milestoneCount);
+  const milestoneAmounts = await getMilestoneAmounts(programAny, streamAddress, milestoneCount, PROGRAM_ID);
   if (milestoneIndex >= milestoneAmounts.length) {
     throw new Error("Milestone index is out of range for this stream.");
   }
@@ -486,11 +486,12 @@ export async function editMilestoneOnChain({
       { address: creatorTokenAccount.toBase58(), role: AccountRole.WRITABLE },
       { address: TOKEN_PROGRAM_ID.toBase58(), role: AccountRole.READONLY },
     ],
+    programId: PROGRAM_ID,
   });
 
   return {
     signature,
-    explorerUrl: `https://explorer.solana.com/tx/${signature}?cluster=${getExplorerCluster(endpoint)}`,
+    explorerUrl: `https://explorer.solana.com/tx/${signature}?cluster=${getExplorerClusterParam(endpoint)}`,
     simulationLogs,
   };
 }
