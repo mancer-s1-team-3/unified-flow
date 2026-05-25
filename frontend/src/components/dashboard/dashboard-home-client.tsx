@@ -190,6 +190,7 @@ export default function Home({ initialStreams = [] }: Props) {
     amount: "1000",
     mint: defaultMint,
     type: "0", // 0: Linear, 1: Cliff, 2: Milestone
+    startDate: "",
     duration: "3600",
     endDate: "",
     cliffDuration: "600",
@@ -586,6 +587,7 @@ export default function Home({ initialStreams = [] }: Props) {
             amount: data.amount,
             mint: data.mint,
             type: data.type,
+            startDate: data.startDate,
             duration: data.duration,
             cliffDuration: data.cliffDuration,
             milestoneCount: data.milestoneCount,

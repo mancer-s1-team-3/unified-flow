@@ -364,12 +364,24 @@ export function DashboardActionPanels(props: Props) {
 
   const durationSeconds = Number(createForm.duration || 0);
   const cliffDurationSeconds = Number(createForm.cliffDuration || 0);
+  const startDateMs = (() => {
+    if (!createForm.startDate) return Date.now() + 10_000;
+    const ms = new Date(createForm.startDate).getTime();
+    return Number.isFinite(ms) ? ms : Date.now() + 10_000;
+  })();
+  const startDateInPast = createForm.type !== "2" && startDateMs <= Date.now();
   const cliffExceedsDuration = createForm.type === "1" && cliffDurationSeconds > durationSeconds;
+  const startDateInLocalIso = (() => {
+    if (createForm.startDate) return createForm.startDate;
+    const d = new Date(Date.now() + 10_000);
+    const pad = (n: number) => String(n).padStart(2, "0");
+    return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+  })();
   const cliffDateInLocalIso = (() => {
     if (createForm.cliffDate) return createForm.cliffDate;
     const seconds = Number(createForm.cliffDuration || 0);
     if (!Number.isFinite(seconds) || seconds <= 0) return "";
-    const d = new Date(Date.now() + seconds * 1000);
+    const d = new Date(startDateMs + seconds * 1000);
     const pad = (n: number) => String(n).padStart(2, "0");
     return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
   })();
@@ -378,7 +390,7 @@ export function DashboardActionPanels(props: Props) {
     if (createForm.endDate) return createForm.endDate;
     const seconds = Number(createForm.duration || 0);
     if (!Number.isFinite(seconds) || seconds <= 0) return "";
-    const d = new Date(Date.now() + seconds * 1000);
+    const d = new Date(startDateMs + seconds * 1000);
     const pad = (n: number) => String(n).padStart(2, "0");
     return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
   })();
@@ -436,10 +448,12 @@ export function DashboardActionPanels(props: Props) {
     Boolean(createForm.amount?.trim()) &&
     Boolean(createForm.mint?.trim()) &&
     Boolean(createForm.type?.trim()) &&
+    (createForm.type === "2" || Boolean(createForm.startDate?.trim())) &&
     (createForm.type === "2" ? Boolean(createForm.milestoneCount?.trim()) : Boolean(createForm.duration?.trim())) &&
     (createForm.type !== "1" || Boolean(createForm.cliffDuration?.trim()));
   const createDisabled =
     !createRequiredValid ||
+    startDateInPast ||
     cliffExceedsDuration ||
     cliffDateInPast ||
     endDateInPast ||
@@ -663,6 +677,30 @@ export function DashboardActionPanels(props: Props) {
               </div>
               {createForm.type !== "2" && (
                 <div className="min-w-0 max-w-full">
+                  <label className="block text-[10px] sm:text-xs font-semibold text-zinc-400 uppercase tracking-wider mb-1.5">Start Date</label>
+                  <input
+                    type="datetime-local"
+                    value={startDateInLocalIso}
+                    onChange={(e) => {
+                      const value = e.target.value;
+                      setCreateForm({
+                        ...createForm,
+                        startDate: value,
+                        endDate: "",
+                        cliffDate: "",
+                      });
+                    }}
+                    className="block w-full max-w-full min-w-0 bg-zinc-950 border border-zinc-800 rounded-xl px-3.5 py-2.5 sm:px-4 sm:py-3 text-sm focus:outline-none focus:border-indigo-500 font-mono [color-scheme:dark]"
+                  />
+                  {startDateInPast && (
+                    <div className="mt-2 text-[10px] font-semibold text-rose-400">
+                      Start date must be in the future.
+                    </div>
+                  )}
+                </div>
+              )}
+              {createForm.type !== "2" && (
+                <div className="min-w-0 max-w-full">
                   <div className="flex items-center justify-between gap-2 mb-1.5 min-h-[26px]">
                     <label className="block text-[10px] sm:text-xs font-semibold text-zinc-400 uppercase tracking-wider">{durationInputMode === "duration" ? "Duration" : "End Date"}</label>
                     <div className="inline-flex rounded-lg border border-zinc-800 bg-zinc-950 p-0.5 text-[9px] font-black uppercase tracking-wider">
@@ -689,7 +727,7 @@ export function DashboardActionPanels(props: Props) {
                         min="0"
                         value={createForm.duration}
                         onChange={(e) => setCreateForm({ ...createForm, duration: e.target.value, endDate: "" })}
-                        placeholder="Seconds from now"
+                        placeholder="Seconds from start date"
                         className="block w-full max-w-full min-w-0 bg-zinc-950 border border-zinc-800 rounded-xl px-3.5 py-2.5 sm:px-4 sm:py-3 pr-14 text-sm focus:outline-none focus:border-indigo-500 font-mono"
                       />
                       <span className="absolute inset-y-0 right-3 flex items-center text-[10px] font-black uppercase tracking-wider text-zinc-500">sec</span>
@@ -705,7 +743,7 @@ export function DashboardActionPanels(props: Props) {
                           return;
                         }
                         const target = new Date(value).getTime();
-                        const seconds = Math.max(0, Math.floor((target - Date.now()) / 1000));
+                        const seconds = Math.max(0, Math.floor((target - startDateMs) / 1000));
                         setCreateForm({ ...createForm, endDate: value, duration: String(seconds) });
                       }}
                       className="block w-full max-w-full min-w-0 bg-zinc-950 border border-zinc-800 rounded-xl px-3.5 py-2.5 sm:px-4 sm:py-3 text-sm focus:outline-none focus:border-indigo-500 font-mono [color-scheme:dark]"
@@ -714,8 +752,8 @@ export function DashboardActionPanels(props: Props) {
                   {durationSeconds > 0 && (
                     <div className="mt-1.5 text-[10px] font-mono text-zinc-500">
                       {durationInputMode === "duration"
-                        ? `≈ ends ${new Date(Date.now() + durationSeconds * 1000).toLocaleString()}`
-                        : `≈ ${durationSeconds.toLocaleString()}s from now`}
+                        ? `≈ ends ${new Date(startDateMs + durationSeconds * 1000).toLocaleString()}`
+                        : `≈ ${durationSeconds.toLocaleString()}s from start date`}
                     </div>
                   )}
                   {endDateInPast && durationInputMode === "date" && (
@@ -754,7 +792,7 @@ export function DashboardActionPanels(props: Props) {
                         min="0"
                         value={createForm.cliffDuration}
                         onChange={(e) => setCreateForm({ ...createForm, cliffDuration: e.target.value, cliffDate: "" })}
-                        placeholder="Seconds from now"
+                        placeholder="Seconds from start date"
                         className="block w-full max-w-full min-w-0 bg-zinc-950 border border-zinc-800 rounded-xl px-3.5 py-2.5 sm:px-4 sm:py-3 pr-14 text-sm focus:outline-none focus:border-indigo-500 font-mono"
                       />
                       <span className="absolute inset-y-0 right-3 flex items-center text-[10px] font-black uppercase tracking-wider text-zinc-500">sec</span>
@@ -770,7 +808,7 @@ export function DashboardActionPanels(props: Props) {
                           return;
                         }
                         const target = new Date(value).getTime();
-                        const seconds = Math.max(0, Math.floor((target - Date.now()) / 1000));
+                        const seconds = Math.max(0, Math.floor((target - startDateMs) / 1000));
                         setCreateForm({ ...createForm, cliffDate: value, cliffDuration: String(seconds) });
                       }}
                       className="block w-full max-w-full min-w-0 bg-zinc-950 border border-zinc-800 rounded-xl px-3.5 py-2.5 sm:px-4 sm:py-3 text-sm focus:outline-none focus:border-indigo-500 font-mono [color-scheme:dark]"
@@ -779,8 +817,8 @@ export function DashboardActionPanels(props: Props) {
                   {cliffDurationSeconds > 0 && (
                     <div className="mt-1.5 text-[10px] font-mono text-zinc-500">
                       {cliffInputMode === "duration"
-                        ? `≈ unlocks ${new Date(Date.now() + cliffDurationSeconds * 1000).toLocaleString()}`
-                        : `≈ ${cliffDurationSeconds.toLocaleString()}s from now`}
+                        ? `≈ unlocks ${new Date(startDateMs + cliffDurationSeconds * 1000).toLocaleString()}`
+                        : `≈ ${cliffDurationSeconds.toLocaleString()}s from start date`}
                     </div>
                   )}
                   {cliffDateInPast && cliffInputMode === "date" && (
@@ -790,7 +828,7 @@ export function DashboardActionPanels(props: Props) {
                   )}
                   {cliffExceedsDuration && (
                     <div className="mt-2 text-[10px] font-semibold text-amber-400">
-                      Cliff must occur before the stream ends ({durationSeconds.toLocaleString()}s from now).
+                      Cliff must occur before the stream ends ({durationSeconds.toLocaleString()}s from start date).
                     </div>
                   )}
                 </div>
