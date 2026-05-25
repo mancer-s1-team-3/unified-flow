@@ -888,23 +888,23 @@ export function DashboardActionPanels(props: Props) {
                   <div className="min-w-0 max-w-full">
                     <div className="flex items-center gap-2 mb-1.5">
                       <label className="block text-[10px] sm:text-xs font-semibold text-zinc-400 uppercase tracking-wider">Count</label>
-                      <span className="text-[10px] text-zinc-600 font-normal">max 255</span>
+                      <span className="text-[10px] text-zinc-600 font-normal">max 17</span>
                     </div>
                     <input
                       type="number"
                       min="1"
-                      max="255"
+                      max="17"
                       value={createForm.milestoneCount}
                       onChange={(e) => {
                         const raw = parseInt(e.target.value, 10);
-                        const clamped = Number.isFinite(raw) ? String(Math.min(255, Math.max(1, raw))) : "";
+                        const clamped = Number.isFinite(raw) ? String(Math.min(17, Math.max(1, raw))) : "";
                         onMilestoneCountChange(clamped);
                       }}
                       className="block w-full max-w-full min-w-0 bg-zinc-950 border border-zinc-800 rounded-xl px-3.5 py-2.5 sm:px-4 sm:py-3 text-sm focus:outline-none focus:border-indigo-500 font-mono"
                     />
-                    {Number(createForm.milestoneCount) >= 255 && (
+                    {Number(createForm.milestoneCount) >= 17 && (
                       <div className="mt-1.5 text-[10px] font-semibold text-amber-400">
-                        Maximum milestone count is 255.
+                        Maximum milestone count is 17.
                       </div>
                     )}
                   </div>
