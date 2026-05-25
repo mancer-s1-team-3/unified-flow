@@ -10,6 +10,16 @@ export type ParsedTxError = {
   raw?: string;
 };
 
+type ErrorLike = {
+  message?: unknown;
+  response?: {
+    data?: unknown;
+  };
+  data?: unknown;
+  cause?: unknown;
+  logs?: unknown;
+ };
+
 // ─── Anchor / program custom error codes ──────────────────────────────────
 // These map to the program's error codes in lib.rs
 const ANCHOR_ERROR_MAP: Record<number, { title: string; detail: string }> = {
@@ -59,6 +69,11 @@ const FRAGMENT_MAP: { pattern: RegExp; title: string; detail: string }[] = [
     pattern: /insufficient lamports/i,
     title: "Insufficient SOL Balance",
     detail: "Your wallet doesn't have enough SOL to cover the transaction fee and rent. Top up your wallet and try again.",
+  },
+  {
+    pattern: /insufficient funds/i,
+    title: "Insufficient SOL Balance",
+    detail: "Your wallet doesn't have enough SOL for this transaction. Top up your wallet and try again.",
   },
 
   // Wallet / signing errors
@@ -166,8 +181,36 @@ function parseAnchorErrorCode(message: string): { title: string; detail: string 
   return null;
 }
 
+function flattenUnknown(value: unknown): string[] {
+  if (value == null) return [];
+  if (typeof value === "string") return [value];
+  if (typeof value === "number" || typeof value === "boolean" || typeof value === "bigint") return [String(value)];
+  if (Array.isArray(value)) return value.flatMap((item) => flattenUnknown(item));
+  if (typeof value === "object") {
+    return Object.values(value as Record<string, unknown>).flatMap((item) => flattenUnknown(item));
+  }
+  return [];
+}
+
+function buildRawErrorText(err: unknown): string {
+  const errorLike = (err ?? {}) as ErrorLike;
+  const chunks = [
+    ...flattenUnknown(errorLike.message),
+    ...flattenUnknown(errorLike.response?.data),
+    ...flattenUnknown(errorLike.data),
+    ...flattenUnknown(errorLike.logs),
+    ...flattenUnknown(errorLike.cause),
+  ].filter(Boolean);
+
+  if (chunks.length === 0) {
+    return String(err ?? "Unknown error");
+  }
+
+  return chunks.join(" | ");
+}
+
 export function parseTransactionError(err: unknown): ParsedTxError {
-  const raw = err instanceof Error ? err.message : String(err ?? "Unknown error");
+  const raw = buildRawErrorText(err);
   const lower = raw.toLowerCase();
 
   // 1. Check anchor program custom error codes first (most specific)
