@@ -42,6 +42,7 @@ export type CreateStreamInput = {
   amount: string;
   mint: string;
   type: string;
+  startDate?: string;
   duration: string;
   cliffDuration?: string;
   milestoneCount?: string;
@@ -227,15 +228,19 @@ async function prepareCreateStreamInstruction({
 
   const nonce = new anchor.BN(String(input.nonce ?? Date.now()));
   const nowTs = Math.floor(Date.now() / 1000);
-  const startTs = toBn(nowTs + 10);
+  const parsedStartTs = input.startDate ? Math.floor(new Date(input.startDate).getTime() / 1000) : nowTs + 10;
+  if (!Number.isFinite(parsedStartTs)) {
+    throw new Error("Start date is invalid.");
+  }
+  const startTs = toBn(Math.max(parsedStartTs, nowTs + 1));
   const durationSecs = Number(input.duration || 0);
 
   if (!Number.isFinite(durationSecs) || durationSecs <= 0) {
     throw new Error("Duration must be a positive number of seconds.");
   }
 
-  const endTs = toBn(nowTs + 10 + durationSecs);
-  const cliffTs = vestingType === 1 ? toBn(nowTs + 10 + Number(input.cliffDuration || 0)) : startTs;
+  const endTs = toBn(startTs.toNumber() + durationSecs);
+  const cliffTs = vestingType === 1 ? toBn(startTs.toNumber() + Number(input.cliffDuration || 0)) : startTs;
 
   if (vestingType === 1 && Number(input.cliffDuration || 0) <= 0) {
     throw new Error("Cliff duration must be a positive number of seconds.");
