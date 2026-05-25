@@ -2,7 +2,11 @@
 
 import * as anchor from "@coral-xyz/anchor";
 import idl from "../../../../backend/src/idl/solana_program.json";
-import { ASSOCIATED_TOKEN_PROGRAM_ADDRESS, TOKEN_PROGRAM_ADDRESS } from "@solana-program/token";
+import {
+  ASSOCIATED_TOKEN_PROGRAM_ADDRESS,
+  TOKEN_PROGRAM_ADDRESS,
+  getCreateAssociatedTokenIdempotentInstruction,
+} from "@solana-program/token";
 import { Buffer } from "buffer";
 import { createWalletTransactionSigner, transactionToBase64 } from "@solana/client";
 import {
@@ -114,6 +118,22 @@ export async function cancelStreamOnChain({
   )[0];
 
   const { blockhash, lastValidBlockHeight } = await connection.getLatestBlockhash(commitment);
+  const createCreatorAtaInstruction = await getCreateAssociatedTokenIdempotentInstruction({
+    payer: walletSigner as any,
+    ata: creatorTokenAccount.toBase58() as any,
+    owner: creator.toBase58() as any,
+    mint: mint.toBase58() as any,
+    systemProgram: SystemProgram.programId.toBase58() as any,
+    tokenProgram: TOKEN_PROGRAM_ID.toBase58() as any,
+  } as any);
+  const createRecipientAtaInstruction = await getCreateAssociatedTokenIdempotentInstruction({
+    payer: walletSigner as any,
+    ata: recipientTokenAccount.toBase58() as any,
+    owner: streamState.recipient.toBase58() as any,
+    mint: mint.toBase58() as any,
+    systemProgram: SystemProgram.programId.toBase58() as any,
+    tokenProgram: TOKEN_PROGRAM_ID.toBase58() as any,
+  } as any);
 
   const anchorInstruction = await program.methods
     .cancel()
@@ -144,15 +164,16 @@ export async function cancelStreamOnChain({
     data: anchorInstruction.data,
   } as any;
 
-  const transactionMessage = setTransactionMessageLifetimeUsingBlockhash(
+  let transactionMessage: any = setTransactionMessageFeePayerSigner(
+    kitSigner,
+    createTransactionMessage({ version: 0 })
+  );
+  transactionMessage = appendTransactionMessageInstruction(createCreatorAtaInstruction as any, transactionMessage);
+  transactionMessage = appendTransactionMessageInstruction(createRecipientAtaInstruction as any, transactionMessage);
+  transactionMessage = appendTransactionMessageInstruction(kitInstruction, transactionMessage);
+  transactionMessage = setTransactionMessageLifetimeUsingBlockhash(
     { blockhash: blockhash as any, lastValidBlockHeight: BigInt(lastValidBlockHeight) },
-    appendTransactionMessageInstruction(
-      kitInstruction,
-      setTransactionMessageFeePayerSigner(
-        kitSigner,
-        createTransactionMessage({ version: 0 })
-      )
-    )
+    transactionMessage
   );
 
   let simulationLogs: string[] = [];
