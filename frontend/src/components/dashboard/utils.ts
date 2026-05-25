@@ -73,3 +73,22 @@ export function getMilestoneAllocations({
   const base = Math.floor(total / count);
   return Array(count).fill(base);
 }
+export function formatRemainingTime(targetTs: number, nowTs: number) {
+  const diff = Math.max(targetTs - nowTs, 0);
+
+  if (diff <= 0) return "0s";
+
+  const days = Math.floor(diff / 86400);
+  const hours = Math.floor((diff % 86400) / 3600);
+  const mins = Math.floor((diff % 3600) / 60);
+
+  if (days > 0) {
+    return `${days}d ${hours}h`;
+  }
+
+  if (hours > 0) {
+    return `${hours}h ${mins}m`;
+  }
+
+  return `${mins}m`;
+}
