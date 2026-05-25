@@ -1,4 +1,6 @@
-export type ClusterKey = "devnet" | "mainnet" | "testnet" | "local";
+import { getNetworkByEndpoint, type ClusterKey } from "@/lib/solana/network-config";
+
+export type { ClusterKey };
 
 export type MintPreset = {
   label: string;
@@ -75,43 +77,20 @@ const MAINNET_MINT_PRESETS: MintPreset[] = [
   },
 ];
 
-function normalizeEndpoint(endpoint: string) {
-  return endpoint.toLowerCase();
-}
-
-export function getClusterKey(endpoint: string): ClusterKey {
-  const normalized = normalizeEndpoint(endpoint);
-
-  if (normalized.includes("mainnet")) return "mainnet";
-  if (normalized.includes("testnet")) return "testnet";
-  if (normalized.includes("devnet")) return "devnet";
-
-  return "local";
+export function getClusterKey(endpoint: string): ClusterKey | null {
+  return getNetworkByEndpoint(endpoint)?.cluster ?? null;
 }
 
 export function getClusterLabel(endpoint: string) {
-  switch (getClusterKey(endpoint)) {
-    case "mainnet":
-      return "mainnet";
-    case "testnet":
-      return "testnet";
-    case "devnet":
-      return "devnet";
-    default:
-      return "current network";
-  }
+  const cluster = getClusterKey(endpoint);
+  if (!cluster) return "current network";
+  return cluster;
 }
 
 export function getMintPresets(endpoint: string): MintPreset[] {
-  switch (getClusterKey(endpoint)) {
-    case "mainnet":
-      return MAINNET_MINT_PRESETS;
-    case "devnet":
-    case "testnet":
-      return DEVNET_MINT_PRESETS;
-    default:
-      return DEVNET_MINT_PRESETS;
-  }
+  const cluster = getClusterKey(endpoint);
+  if (cluster === "mainnet") return MAINNET_MINT_PRESETS;
+  return DEVNET_MINT_PRESETS;
 }
 
 export function getDefaultMint(endpoint: string) {
