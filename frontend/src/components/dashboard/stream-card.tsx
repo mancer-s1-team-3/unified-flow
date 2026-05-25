@@ -2,8 +2,13 @@
 
 import { memo } from "react";
 import { ChevronRight } from "lucide-react";
-import { formatDate, formatTokenAmount, getAmountUnitLabel, shorten } from "./utils";
-
+import {
+  formatDate,
+  formatTokenAmount,
+  getAmountUnitLabel,
+  shorten,
+  formatRemainingTime,
+} from "./utils";
 export const StreamCard = memo(function StreamCard({
   stream,
   onOpen,
@@ -53,6 +58,19 @@ export const StreamCard = memo(function StreamCard({
 
   const claimable = isCancelled ? 0 : Math.max(vested - withdrawn, 0);
   const isMilestoneCompleted = stream.vestingType === 2 && (Number(stream.completedAt || 0) > 0 || unlocked >= total);
+  const remainingTarget =
+  isCancelled
+    ? null
+    : stream.vestingType === 2
+    ? null
+    : now < start
+    ? start
+    : end;
+
+const remainingText =
+  remainingTarget !== null
+    ? formatRemainingTime(remainingTarget, now)
+    : null;
   const isCompleted = !isCancelled && (stream.vestingType === 2 ? isMilestoneCompleted : withdrawn >= total);
   const isNotStarted = now < start;
   const isEnded = !isCancelled && (stream.vestingType === 2 ? isMilestoneCompleted : now >= end);
@@ -131,7 +149,16 @@ export const StreamCard = memo(function StreamCard({
 
       <div className="mt-4 flex flex-col gap-1 border-t border-zinc-900/50 pt-2 text-[10px] text-zinc-500 font-mono">
         <div className="flex justify-between items-center gap-2">
-          <span>Start: {formatDate(stream.startTs)}</span>
+         <div className="flex flex-col gap-1">
+      <span>Start: {formatDate(stream.startTs)}</span>
+
+      {remainingText && (
+        <span className="text-indigo-400 font-bold">
+          ⏳ {isNotStarted ? "Starts in" : "Time remaining"}:{" "}
+          {remainingText}
+        </span>
+      )}
+    </div>
           <button
             type="button"
             onClick={(e) => {
