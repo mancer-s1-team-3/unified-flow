@@ -773,7 +773,7 @@ export default function Home({ initialStreams = [] }: Props) {
         fetchStreams();
         setActiveTab("streams");
       } catch (err: any) {
-        showNotification("error", err.response?.data?.error || err?.message || "Bulk deployment failed.");
+        showParsedTxError(err, "Bulk deployment failed.");
       } finally {
         clearTxStatus();
       }
@@ -848,7 +848,7 @@ export default function Home({ initialStreams = [] }: Props) {
         fetchStreams();
         setActiveTab("streams");
       } catch (err: any) {
-        showNotification("error", err?.message || "Failed to update linear stream.");
+        showParsedTxError(err, "Failed to update linear stream.");
       }
       return;
     }
@@ -897,7 +897,7 @@ export default function Home({ initialStreams = [] }: Props) {
         fetchStreams();
         setActiveTab("streams");
       } catch (err: any) {
-        showNotification("error", err?.message || "Failed to update milestone allocation.");
+        showParsedTxError(err, "Failed to update milestone allocation.");
       }
       return;
     }
@@ -921,7 +921,7 @@ export default function Home({ initialStreams = [] }: Props) {
         fetchStreams();
         setActiveTab("streams");
       } catch (err: any) {
-        showNotification("error", err?.message || "Failed to update cliff timestamp.");
+        showParsedTxError(err, "Failed to update cliff timestamp.");
       }
       return;
     }
