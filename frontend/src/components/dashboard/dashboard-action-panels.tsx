@@ -75,19 +75,24 @@ function CancelConfirmDialog({
           </div>
 
           {/* What happens list */}
-          <ul className="space-y-2 mb-6">
-            {[
-              { color: "rose",   text: "Vesting schedule will be permanently terminated" },
-              { color: "orange", text: "Recipient loses access to all remaining unvested tokens" },
-              { color: "amber",  text: "Unlocked but unclaimed tokens remain claimable by recipient" },
-              { color: "emerald",text: "Locked tokens are refunded to creator wallet immediately" },
-            ].map(({ color, text }) => (
-              <li key={text} className="flex items-start gap-2.5 text-[11px] text-zinc-400">
-                <span className={`mt-0.5 w-1.5 h-1.5 rounded-full bg-${color}-400 shrink-0`} />
-                {text}
-              </li>
-            ))}
-          </ul>
+         <ul className="space-y-2 mb-6">
+  {[
+    { color: "bg-red-400", text: "Vesting schedule will be permanently terminated" },
+    { color: "bg-orange-400", text: "Recipient loses access to all remaining unvested tokens" },
+    { color: "bg-yellow-300", text: "Unlocked but unclaimed tokens remain claimable by recipient" },
+    { color: "bg-green-400", text: "Locked tokens are refunded to creator wallet immediately" },
+  ].map(({ color, text }) => (
+    <li
+      key={text}
+      className="flex items-start gap-2.5 text-[11px] text-zinc-400"
+    >
+      <span
+        className={`mt-0.5 w-1.5 h-1.5 rounded-full shrink-0 ${color}`}
+      />
+      {text}
+    </li>
+  ))}
+</ul>
 
           {/* Typed confirmation */}
           <div className="mb-5">
