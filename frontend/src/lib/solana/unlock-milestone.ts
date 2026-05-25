@@ -14,8 +14,8 @@ import {
 } from "@solana/kit";
 import { type Commitment, Connection, PublicKey, SystemProgram, VersionedTransaction } from "@solana/web3.js";
 import type { WalletSession } from "@solana/client";
+import { getExplorerClusterParam, getProgramIdForEndpoint } from "@/lib/solana/network-config";
 
-const PROGRAM_ID = new PublicKey(process.env.NEXT_PUBLIC_PROGRAM_ID ?? "8M5yieUh7pxwUi1YBByDF82nqoorZwaKi8dBoMVpurFa");
 const UNLOCK_IDL = idl as unknown as anchor.Idl;
 
 interface StreamAccountView {
@@ -67,13 +67,6 @@ function getAnchorWallet(session: WalletSession) {
   };
 }
 
-function getExplorerCluster(endpoint: string) {
-  if (endpoint.includes("devnet")) return "devnet";
-  if (endpoint.includes("testnet")) return "testnet";
-  if (endpoint.includes("mainnet")) return "mainnet-beta";
-  return "custom";
-}
-
 export async function unlockMilestoneOnChain({
   wallet,
   endpoint,
@@ -88,6 +81,7 @@ export async function unlockMilestoneOnChain({
   onStatus?: (phase: TxProgressPhase) => void;
 }): Promise<UnlockMilestoneResult> {
   onStatus?.("wallet_approval");
+  const PROGRAM_ID = getProgramIdForEndpoint(endpoint);
   const creator = new PublicKey(wallet.account.address.toString());
   const streamAddress = parsePublicKey(input.streamAddress, "stream address");
   const { signer: walletSigner, mode: walletSignerMode } = createWalletTransactionSigner(wallet);
@@ -202,7 +196,7 @@ export async function unlockMilestoneOnChain({
 
   return {
     signature,
-    explorerUrl: `https://explorer.solana.com/tx/${signature}?cluster=${getExplorerCluster(endpoint)}`,
+    explorerUrl: `https://explorer.solana.com/tx/${signature}?cluster=${getExplorerClusterParam(endpoint)}`,
     simulationLogs,
     unlockedMilestoneIndex: nextIndex,
     milestoneAddress: milestoneAddress.toBase58(),

@@ -25,10 +25,7 @@ import {
 } from "@solana/kit";
 import type { WalletSession } from "@solana/client";
 import idl from "../../../../backend/src/idl/solana_program.json";
-
-const PROGRAM_ID = new PublicKey(
-  process.env.NEXT_PUBLIC_PROGRAM_ID ?? "8M5yieUh7pxwUi1YBByDF82nqoorZwaKi8dBoMVpurFa"
-);
+import { getExplorerClusterParam, getProgramIdForEndpoint } from "@/lib/solana/network-config";
 
 const TOKEN_PROGRAM_ID = new PublicKey(TOKEN_PROGRAM_ADDRESS);
 const ASSOCIATED_TOKEN_PROGRAM_ID = new PublicKey(ASSOCIATED_TOKEN_PROGRAM_ADDRESS);
@@ -198,6 +195,7 @@ async function prepareCreateStreamInstruction({
   program,
   input,
   walletSigner,
+  programId,
 }: {
   wallet: WalletSession;
   connection: Connection;
@@ -205,7 +203,9 @@ async function prepareCreateStreamInstruction({
   program: anchor.Program;
   input: CreateStreamInput;
   walletSigner: any;
+  programId: PublicKey;
 }): Promise<PreparedCreateStream> {
+  const PROGRAM_ID = programId;
   const creator = new PublicKey(wallet.account.address.toString());
   const recipient = parsePublicKey(input.recipient, "recipient address");
   const mint = parsePublicKey(input.mint, "mint address");
@@ -494,6 +494,7 @@ export async function createStreamOnChain({
   onStatus?: (phase: TxProgressPhase) => void;
 }): Promise<CreateStreamResult> {
   onStatus?.("wallet_approval");
+  const PROGRAM_ID = getProgramIdForEndpoint(endpoint);
   const creator = new PublicKey(wallet.account.address.toString());
   const recipient = parsePublicKey(input.recipient, "recipient address");
   const mint = parsePublicKey(input.mint, "mint address");
@@ -753,7 +754,7 @@ export async function createStreamOnChain({
     signature,
     streamAddress: streamAddress.toBase58(),
     vaultAddress: vaultAddress.toBase58(),
-    explorerUrl: `https://explorer.solana.com/tx/${signature}?cluster=${getExplorerCluster(endpoint)}`,
+    explorerUrl: `https://explorer.solana.com/tx/${signature}?cluster=${getExplorerClusterParam(endpoint)}`,
     simulationLogs,
   };
 }
@@ -778,6 +779,7 @@ export async function createStreamBatchOnChain({
     throw new Error("At least one CSV row is required.");
   }
 
+  const PROGRAM_ID = getProgramIdForEndpoint(endpoint);
   const connection = new Connection(endpoint, commitment);
   const provider = new anchor.AnchorProvider(connection, getAnchorWallet(wallet), { commitment });
   const program = new anchor.Program(CREATE_STREAM_IDL as unknown as anchor.Idl, provider);
@@ -794,6 +796,7 @@ export async function createStreamBatchOnChain({
         program,
         input,
         walletSigner,
+        programId: PROGRAM_ID,
       })
     );
   }
@@ -827,7 +830,7 @@ export async function createStreamBatchOnChain({
       signature,
       streamAddresses: group.map((part) => part.streamAddress.toBase58()),
       vaultAddresses: group.map((part) => part.vaultAddress.toBase58()),
-      explorerUrl: `https://explorer.solana.com/tx/${signature}?cluster=${getExplorerCluster(endpoint)}`,
+      explorerUrl: `https://explorer.solana.com/tx/${signature}?cluster=${getExplorerClusterParam(endpoint)}`,
       simulationLogs,
     });
   }
@@ -837,11 +840,4 @@ export async function createStreamBatchOnChain({
     streamAddresses: prepared.map((part) => part.streamAddress.toBase58()),
     vaultAddresses: prepared.map((part) => part.vaultAddress.toBase58()),
   };
-}
-
-function getExplorerCluster(endpoint: string) {
-  if (endpoint.includes("devnet")) return "devnet";
-  if (endpoint.includes("testnet")) return "testnet";
-  if (endpoint.includes("mainnet")) return "mainnet-beta";
-  return "custom";
 }

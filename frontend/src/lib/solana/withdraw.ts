@@ -20,8 +20,8 @@ import {
 } from "@solana/kit";
 import { type Commitment, Connection, PublicKey, SystemProgram, VersionedTransaction } from "@solana/web3.js";
 import type { WalletSession } from "@solana/client";
+import { getExplorerClusterParam, getProgramIdForEndpoint } from "@/lib/solana/network-config";
 
-const PROGRAM_ID = new PublicKey(process.env.NEXT_PUBLIC_PROGRAM_ID ?? "8M5yieUh7pxwUi1YBByDF82nqoorZwaKi8dBoMVpurFa");
 const TOKEN_PROGRAM_ID = new PublicKey(TOKEN_PROGRAM_ADDRESS);
 const ASSOCIATED_TOKEN_PROGRAM_ID = new PublicKey(ASSOCIATED_TOKEN_PROGRAM_ADDRESS);
 const CHAINLINK_FEED = new PublicKey("99B2bTijsU6f1GCT73HmdR7HCFFjGMBcPZY6jZ96ynrR");
@@ -204,6 +204,7 @@ export async function withdrawFromStreamOnChain({
   onStatus?: (phase: TxProgressPhase) => void;
 }): Promise<WithdrawStreamResult> {
   onStatus?.("wallet_approval");
+  const PROGRAM_ID = getProgramIdForEndpoint(endpoint);
   const recipient = new PublicKey(wallet.account.address.toString());
   const streamAddress = parsePublicKey(input.streamAddress, "stream address");
   const { signer: walletSigner, mode: walletSignerMode } = createWalletTransactionSigner(wallet);
@@ -400,15 +401,8 @@ export async function withdrawFromStreamOnChain({
 
   return {
     signature,
-    explorerUrl: `https://explorer.solana.com/tx/${signature}?cluster=${getExplorerCluster(endpoint)}`,
+    explorerUrl: `https://explorer.solana.com/tx/${signature}?cluster=${getExplorerClusterParam(endpoint)}`,
     simulationLogs,
     withdrawnAmount: formatTokenAmountFromBaseUnits(requestedAmount, mintDecimals),
   };
-}
-
-function getExplorerCluster(endpoint: string) {
-  if (endpoint.includes("devnet")) return "devnet";
-  if (endpoint.includes("testnet")) return "testnet";
-  if (endpoint.includes("mainnet")) return "mainnet-beta";
-  return "custom";
 }

@@ -4,8 +4,11 @@ import { useState, useEffect } from "react";
 import { api } from "@/lib/api";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useWalletConnection } from "@solana/react-hooks";
+import { useClusterState, useWalletConnection } from "@solana/react-hooks";
+import { getExplorerClusterParam } from "@/lib/solana/network-config";
+import { getClusterLabel } from "@/components/dashboard/token-mints";
 import { WalletPickerButton } from "@/components/wallet/wallet-picker-button";
+import { NetworkSwitcher } from "@/components/wallet/network-switcher";
 import { BrandMark } from "@/components/brand/brand-mark";
 import { formatTokenAmount, getAmountUnitLabel, getMilestoneAllocations } from "@/components/dashboard/utils";
 import { 
@@ -16,6 +19,9 @@ import {
 
 export default function StreamsPage() {
   const { wallet } = useWalletConnection();
+  const { endpoint } = useClusterState();
+  const explorerClusterParam = getExplorerClusterParam(endpoint);
+  const clusterDisplayLabel = getClusterLabel(endpoint);
   const router = useRouter();
   const [streams, setStreams] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
@@ -193,6 +199,7 @@ export default function StreamsPage() {
             <BookOpen className="w-3.5 h-3.5" />
             Developer Docs
           </Link>
+          <NetworkSwitcher className="shrink-0" />
           <WalletPickerButton className="shrink-0" />
         </div>
       </header>
@@ -722,8 +729,8 @@ export default function StreamsPage() {
                               <span className="text-[9px] text-zinc-500 font-mono block">Slot: {tx.slot}</span>
                             </div>
                             
-                            <a 
-                              href={`https://solscan.io/tx/${tx.signature}?cluster=devnet`}
+                            <a
+                              href={`https://solscan.io/tx/${tx.signature}?cluster=${explorerClusterParam}`}
                               target="_blank"
                               rel="noopener noreferrer"
                               className="text-indigo-400 hover:text-indigo-300 flex items-center gap-0.5 font-bold transition-all"
@@ -816,7 +823,7 @@ export default function StreamsPage() {
       {/* Footer */}
       <footer className="max-w-7xl mx-auto w-full px-6 py-6 border-t border-zinc-900 flex flex-col md:flex-row justify-between items-center gap-4 text-xs text-zinc-500 relative z-10">
         <div>
-          &copy; {new Date().getFullYear()} Unified Flow Protocol. Built for Solana Devnet.
+          &copy; {new Date().getFullYear()} Unified Flow Protocol. Built for Solana {clusterDisplayLabel}.
         </div>
         <div className="flex gap-4">
           <Link href="/guide" className="hover:text-cyan-400 transition-colors">

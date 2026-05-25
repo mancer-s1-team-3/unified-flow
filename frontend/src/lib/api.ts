@@ -1,7 +1,10 @@
 import axios from "axios";
+import { getActiveNetwork } from "@/lib/solana/network-config";
 
 export const api = axios.create({
-    baseURL:
-        process.env
-            .NEXT_PUBLIC_API,
+    baseURL: getActiveNetwork().apiBaseUrl,
 });
+
+export function setApiBaseUrl(baseUrl: string) {
+    api.defaults.baseURL = baseUrl;
+}

@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { BookOpen, GraduationCap } from "lucide-react";
 import { DashboardHeaderWallet } from "@/components/dashboard/dashboard-header-wallet";
+import { NetworkSwitcher } from "@/components/wallet/network-switcher";
 import { BrandMark } from "@/components/brand/brand-mark";
 
 export function DashboardHeader() {
@@ -31,6 +32,7 @@ export function DashboardHeader() {
           <BookOpen className="w-3.5 h-3.5" />
           Developer Docs
         </Link>
+        <NetworkSwitcher />
         <DashboardHeaderWallet />
       </div>
     </header>
