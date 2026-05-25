@@ -357,7 +357,9 @@ export function DashboardActionPanels(props: Props) {
   const [cliffInputMode, setCliffInputMode] = useState<"duration" | "date">("duration");
   const [durationInputMode, setDurationInputMode] = useState<"duration" | "date">("duration");
 
-
+  // ─── FIX: Auto-populate startDate with a future default when type is non-milestone ───
+  // Also runs on a 30s interval to refresh the default if the page is left open
+  // and the previously-set default has since fallen into the past.
   useEffect(() => {
     if (createForm.type === "2") return;
 
@@ -884,8 +886,27 @@ export function DashboardActionPanels(props: Props) {
               {createForm.type === "2" && (
                 <div className="md:col-span-2 grid min-w-0 gap-4 bg-zinc-900/30 border border-zinc-900 p-4 rounded-xl max-w-full overflow-hidden">
                   <div className="min-w-0 max-w-full">
-                    <label className="block text-[10px] sm:text-xs font-semibold text-zinc-400 uppercase tracking-wider mb-1.5">Count</label>
-                    <input type="number" value={createForm.milestoneCount} onChange={(e) => onMilestoneCountChange(e.target.value)} className="block w-full max-w-full min-w-0 bg-zinc-950 border border-zinc-800 rounded-xl px-3.5 py-2.5 sm:px-4 sm:py-3 text-sm focus:outline-none focus:border-indigo-500 font-mono" />
+                    <div className="flex items-center gap-2 mb-1.5">
+                      <label className="block text-[10px] sm:text-xs font-semibold text-zinc-400 uppercase tracking-wider">Count</label>
+                      <span className="text-[10px] text-zinc-600 font-normal">max 255</span>
+                    </div>
+                    <input
+                      type="number"
+                      min="1"
+                      max="255"
+                      value={createForm.milestoneCount}
+                      onChange={(e) => {
+                        const raw = parseInt(e.target.value, 10);
+                        const clamped = Number.isFinite(raw) ? String(Math.min(255, Math.max(1, raw))) : "";
+                        onMilestoneCountChange(clamped);
+                      }}
+                      className="block w-full max-w-full min-w-0 bg-zinc-950 border border-zinc-800 rounded-xl px-3.5 py-2.5 sm:px-4 sm:py-3 text-sm focus:outline-none focus:border-indigo-500 font-mono"
+                    />
+                    {Number(createForm.milestoneCount) >= 255 && (
+                      <div className="mt-1.5 text-[10px] font-semibold text-amber-400">
+                        Maximum milestone count is 255.
+                      </div>
+                    )}
                   </div>
                   <div className="border-t border-zinc-900/60 pt-3">
                     <label className="block text-[10px] font-bold text-zinc-500 uppercase tracking-widest mb-2">Milestones</label>
