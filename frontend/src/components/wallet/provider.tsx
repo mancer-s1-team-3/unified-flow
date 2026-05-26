@@ -4,6 +4,7 @@ import { useMemo } from "react";
 import { autoDiscover, filterByNames } from "@solana/client";
 import { SolanaProvider } from "@solana/react-hooks";
 import { NetworkProvider, useNetwork } from "@/components/wallet/network-context";
+import { NotificationProvider } from "@/lib/notification-context";
 
 function SolanaProviderWithNetwork({ children }: { children: React.ReactNode }) {
   const { cluster, network } = useNetwork();
@@ -30,8 +31,10 @@ function SolanaProviderWithNetwork({ children }: { children: React.ReactNode }) 
 
 export function Providers({ children }: { children: React.ReactNode }) {
   return (
-    <NetworkProvider>
-      <SolanaProviderWithNetwork>{children}</SolanaProviderWithNetwork>
-    </NetworkProvider>
+    <NotificationProvider>
+      <NetworkProvider>
+        <SolanaProviderWithNetwork>{children}</SolanaProviderWithNetwork>
+      </NetworkProvider>
+    </NotificationProvider>
   );
 }
