@@ -6,7 +6,7 @@ import { useRouter } from "next/navigation";
 import { api } from "@/lib/api";
 import { useClusterState, useWalletConnection } from "@solana/react-hooks";
 import { DashboardSidebar } from "@/components/dashboard/dashboard-sidebar";
-import { NotificationBanner } from "@/components/dashboard/notification-banner";
+import { NotificationToastStack } from "@/components/dashboard/notification-banner";
 import { StreamDetailsDrawer } from "@/components/dashboard/stream-details-drawer";
 import { DashboardStreamsPanel } from "@/components/dashboard/dashboard-streams-panel";
 import { ChatbotWidget } from "@/components/dashboard/chatbot-widget";
@@ -20,6 +20,7 @@ import { withdrawFromStreamOnChain } from "@/lib/solana/withdraw";
 import { cancelStreamOnChain } from "@/lib/solana/cancel";
 import { unlockMilestoneOnChain } from "@/lib/solana/unlock-milestone";
 import { parseTransactionError } from "@/lib/parse-tx-error";
+import { useNotifications } from "@/lib/notification-context";
 import {
   buildCreateStreamCsvTemplate,
   getClusterLabel,
@@ -212,21 +213,30 @@ export default function Home({ initialStreams = [] }: Props) {
   const [editLinearForm, setEditLinearForm] = useState({ streamId: "", newEndDuration: "", topupAmount: "" });
   const [editCliffForm, setEditCliffForm] = useState({ streamId: "", newCliffDuration: "" });
 
-  // Notifications
-  const [notification, setNotification] = useState<{
-    type: "success" | "error" | "info" | null;
-    message: string;
-  }>({ type: null, message: "" });
+  // Notifications — powered by global NotificationContext
+  const { addNotification } = useNotifications();
   const connectedWalletAddress = connected && wallet?.account.address ? String(wallet.account.address) : null;
 
-  const showNotification = useCallback((type: "success" | "error" | "info", message: string) => {
-    setNotification({ type, message });
-    setTimeout(() => setNotification({ type: null, message: "" }), 5000);
-  }, []);
-  const showParsedTxError = useCallback((err: unknown, fallback: string) => {
-    const parsed = parseTransactionError(err);
-    showNotification("error", `${parsed.title}: ${parsed.detail || fallback}`);
-  }, [showNotification]);
+  const showNotification = useCallback(
+    (type: "success" | "error" | "info", message: string, event?: string) => {
+      addNotification({ type, message, event: (event as any) ?? "generic" });
+    },
+    [addNotification]
+  );
+
+  const showParsedTxError = useCallback(
+    (err: unknown, fallback: string) => {
+      const parsed = parseTransactionError(err);
+      addNotification({
+        type: "error",
+        title: parsed.title,
+        message: parsed.detail || fallback,
+        raw: parsed.raw,
+        event: "generic",
+      });
+    },
+    [addNotification]
+  );
 
   const copyToClipboard = useCallback((text: string, id: string) => {
     navigator.clipboard.writeText(text);
@@ -596,7 +606,7 @@ export default function Home({ initialStreams = [] }: Props) {
           onStatus: setTxStatus,
         });
 
-        showNotification("success", `Stream created on-chain. Signature: ${result.signature.slice(0, 8)}...`);
+        addNotification({ type: "success", event: "stream_created", title: "Stream Created", message: `Stream deployed on-chain. Tx: ${result.signature.slice(0, 8)}…` });
         fetchStreams();
         setActiveTab("streams");
       } catch (err: any) {
@@ -624,7 +634,7 @@ export default function Home({ initialStreams = [] }: Props) {
           onStatus: setTxStatus,
         });
 
-        showNotification("success", `Tokens withdrawn on-chain. Signature: ${result.signature.slice(0, 8)}...`);
+        addNotification({ type: "success", event: "withdraw", title: "Tokens Withdrawn", message: `Tokens withdrawn successfully. Tx: ${result.signature.slice(0, 8)}…` });
         fetchStreams();
         setActiveTab("streams");
       } catch (err: any) {
@@ -664,7 +674,7 @@ export default function Home({ initialStreams = [] }: Props) {
             : prev
         );
 
-        showNotification("success", `Stream cancelled on-chain. Signature: ${result.signature.slice(0, 8)}...`);
+        addNotification({ type: "success", event: "stream_cancelled", title: "Stream Cancelled", message: `Stream cancelled on-chain. Tx: ${result.signature.slice(0, 8)}…` });
         fetchStreams();
         setActiveTab("streams");
       } catch (err: any) {
@@ -691,10 +701,7 @@ export default function Home({ initialStreams = [] }: Props) {
           onStatus: setTxStatus,
         });
 
-        showNotification(
-          "success",
-          `Milestone #${result.unlockedMilestoneIndex} unlocked on-chain. Signature: ${result.signature.slice(0, 8)}...`
-        );
+        addNotification({ type: "success", event: "milestone_unlocked", title: "Milestone Unlocked", message: `Milestone #${result.unlockedMilestoneIndex} unlocked. Tx: ${result.signature.slice(0, 8)}…` });
         fetchStreams();
         setActiveTab("streams");
       } catch (err: any) {
@@ -765,7 +772,7 @@ export default function Home({ initialStreams = [] }: Props) {
           });
         }
 
-        showNotification("success", `Successfully versioned (v${csvVersions.length + 1}) and deployed ${batchResult.streamAddresses.length} CSV bulk streams on-chain in ${batchResult.batches.length} versioned transaction(s)!`);
+        addNotification({ type: "success", event: "csv_deployed", title: "CSV Deployed", message: `v${csvVersions.length + 1} — ${batchResult.streamAddresses.length} streams deployed in ${batchResult.batches.length} tx(s).` });
         
         // Reset state
         setCsvDiffResult(null);
@@ -815,7 +822,7 @@ export default function Home({ initialStreams = [] }: Props) {
           filename: `bulk_edit_v${csvVersions.length + 1}.csv`,
           uploader: connectedWalletAddress || "Anonymous"
         });
-        showNotification("success", `Successfully versioned (v${csvVersions.length + 1}) and applied ${batchEditResult.streamAddresses.length} on-chain CSV bulk edits in ${batchEditResult.signatures.length} transaction(s)!`);
+        addNotification({ type: "success", event: "csv_edited", title: "CSV Edited", message: `v${csvVersions.length + 1} — ${batchEditResult.streamAddresses.length} streams updated in ${batchEditResult.signatures.length} tx(s).` });
         
         // Reset state
         setCsvDiffResult(null);
@@ -844,7 +851,7 @@ export default function Home({ initialStreams = [] }: Props) {
             topupAmount: data.topupAmount,
           },
         });
-        showNotification("success", `Linear stream timeline extended and topped up successfully!`);
+        addNotification({ type: "success", event: "stream_edited", title: "Linear Stream Updated", message: "Stream timeline extended and topped up successfully." });
         fetchStreams();
         setActiveTab("streams");
       } catch (err: any) {
@@ -893,7 +900,7 @@ export default function Home({ initialStreams = [] }: Props) {
           });
         }
 
-        showNotification("success", `Milestone allocations updated successfully!`);
+        addNotification({ type: "success", event: "stream_edited", title: "Milestone Updated", message: "Milestone allocations updated successfully." });
         fetchStreams();
         setActiveTab("streams");
       } catch (err: any) {
@@ -917,7 +924,7 @@ export default function Home({ initialStreams = [] }: Props) {
             newCliffDuration: data.newCliffDuration,
           },
         });
-        showNotification("success", `Cliff timestamp updated successfully!`);
+        addNotification({ type: "success", event: "stream_edited", title: "Cliff Updated", message: "Cliff timestamp updated successfully." });
         fetchStreams();
         setActiveTab("streams");
       } catch (err: any) {
@@ -972,7 +979,7 @@ export default function Home({ initialStreams = [] }: Props) {
       <div className="hidden md:block absolute top-0 left-1/4 w-[500px] h-[500px] bg-indigo-950/20 rounded-full blur-[140px] pointer-events-none" />
       <div className="hidden md:block absolute bottom-0 right-1/4 w-[600px] h-[600px] bg-purple-950/15 rounded-full blur-[160px] pointer-events-none" />
 
-      <NotificationBanner notification={notification} />
+      <NotificationToastStack />
 
       {/* Main Workspace Dashboard Grid */}
       <div className="max-w-7xl mx-auto w-full px-4 py-4 sm:px-6 sm:py-8 flex-grow flex flex-col md:flex-row gap-4 md:gap-8 relative z-10">
