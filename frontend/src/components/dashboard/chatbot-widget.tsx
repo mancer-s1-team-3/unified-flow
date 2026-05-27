@@ -207,7 +207,7 @@ export function ChatbotWidget() {
   };
 
   const widget = (
-    <div className="fixed bottom-5 right-5 z-[90] flex flex-col items-end gap-3">
+    <div className="fixed bottom-[84px] md:bottom-5 right-5 z-[90] flex flex-col items-end gap-3">
       {/* Chat Window */}
       {open && (
         <div className="w-[340px] sm:w-[360px] bg-zinc-950 border border-zinc-800 rounded-3xl shadow-2xl shadow-black/70 flex flex-col overflow-hidden animate-in slide-in-from-bottom-4 fade-in duration-300"
