@@ -12,6 +12,8 @@ type Props = {
   fetchStreamDetails: (id: string) => void;
   connectedWalletAddress: string | null;
   onFilteredCountChange?: (count: number) => void;
+  initialSearch?: string;
+  waitingForIndex?: boolean;
 };
 
 export function DashboardStreamsPanel({
@@ -22,8 +24,10 @@ export function DashboardStreamsPanel({
   fetchStreamDetails,
   connectedWalletAddress,
   onFilteredCountChange,
+  initialSearch = "",
+  waitingForIndex = false,
 }: Props) {
-  const [searchQuery, setSearchQuery] = useState("");
+  const [searchQuery, setSearchQuery] = useState(initialSearch);
   const [filterSquadsAddress, setFilterSquadsAddress] = useState(() => {
     if (typeof window === "undefined") return "";
     return localStorage.getItem("squads_multisig_address") ?? "";
@@ -104,6 +108,9 @@ export function DashboardStreamsPanel({
         stream.creator.toLowerCase().includes(query) ||
         stream.recipient.toLowerCase().includes(query) ||
         stream.mint.toLowerCase().includes(query);
+
+      // If search query is active, bypass wallet filter — allows share links to work
+      if (query !== "") return matchesSearch;
 
       if (showOnlySquads && squadsAddress !== "") {
         const isSquadsAssociated =
@@ -208,13 +215,25 @@ export function DashboardStreamsPanel({
         </div>
       ) : filteredStreams.length === 0 ? (
         <div className="flex flex-col items-center justify-center py-20 text-zinc-400 border-2 border-dashed border-zinc-900 rounded-2xl">
-          <Layers className="w-10 h-10 text-zinc-700 mb-3" />
-          <span className="text-xs font-bold text-zinc-300">No matching streams indexed</span>
-          <span className="text-[10px] text-zinc-500 max-w-xs text-center mt-1">
-            {connectedWalletAddress
-              ? "Only streams created or received by your connected wallet are shown here unless Squads View is enabled."
-              : "Connect a wallet to show your created streams, or enable Squads View and paste a Squads multisig address."}
-          </span>
+          {waitingForIndex ? (
+            <>
+              <RefreshCw className="w-10 h-10 text-indigo-400 mb-3 animate-spin" />
+              <span className="text-xs font-bold text-zinc-300">Waiting for stream to be indexed...</span>
+              <span className="text-[10px] text-zinc-500 max-w-xs text-center mt-1">
+                The stream was created on-chain and will appear here once the indexer picks it up. Retrying automatically.
+              </span>
+            </>
+          ) : (
+            <>
+              <Layers className="w-10 h-10 text-zinc-700 mb-3" />
+              <span className="text-xs font-bold text-zinc-300">No matching streams indexed</span>
+              <span className="text-[10px] text-zinc-500 max-w-xs text-center mt-1">
+                {connectedWalletAddress
+                  ? "Only streams created or received by your connected wallet are shown here unless Squads View is enabled."
+                  : "Connect a wallet to show your created streams, or enable Squads View and paste a Squads multisig address."}
+              </span>
+            </>
+          )}
         </div>
       ) : (
         <div className="flex flex-col gap-6">

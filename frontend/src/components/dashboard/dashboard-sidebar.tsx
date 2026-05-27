@@ -71,14 +71,14 @@ const MORE_TABS: Array<{ value: TabId; label: string; icon: ReactNode; highlight
   { value: "edit_cliff",       label: "Edit Cliff Conditions", icon: <Shield className="w-4 h-4" /> },
 ];
 
-function MobileBottomNav({
+export function MobileBottomNav({
   activeTab,
-  setActiveTab,
+  onSelect,
   streamsCount,
 }: {
-  activeTab: TabId;
-  setActiveTab: (tab: TabId) => void;
-  streamsCount: number;
+  activeTab?: TabId;
+  onSelect: (tab: TabId) => void;
+  streamsCount?: number;
 }) {
   const [sheetOpen, setSheetOpen] = useState(false);
   const isMoreActive = MORE_TABS.some((t) => t.value === activeTab);
@@ -92,7 +92,7 @@ function MobileBottomNav({
   }, [sheetOpen]);
 
   const handleSelect = (tab: TabId) => {
-    setActiveTab(tab);
+    onSelect(tab);
     setSheetOpen(false);
   };
 
@@ -148,14 +148,14 @@ function MobileBottomNav({
             return (
               <button
                 key={tab.value}
-                onClick={() => { setSheetOpen(false); setActiveTab(tab.value); }}
+                onClick={() => { setSheetOpen(false); handleSelect(tab.value); }}
                 className={`flex-1 flex flex-col items-center justify-center gap-1 transition-all ${
                   isActive ? "text-indigo-400" : "text-zinc-500 hover:text-zinc-300"
                 }`}
               >
                 <div className="relative">
                   {tab.icon}
-                  {showCount && streamsCount > 0 && (
+                  {showCount && streamsCount != null && streamsCount > 0 && (
                     <span className="absolute -top-1.5 -right-2 min-w-[16px] h-4 px-1 rounded-full bg-indigo-500 text-white text-[9px] font-extrabold flex items-center justify-center leading-none">
                       {streamsCount > 99 ? "99+" : streamsCount}
                     </span>
@@ -199,7 +199,7 @@ export const DashboardSidebar = memo(function DashboardSidebar({
     <>
       {/* Mobile bottom nav */}
       <div className="md:hidden">
-        <MobileBottomNav activeTab={activeTab} setActiveTab={setActiveTab} streamsCount={streamsCount} />
+        <MobileBottomNav activeTab={activeTab} onSelect={setActiveTab} streamsCount={streamsCount} />
       </div>
 
       {/* Desktop sidebar */}
