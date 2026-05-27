@@ -47,8 +47,10 @@ export default function RootLayout({
         <meta name="theme-color" content="#0b1120" />
         <meta name="mobile-web-app-capable" content="yes" />
         <link rel="manifest" href="/manifest.webmanifest" />
-        <link rel="icon" href="/favicon.ico" sizes="any" />
-        <link rel="apple-touch-icon" href="/logo-192.png" />
+        <link rel="icon" type="image/png" sizes="192x192" href="/logo-192.png" />
+        <link rel="icon" type="image/png" sizes="512x512" href="/logo-512.png" />
+        <link rel="shortcut icon" href="/logo-192.png" />
+        <link rel="apple-touch-icon" sizes="192x192" href="/logo-192.png" />
       </head>
       <body>
         <PwaRegister />
