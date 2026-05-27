@@ -3,6 +3,7 @@
 import dynamic from "next/dynamic";
 import { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import { useRouter } from "next/navigation";
+import { CheckCircle2, Copy, Check, X, ExternalLink } from "lucide-react";
 import { api } from "@/lib/api";
 import { useClusterState, useWalletConnection } from "@solana/react-hooks";
 import { DashboardSidebar } from "@/components/dashboard/dashboard-sidebar";
@@ -21,6 +22,7 @@ import { cancelStreamOnChain } from "@/lib/solana/cancel";
 import { unlockMilestoneOnChain } from "@/lib/solana/unlock-milestone";
 import { parseTransactionError } from "@/lib/parse-tx-error";
 import { useNotifications } from "@/lib/notification-context";
+import { getExplorerClusterParam } from "@/lib/solana/network-config";
 import {
   buildCreateStreamCsvTemplate,
   getClusterLabel,
@@ -143,6 +145,140 @@ function buildMilestoneAmountsFromStream(stream: any) {
   return buildEvenMilestoneAmountsFromBaseUnits(totalBaseUnits, count, decimals);
 }
 
+type CreateStreamSuccessData = {
+  streamAddress: string;
+  streamScannerUrl: string;
+  signature: string;
+  explorerUrl: string;
+  recipient: string;
+  amount: string;
+  mint: string;
+};
+
+function CreateStreamSuccessModal({
+  data,
+  onClose,
+  onOk,
+}: {
+  data: CreateStreamSuccessData;
+  onClose: () => void;
+  onOk: () => void;
+}) {
+  const [copied, setCopied] = useState(false);
+
+  useEffect(() => {
+    const handleKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") onClose();
+    };
+    document.addEventListener("keydown", handleKey);
+    return () => document.removeEventListener("keydown", handleKey);
+  }, [onClose]);
+
+  const streamLink = typeof window !== "undefined"
+    ? `${window.location.origin}/streams?search=${data.streamAddress}`
+    : `/streams?search=${data.streamAddress}`;
+
+  const handleCopyLink = () => {
+    navigator.clipboard.writeText(streamLink);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  };
+
+  const shorten = (addr: string) => addr ? `${addr.slice(0, 8)}...${addr.slice(-8)}` : "—";
+
+  return (
+    <div
+      className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm animate-in fade-in duration-200"
+      onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}
+    >
+      <div className="relative w-full max-w-md bg-zinc-950 border border-zinc-800 rounded-3xl shadow-2xl shadow-black/60 overflow-hidden animate-in zoom-in-95 slide-in-from-bottom-4 duration-300">
+        <div className="h-1 w-full bg-gradient-to-r from-emerald-600 via-green-500 to-teal-500" />
+
+        <button
+          onClick={onClose}
+          className="absolute top-4 right-4 p-1.5 rounded-lg text-zinc-500 hover:text-zinc-200 hover:bg-zinc-800/60 transition-all"
+          aria-label="Close"
+        >
+          <X className="w-4 h-4" />
+        </button>
+
+        <div className="p-6 pt-7">
+          <div className="flex items-center justify-center mb-5">
+            <div className="relative">
+              <div className="w-16 h-16 rounded-2xl bg-emerald-500/10 border border-emerald-500/25 flex items-center justify-center">
+                <CheckCircle2 className="w-8 h-8 text-emerald-400" />
+              </div>
+              <div className="absolute -inset-2 rounded-3xl bg-emerald-500/5 blur-xl -z-10" />
+            </div>
+          </div>
+
+          <div className="text-center mb-5">
+            <h3 className="text-lg font-extrabold text-zinc-50 mb-1.5">Stream Created!</h3>
+            <p className="text-xs text-zinc-400 leading-relaxed">
+              Stream has been successfully deployed on-chain.
+            </p>
+          </div>
+
+          <div className="space-y-2.5 mb-6">
+            <div className="bg-zinc-900/60 border border-zinc-800 rounded-xl px-3 py-2.5">
+              <div className="text-[9px] font-black uppercase tracking-widest text-zinc-500 mb-1">Stream Address</div>
+              <a
+                href={data.streamScannerUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="font-mono text-[11px] text-indigo-400 hover:text-indigo-300 transition-colors flex items-center gap-1 group break-all"
+              >
+                <span className="break-all">{data.streamAddress}</span>
+                <ExternalLink className="w-3 h-3 flex-shrink-0 opacity-60 group-hover:opacity-100" />
+              </a>
+            </div>
+
+            <div className="grid grid-cols-2 gap-2">
+              <div className="bg-zinc-900/60 border border-zinc-800 rounded-xl px-3 py-2.5">
+                <div className="text-[9px] font-black uppercase tracking-widest text-zinc-500 mb-1">Recipient</div>
+                <div className="font-mono text-[11px] text-zinc-300 break-all">{shorten(data.recipient)}</div>
+              </div>
+              <div className="bg-zinc-900/60 border border-zinc-800 rounded-xl px-3 py-2.5">
+                <div className="text-[9px] font-black uppercase tracking-widest text-zinc-500 mb-1">Amount</div>
+                <div className="font-mono text-[11px] text-zinc-300">{data.amount}</div>
+              </div>
+            </div>
+
+            <div className="bg-zinc-900/60 border border-zinc-800 rounded-xl px-3 py-2.5">
+              <div className="text-[9px] font-black uppercase tracking-widest text-zinc-500 mb-1">Transaction</div>
+              <a
+                href={data.explorerUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="font-mono text-[11px] text-indigo-400 hover:text-indigo-300 transition-colors flex items-start gap-1 group"
+              >
+                <span className="break-all leading-relaxed">{data.signature}</span>
+                <ExternalLink className="w-3 h-3 flex-shrink-0 mt-0.5 opacity-60 group-hover:opacity-100" />
+              </a>
+            </div>
+          </div>
+
+          <div className="flex gap-3">
+            <button
+              onClick={handleCopyLink}
+              className="flex-1 flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-zinc-800 hover:bg-zinc-700 border border-zinc-700 text-zinc-200 text-sm font-semibold transition-all"
+            >
+              {copied ? <Check className="w-4 h-4 text-emerald-400" /> : <Copy className="w-4 h-4" />}
+              {copied ? "Copied!" : "Copy Link"}
+            </button>
+            <button
+              onClick={onOk}
+              className="flex-1 px-4 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-sm font-semibold transition-all shadow-lg shadow-emerald-900/40"
+            >
+              Go To Active Stream
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 type Props = {
   initialStreams?: any[];
 };
@@ -167,7 +303,8 @@ export default function Home({ initialStreams = [] }: Props) {
   const [filteredStreamsCount, setFilteredStreamsCount] = useState(initialStreams.length);
   const [loading, setLoading] = useState(initialStreams.length === 0);
   const [copiedId, setCopiedId] = useState<string | null>(null);
-  
+  const [createStreamSuccess, setCreateStreamSuccess] = useState<CreateStreamSuccessData | null>(null);
+
   // Details Drawer State
   const [selectedStream, setSelectedStream] = useState<any | null>(null);
   const [loadingDetails, setLoadingDetails] = useState(false);
@@ -606,9 +743,17 @@ export default function Home({ initialStreams = [] }: Props) {
           onStatus: setTxStatus,
         });
 
-        addNotification({ type: "success", event: "stream_created", title: "Stream Created", message: `Stream deployed on-chain. Tx: ${result.signature.slice(0, 8)}…` });
         fetchStreams();
-        setActiveTab("streams");
+        const clusterParam = getExplorerClusterParam(endpoint);
+        setCreateStreamSuccess({
+          streamAddress: result.streamAddress,
+          streamScannerUrl: `https://explorer.solana.com/address/${result.streamAddress}?cluster=${clusterParam}`,
+          signature: result.signature,
+          explorerUrl: result.explorerUrl,
+          recipient: data.recipient,
+          amount: data.amount,
+          mint: data.mint,
+        });
       } catch (err: any) {
         showParsedTxError(err, "Deployment failed.");
       } finally {
@@ -980,6 +1125,17 @@ export default function Home({ initialStreams = [] }: Props) {
       <div className="hidden md:block absolute bottom-0 right-1/4 w-[600px] h-[600px] bg-purple-950/15 rounded-full blur-[160px] pointer-events-none" />
 
       <NotificationToastStack />
+
+      {createStreamSuccess && (
+        <CreateStreamSuccessModal
+          data={createStreamSuccess}
+          onClose={() => setCreateStreamSuccess(null)}
+          onOk={() => {
+            setCreateStreamSuccess(null);
+            setActiveTab("streams");
+          }}
+        />
+      )}
 
       {/* Main Workspace Dashboard Grid */}
       <div className="max-w-7xl mx-auto w-full px-4 py-4 sm:px-6 sm:py-8 flex-grow flex flex-col md:flex-row gap-4 md:gap-8 relative z-10">
