@@ -82,7 +82,7 @@ const remainingText =
     <div
       key={stream.id}
       onClick={() => onOpen(stream.id)}
-      className="bg-zinc-950/65 border border-zinc-900 hover:border-indigo-500/50 hover:bg-zinc-950/90 rounded-2xl p-4 sm:p-5 transition-all shadow-md group relative overflow-hidden cursor-pointer"
+      className="bg-zinc-900/10 border border-zinc-900 hover:border-indigo-500/50 hover:bg-zinc-900/30 rounded-2xl p-4 sm:p-5 transition-all shadow-md group relative overflow-hidden cursor-pointer animate-in fade-in-30 duration-200"
     >
       <div className="hidden sm:block absolute top-0 right-0 w-24 h-24 bg-indigo-500/5 rounded-full blur-2xl group-hover:bg-indigo-500/10 transition-colors pointer-events-none" />
 
@@ -123,12 +123,12 @@ const remainingText =
           <span className="font-semibold text-zinc-400">Vesting Completion</span>
           <span className="font-mono text-zinc-200 font-bold">{progress.toFixed(2)}%</span>
         </div>
-        <div className="h-2 w-full bg-zinc-900 rounded-full overflow-hidden border border-zinc-800/40">
+        <div className="h-2 w-full bg-zinc-950 rounded-full overflow-hidden border border-zinc-850">
           <div className="h-full bg-gradient-to-r from-indigo-500 to-purple-500 rounded-full transition-all duration-500" style={{ width: `${progress}%` }} />
         </div>
       </div>
 
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 bg-zinc-900/35 border border-zinc-900/60 rounded-xl p-3.5 text-xs">
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 bg-zinc-950/20 border border-zinc-900/60 rounded-xl p-3.5 text-xs">
         <div>
           <div className="text-zinc-500 font-medium">Total Amount</div>
           <div className="font-bold text-zinc-200">{formatTokenAmount(stream.totalAmount, mintDecimals)} {amountLabel}</div>
