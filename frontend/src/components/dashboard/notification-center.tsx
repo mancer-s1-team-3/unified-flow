@@ -241,7 +241,7 @@ export const NotificationCenter = memo(function NotificationCenter() {
           transition: "transform 220ms cubic-bezier(0.22,1,0.36,1), opacity 180ms ease",
           transformOrigin: "top right",
         }}
-        className="absolute top-12 right-0 w-[380px] max-h-[560px] flex flex-col rounded-2xl border border-zinc-700/70 bg-zinc-900/95 backdrop-blur-xl shadow-2xl shadow-black/60 z-[90] overflow-hidden"
+        className="fixed sm:absolute top-[72px] sm:top-12 left-4 right-4 sm:left-auto sm:right-0 sm:w-[380px] max-h-[70vh] sm:max-h-[560px] flex flex-col rounded-2xl border border-zinc-700/70 bg-zinc-900/95 backdrop-blur-xl shadow-2xl shadow-black/60 z-[90] overflow-hidden"
       >
         {/* Panel Header */}
         <div className="flex items-center justify-between px-4 py-3.5 border-b border-zinc-800/80">

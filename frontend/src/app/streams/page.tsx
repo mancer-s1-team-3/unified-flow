@@ -3,7 +3,7 @@
 import { useState, useEffect } from "react";
 import { api } from "@/lib/api";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { useClusterState, useWalletConnection } from "@solana/react-hooks";
 import { getExplorerClusterParam } from "@/lib/solana/network-config";
 import { getClusterLabel } from "@/components/dashboard/token-mints";
@@ -23,12 +23,13 @@ export default function StreamsPage() {
   const explorerClusterParam = getExplorerClusterParam(endpoint);
   const clusterDisplayLabel = getClusterLabel(endpoint);
   const router = useRouter();
+  const searchParams = useSearchParams();
   const [streams, setStreams] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
   const [copiedId, setCopiedId] = useState<string | null>(null);
 
   // Search & Filter States
-  const [searchQuery, setSearchQuery] = useState("");
+  const [searchQuery, setSearchQuery] = useState(() => searchParams.get("search") ?? "");
   const [filterSquadsAddress, setFilterSquadsAddress] = useState(() => {
     if (typeof window === "undefined") return "";
     return localStorage.getItem("squads_multisig_address") ?? "";
