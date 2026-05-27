@@ -1138,7 +1138,7 @@ export default function Home({ initialStreams = [] }: Props) {
       )}
 
       {/* Main Workspace Dashboard Grid */}
-      <div className="max-w-7xl mx-auto w-full px-4 py-4 sm:px-6 sm:py-8 flex-grow flex flex-col md:flex-row gap-4 md:gap-8 relative z-10">
+      <div className="max-w-7xl mx-auto w-full px-4 py-4 sm:px-6 sm:py-8 pb-20 md:pb-8 flex-grow flex flex-col md:flex-row gap-4 md:gap-8 relative z-10">
         
         <DashboardSidebar activeTab={activeTab} setActiveTab={setActiveTab} streamsCount={filteredStreamsCount} />
 
