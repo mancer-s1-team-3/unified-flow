@@ -2,6 +2,7 @@
 
 import { type ReactNode } from "react";
 import { Sparkles } from "lucide-react";
+import { useWalletConnection } from "@solana/react-hooks";
 import { OnboardingWizard } from "./onboarding-wizard";
 import { useOnboarding } from "./onboarding-store";
 
@@ -20,11 +21,12 @@ export function OnboardingProvider({ children }: { children: ReactNode }) {
  */
 export function OnboardingCompletedBanner() {
   const { isComplete, startOnboarding, resetOnboarding } = useOnboarding();
+  const { connected } = useWalletConnection();
 
-  if (!isComplete) return null;
+  if (!isComplete || connected) return null;
 
   return (
-    <div className="mb-4 flex items-center justify-between gap-3 rounded-2xl border border-zinc-800/80 bg-zinc-900/40 px-4 py-3">
+    <div className="mb-4 flex items-center justify-between gap-3 rounded-2xl border border-zinc-800/80 bg-zinc-900/40 px-4 py-3 animate-in fade-in slide-in-from-top-2 duration-500 ease-out">
       <div className="flex items-center gap-2.5 min-w-0">
         <Sparkles className="w-4 h-4 text-indigo-400 shrink-0" />
         <p className="text-xs text-zinc-400 truncate">

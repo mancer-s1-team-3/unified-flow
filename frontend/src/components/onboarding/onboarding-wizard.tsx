@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useCallback } from "react";
+import { useEffect, useCallback, useState, useRef } from "react";
 import {
   ArrowRight,
   ArrowLeft,
@@ -30,6 +30,39 @@ export function OnboardingWizard() {
     startOnboarding,
   } = useOnboarding();
 
+  const [visible, setVisible] = useState(false);
+  const [closing, setClosing] = useState(false);
+  const [stepKey, setStepKey] = useState(currentStepIndex);
+  const prevIndexRef = useRef(currentStepIndex);
+
+  // Animate in when wizard becomes active
+  useEffect(() => {
+    if (isActive && !isComplete) {
+      setClosing(false);
+      const t = setTimeout(() => setVisible(true), 16);
+      return () => clearTimeout(t);
+    } else {
+      setVisible(false);
+    }
+  }, [isActive, isComplete]);
+
+  // Animate step content on step change
+  useEffect(() => {
+    if (currentStepIndex !== prevIndexRef.current) {
+      prevIndexRef.current = currentStepIndex;
+      setStepKey(currentStepIndex);
+    }
+  }, [currentStepIndex]);
+
+  const handleClose = useCallback(() => {
+    setClosing(true);
+    setVisible(false);
+    setTimeout(() => {
+      setClosing(false);
+      skipOnboarding();
+    }, 350);
+  }, [skipOnboarding]);
+
   // Auto-start for first-time users on mount
   useEffect(() => {
     if (!isComplete && !isActive) {
@@ -42,11 +75,11 @@ export function OnboardingWizard() {
   const handleKeyDown = useCallback(
     (e: KeyboardEvent) => {
       if (!isActive) return;
-      if (e.key === "Escape") skipOnboarding();
+      if (e.key === "Escape") handleClose();
       if (e.key === "ArrowRight") nextStep();
       if (e.key === "ArrowLeft") prevStep();
     },
-    [isActive, nextStep, prevStep, skipOnboarding]
+    [isActive, nextStep, prevStep, handleClose]
   );
 
   useEffect(() => {
@@ -54,7 +87,7 @@ export function OnboardingWizard() {
     return () => document.removeEventListener("keydown", handleKeyDown);
   }, [handleKeyDown]);
 
-  if (!isActive || isComplete) return null;
+  if ((!isActive || isComplete) && !closing) return null;
 
   const step = ONBOARDING_STEPS[currentStepIndex];
   const StepIcon = STEP_ICONS[currentStepIndex];
@@ -63,7 +96,14 @@ export function OnboardingWizard() {
   const progress = ((currentStepIndex + 1) / ONBOARDING_STEPS.length) * 100;
 
   return (
-    <div className="fixed bottom-4 right-4 sm:bottom-6 sm:right-6 z-[200] w-[calc(100vw-2rem)] sm:w-96 animate-in fade-in slide-in-from-bottom-4 duration-500">
+    <div
+      className="fixed bottom-4 right-4 sm:bottom-6 sm:right-6 z-[200] w-[calc(100vw-2rem)] sm:w-96"
+      style={{
+        transition: "opacity 350ms ease, transform 350ms cubic-bezier(0.16, 1, 0.3, 1)",
+        opacity: visible ? 1 : 0,
+        transform: visible ? "translateY(0)" : "translateY(16px)",
+      }}
+    >
       <div className="bg-zinc-950/98 border border-zinc-800 rounded-2xl shadow-2xl shadow-black/60 backdrop-blur-xl overflow-hidden">
         {/* Progress bar */}
         <div className="h-0.5 w-full bg-zinc-900">
@@ -82,7 +122,7 @@ export function OnboardingWizard() {
             </span>
           </div>
           <button
-            onClick={skipOnboarding}
+            onClick={handleClose}
             className="p-1 rounded-md text-zinc-500 hover:text-zinc-200 hover:bg-zinc-800/60 transition-all"
             aria-label="Skip onboarding"
           >
@@ -118,28 +158,33 @@ export function OnboardingWizard() {
             </span>
           </div>
 
-          {/* Step content */}
-          <div className="flex items-start gap-3 mb-3">
-            <div className="w-9 h-9 rounded-xl bg-indigo-500/10 border border-indigo-500/20 flex items-center justify-center shrink-0">
-              <StepIcon className="w-4.5 h-4.5 text-indigo-400" />
+          {/* Step content — re-keyed on each step change to trigger fade-in */}
+          <div
+            key={stepKey}
+            className="animate-in fade-in slide-in-from-right-3 duration-300 ease-out"
+          >
+            <div className="flex items-start gap-3 mb-3">
+              <div className="w-9 h-9 rounded-xl bg-indigo-500/10 border border-indigo-500/20 flex items-center justify-center shrink-0">
+                <StepIcon className="w-4.5 h-4.5 text-indigo-400" />
+              </div>
+              <div className="min-w-0">
+                <h4 className="text-sm font-bold text-zinc-100 leading-tight">
+                  {step.title}
+                </h4>
+                <p className="text-[11px] text-zinc-400 leading-relaxed mt-1">
+                  {step.description}
+                </p>
+              </div>
             </div>
-            <div className="min-w-0">
-              <h4 className="text-sm font-bold text-zinc-100 leading-tight">
-                {step.title}
-              </h4>
-              <p className="text-[11px] text-zinc-400 leading-relaxed mt-1">
-                {step.description}
-              </p>
-            </div>
-          </div>
 
-          {/* Tip box */}
-          <div className="bg-indigo-500/5 border border-indigo-500/10 rounded-lg px-3 py-2 mb-3">
-            <div className="flex items-center gap-2">
-              <CheckCircle2 className="w-3 h-3 text-indigo-400 shrink-0" />
-              <span className="text-[10px] text-indigo-300/80 font-medium">
-                {step.highlight}
-              </span>
+            {/* Tip box */}
+            <div className="bg-indigo-500/5 border border-indigo-500/10 rounded-lg px-3 py-2 mb-3">
+              <div className="flex items-center gap-2">
+                <CheckCircle2 className="w-3 h-3 text-indigo-400 shrink-0" />
+                <span className="text-[10px] text-indigo-300/80 font-medium">
+                  {step.highlight}
+                </span>
+              </div>
             </div>
           </div>
 
@@ -160,7 +205,7 @@ export function OnboardingWizard() {
 
             <div className="flex items-center gap-2">
               <button
-                onClick={skipOnboarding}
+                onClick={handleClose}
                 className="px-3 py-2 rounded-lg text-[11px] font-medium text-zinc-600 hover:text-zinc-400 transition-all"
               >
                 Skip
