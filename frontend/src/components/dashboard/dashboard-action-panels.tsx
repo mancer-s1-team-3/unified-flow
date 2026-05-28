@@ -1096,8 +1096,11 @@ export function DashboardActionPanels(props: Props) {
           </div>
         )}
 
-        {/* Withdraw Fee Preview */}
-{/* Withdraw Fee Preview */}
+
+      </>
+    )}
+            {/* Withdraw Fee Preview */}
+
 <div>
   <div className="text-zinc-500">
     Withdraw Fee
@@ -1135,8 +1138,6 @@ export function DashboardActionPanels(props: Props) {
     </>
   )}
 </div>
-      </>
-    )}
   </div>
 </div>
               <button
