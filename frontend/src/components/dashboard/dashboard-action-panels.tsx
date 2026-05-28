@@ -356,25 +356,22 @@ export function DashboardActionPanels(props: Props) {
   const [mintMenuOpen, setMintMenuOpen] = useState(false);
   const [cliffInputMode, setCliffInputMode] = useState<"duration" | "date">("duration");
   const [durationInputMode, setDurationInputMode] = useState<"duration" | "date">("duration");
-const feeEstimate = useFeeEstimate();
+  const feeEstimate = useFeeEstimate();
+
   // ─── FIX: Auto-populate startDate with a future default when type is non-milestone ───
-  // Also runs on a 30s interval to refresh the default if the page is left open
-  // and the previously-set default has since fallen into the past.
   useEffect(() => {
     if (createForm.type === "2") return;
 
     const getFutureIso = () => {
-      const d = new Date(Date.now() + 60_000); // 1 minute from now
+      const d = new Date(Date.now() + 60_000);
       const pad = (n: number) => String(n).padStart(2, "0");
       return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
     };
 
-    // Set initial default if empty
     if (!createForm.startDate) {
       setCreateForm((prev: any) => ({ ...prev, startDate: getFutureIso() }));
     }
 
-    // Every 30s: if the current startDate has fallen into the past, bump it forward
     const interval = setInterval(() => {
       setCreateForm((prev: any) => {
         if (prev.type === "2") return prev;
@@ -410,7 +407,6 @@ const feeEstimate = useFeeEstimate();
   })();
   const startDateInPast = createForm.type !== "2" && startDateMs <= Date.now();
 
-  // ─── FIX: cliffDateInPast & endDateInPast only fire when field actually has a value ───
   const cliffExceedsDuration = createForm.type === "1" && cliffDurationSeconds > durationSeconds;
   const cliffDateInPast =
     createForm.type === "1" &&
@@ -420,42 +416,7 @@ const feeEstimate = useFeeEstimate();
     createForm.type !== "2" &&
     Boolean(createForm.duration?.trim()) &&
     durationSeconds <= 0;
-  // ──────────────────────────────────────────────────────────────────────────────────────
-function useFeeEstimate() {
-  const [solPrice, setSolPrice] = useState<number | null>(null);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState(false);
- 
-  // Fetch SOL/USD price dari CoinGecko (public, no key needed)
-  const fetchPrice = async () => {
-    setLoading(true);
-    setError(false);
-    try {
-      const res = await fetch(
-        "https://api.coingecko.com/api/v3/simple/price?ids=solana&vs_currencies=usd",
-        { signal: AbortSignal.timeout(5000) }
-      );
-      const data = await res.json();
-      setSolPrice(data?.solana?.usd ?? null);
-    } catch {
-      setError(true);
-    } finally {
-      setLoading(false);
-    }
-  };
- 
-  useEffect(() => {
-    fetchPrice();
-    // Refresh setiap 60 detik
-    const interval = setInterval(fetchPrice, 60_000);
-    return () => clearInterval(interval);
-  }, []);
- 
-  const FEE_USD = 0.99;
-  const solCost = solPrice ? FEE_USD / solPrice : null;
- 
-  return { solPrice, solCost, loading, error, refetch: fetchPrice };
-}
+
   const startDateInLocalIso = (() => {
     if (createForm.startDate) return createForm.startDate;
     const d = new Date(Date.now() + 10_000);
@@ -576,6 +537,11 @@ function useFeeEstimate() {
     document.addEventListener("pointerdown", handlePointerDown);
     return () => document.removeEventListener("pointerdown", handlePointerDown);
   }, []);
+
+  // ─── shared className for datetime-local inputs (mobile-safe) ────────────
+  const dateInputClass =
+    "block w-full max-w-full min-w-0 bg-zinc-950 border border-zinc-800 rounded-xl px-3 py-2.5 sm:px-4 sm:py-3 text-[11px] sm:text-sm focus:outline-none focus:border-indigo-500 font-mono [color-scheme:dark] truncate";
+  // ──────────────────────────────────────────────────────────────────────────
 
   return (
     <>
@@ -758,8 +724,10 @@ function useFeeEstimate() {
                   <option value="2">Milestone-Based Vesting</option>
                 </select>
               </div>
+
+              {/* ─── Start Date ─────────────────────────────────────────────── */}
               {createForm.type !== "2" && (
-                <div className="min-w-0 max-w-full">
+                <div className="min-w-0 max-w-full overflow-hidden">
                   <label className="block text-[10px] sm:text-xs font-semibold text-zinc-400 uppercase tracking-wider mb-1.5">Start Date</label>
                   <input
                     type="datetime-local"
@@ -773,7 +741,8 @@ function useFeeEstimate() {
                         cliffDate: "",
                       });
                     }}
-                    className="block w-full max-w-full min-w-0 bg-zinc-950 border border-zinc-800 rounded-xl px-3.5 py-2.5 sm:px-4 sm:py-3 text-sm focus:outline-none focus:border-indigo-500 font-mono [color-scheme:dark]"
+                    className={dateInputClass}
+                    style={{ WebkitAppearance: "none" }}
                   />
                   {startDateInPast && (
                     <div className="mt-2 text-[10px] font-semibold text-rose-400">
@@ -782,11 +751,14 @@ function useFeeEstimate() {
                   )}
                 </div>
               )}
+              {/* ──────────────────────────────────────────────────────────────── */}
+
+              {/* ─── Duration / End Date ────────────────────────────────────── */}
               {createForm.type !== "2" && (
-                <div className="min-w-0 max-w-full">
+                <div className="min-w-0 max-w-full overflow-hidden">
                   <div className="flex items-center justify-between gap-2 mb-1.5 min-h-[26px]">
                     <label className="block text-[10px] sm:text-xs font-semibold text-zinc-400 uppercase tracking-wider">{durationInputMode === "duration" ? "Duration" : "End Date"}</label>
-                    <div className="inline-flex rounded-lg border border-zinc-800 bg-zinc-950 p-0.5 text-[9px] font-black uppercase tracking-wider">
+                    <div className="inline-flex rounded-lg border border-zinc-800 bg-zinc-950 p-0.5 text-[9px] font-black uppercase tracking-wider shrink-0">
                       <button
                         type="button"
                         onClick={() => setDurationInputMode("duration")}
@@ -829,7 +801,8 @@ function useFeeEstimate() {
                         const seconds = Math.max(0, Math.floor((target - startDateMs) / 1000));
                         setCreateForm({ ...createForm, endDate: value, duration: String(seconds) });
                       }}
-                      className="block w-full max-w-full min-w-0 bg-zinc-950 border border-zinc-800 rounded-xl px-3.5 py-2.5 sm:px-4 sm:py-3 text-sm focus:outline-none focus:border-indigo-500 font-mono [color-scheme:dark]"
+                      className={dateInputClass}
+                      style={{ WebkitAppearance: "none" }}
                     />
                   )}
                   {durationSeconds > 0 && (
@@ -846,12 +819,14 @@ function useFeeEstimate() {
                   )}
                 </div>
               )}
+              {/* ──────────────────────────────────────────────────────────────── */}
 
+              {/* ─── Cliff ──────────────────────────────────────────────────── */}
               {createForm.type === "1" && (
-                <div className="min-w-0 max-w-full">
+                <div className="min-w-0 max-w-full overflow-hidden">
                   <div className="flex items-center justify-between gap-2 mb-1.5 min-h-[26px]">
                     <label className="block text-[10px] sm:text-xs font-semibold text-zinc-400 uppercase tracking-wider">Cliff</label>
-                    <div className="inline-flex rounded-lg border border-zinc-800 bg-zinc-950 p-0.5 text-[9px] font-black uppercase tracking-wider">
+                    <div className="inline-flex rounded-lg border border-zinc-800 bg-zinc-950 p-0.5 text-[9px] font-black uppercase tracking-wider shrink-0">
                       <button
                         type="button"
                         onClick={() => setCliffInputMode("duration")}
@@ -894,7 +869,8 @@ function useFeeEstimate() {
                         const seconds = Math.max(0, Math.floor((target - startDateMs) / 1000));
                         setCreateForm({ ...createForm, cliffDate: value, cliffDuration: String(seconds) });
                       }}
-                      className="block w-full max-w-full min-w-0 bg-zinc-950 border border-zinc-800 rounded-xl px-3.5 py-2.5 sm:px-4 sm:py-3 text-sm focus:outline-none focus:border-indigo-500 font-mono [color-scheme:dark]"
+                      className={dateInputClass}
+                      style={{ WebkitAppearance: "none" }}
                     />
                   )}
                   {cliffDurationSeconds > 0 && (
@@ -916,6 +892,7 @@ function useFeeEstimate() {
                   )}
                 </div>
               )}
+              {/* ──────────────────────────────────────────────────────────────── */}
 
               {createForm.type === "2" && (
                 <div className="md:col-span-2 grid min-w-0 gap-4 bg-zinc-900/30 border border-zinc-900 p-4 rounded-xl max-w-full overflow-hidden">
@@ -1154,123 +1131,121 @@ function useFeeEstimate() {
       )}
 
       {activeTab === "withdraw" && (
-       <div className="animate-in fade-in-30 duration-200">
-    <div className="border-b border-zinc-900 pb-4 mb-6">
-      <h2 className="text-2xl font-extrabold tracking-tight">Withdraw Claim</h2>
-      <p className="text-xs text-zinc-400">Withdraw matured/unlocked tokens from an active vesting stream</p>
-    </div>
- 
-    <div className="grid gap-4">
-      <div>
-        <label className="block text-xs font-semibold text-zinc-400 uppercase tracking-wider mb-1.5">
-          Stream ID (PDA Address)
-        </label>
-        <input
-          type="text"
-          value={withdrawForm.streamId}
-          onChange={(e) => setWithdrawForm({ ...withdrawForm, streamId: e.target.value })}
-          className="w-full bg-zinc-950 border border-zinc-800 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:border-indigo-500 font-mono"
-        />
-      </div>
-    </div>
- 
-    {/* ─── Protocol Fee Preview Card ─────────────────────────────────── */}
-    <div className="mt-5 rounded-2xl border border-amber-500/20 bg-amber-950/10 overflow-hidden">
-      {/* Header */}
-      <div className="flex items-center justify-between gap-3 px-4 py-3 border-b border-amber-500/10">
-        <div className="flex items-center gap-2">
-          <div className="w-6 h-6 rounded-lg bg-amber-500/10 flex items-center justify-center shrink-0">
-            {/* Coin icon inline SVG */}
-            <svg className="w-3.5 h-3.5 text-amber-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-              <circle cx="12" cy="12" r="10"/><path d="M12 6v2m0 8v2M9.5 9.5C9.5 8.1 10.6 7 12 7s2.5 1.1 2.5 2.5c0 3-5 3-5 6h5M12 17h.01"/>
-            </svg>
+        <div className="animate-in fade-in-30 duration-200">
+          <div className="border-b border-zinc-900 pb-4 mb-6">
+            <h2 className="text-2xl font-extrabold tracking-tight">Withdraw Claim</h2>
+            <p className="text-xs text-zinc-400">Withdraw matured/unlocked tokens from an active vesting stream</p>
           </div>
-          <span className="text-[11px] font-black uppercase tracking-widest text-amber-400/80">
-            Protocol Fee (per withdraw call)
-          </span>
-        </div>
-        <button
-          onClick={feeEstimate.refetch}
-          disabled={feeEstimate.loading}
-          title="Refresh SOL price"
-          className="p-1 rounded-lg text-zinc-500 hover:text-zinc-300 hover:bg-zinc-800/60 transition-all disabled:opacity-40"
-        >
-          <RefreshCw className={`w-3 h-3 ${feeEstimate.loading ? "animate-spin" : ""}`} />
-        </button>
-      </div>
- 
-      {/* Fee breakdown */}
-      <div className="px-4 py-3.5 flex flex-col gap-3">
-        {/* Fixed USD amount */}
-        <div className="flex items-center justify-between">
-          <span className="text-xs text-zinc-400">Fixed fee (USD)</span>
-          <span className="font-mono text-sm font-extrabold text-zinc-100">$0.99</span>
-        </div>
- 
-        {/* SOL equivalent */}
-        <div className="flex items-center justify-between">
-          <span className="text-xs text-zinc-400">
-            Estimated SOL cost
-            {feeEstimate.solPrice && (
-              <span className="ml-1.5 text-[10px] text-zinc-600">
-                @ ${feeEstimate.solPrice.toFixed(2)}/SOL
-              </span>
-            )}
-          </span>
-          <div className="flex items-center gap-2">
-            {feeEstimate.loading ? (
-              <span className="text-xs text-zinc-500 font-mono animate-pulse">fetching...</span>
-            ) : feeEstimate.error || !feeEstimate.solCost ? (
-              <span className="text-xs text-zinc-500 font-mono">unavailable</span>
-            ) : (
-              <span className="font-mono text-sm font-extrabold text-amber-300">
-                ◎ {feeEstimate.solCost.toFixed(6)} SOL
-              </span>
-            )}
-          </div>
-        </div>
- 
-        {/* Charged from */}
-        <div className="flex items-start gap-2 pt-1 border-t border-amber-500/10">
-          <div className="mt-0.5 w-1 h-1 rounded-full bg-amber-400/60 shrink-0" />
-          <p className="text-[10px] text-amber-300/60 leading-relaxed">
-            Fee is charged in SOL from <span className="font-bold text-amber-300/80">your wallet</span> on every{" "}
-            <code className="font-mono bg-amber-950/40 px-1 rounded">withdraw</code> call, regardless of how many
-            tokens are claimed. Partial claims are fully supported but each call costs the full fee.
-          </p>
-        </div>
- 
-        {/* Error fallback notice */}
-        {feeEstimate.error && (
-          <div className="flex items-center gap-2 pt-1 border-t border-zinc-800">
-            <svg className="w-3 h-3 text-zinc-500 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-              <circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/>
-            </svg>
-            <span className="text-[10px] text-zinc-500">
-              Could not fetch SOL price. The on-chain fee will still be charged at live oracle price.
-            </span>
-          </div>
-        )}
-      </div>
-    </div>
-    {/* ──────────────────────────────────────────────────────────────────── */}
- 
-    <button
-      disabled={withdrawDisabled}
-      onClick={() => handleAction("withdraw", withdrawForm)}
-      className={`w-full mt-5 text-white font-bold text-xs py-3 rounded-xl transition-all shadow-lg flex items-center justify-center gap-2 ${
-        withdrawDisabled
-          ? "bg-zinc-800 text-zinc-500 cursor-not-allowed shadow-none"
-          : "bg-indigo-600 hover:bg-indigo-700 hover:shadow-indigo-500/20"
-      }`}
-    >
-      {activeTxAction === "withdraw" && activeTxPhase ? (
-        <RefreshCw className="w-4 h-4 animate-spin" />
-      ) : null}
-      {getTxLabel("withdraw", "Claim Claimable Tokens")}
-    </button>
-  </div>
 
+          <div className="grid gap-4">
+            <div>
+              <label className="block text-xs font-semibold text-zinc-400 uppercase tracking-wider mb-1.5">
+                Stream ID (PDA Address)
+              </label>
+              <input
+                type="text"
+                value={withdrawForm.streamId}
+                onChange={(e) => setWithdrawForm({ ...withdrawForm, streamId: e.target.value })}
+                className="w-full bg-zinc-950 border border-zinc-800 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:border-indigo-500 font-mono"
+              />
+            </div>
+          </div>
+
+          {/* ─── Protocol Fee Preview Card ─────────────────────────────────── */}
+          <div className="mt-5 rounded-2xl border border-amber-500/20 bg-amber-950/10 overflow-hidden">
+            {/* Header */}
+            <div className="flex items-center justify-between gap-3 px-4 py-3 border-b border-amber-500/10">
+              <div className="flex items-center gap-2">
+                <div className="w-6 h-6 rounded-lg bg-amber-500/10 flex items-center justify-center shrink-0">
+                  <svg className="w-3.5 h-3.5 text-amber-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <circle cx="12" cy="12" r="10"/><path d="M12 6v2m0 8v2M9.5 9.5C9.5 8.1 10.6 7 12 7s2.5 1.1 2.5 2.5c0 3-5 3-5 6h5M12 17h.01"/>
+                  </svg>
+                </div>
+                <span className="text-[11px] font-black uppercase tracking-widest text-amber-400/80">
+                  Protocol Fee (per withdraw call)
+                </span>
+              </div>
+              <button
+                onClick={feeEstimate.refetch}
+                disabled={feeEstimate.loading}
+                title="Refresh SOL price"
+                className="p-1 rounded-lg text-zinc-500 hover:text-zinc-300 hover:bg-zinc-800/60 transition-all disabled:opacity-40"
+              >
+                <RefreshCw className={`w-3 h-3 ${feeEstimate.loading ? "animate-spin" : ""}`} />
+              </button>
+            </div>
+
+            {/* Fee breakdown */}
+            <div className="px-4 py-3.5 flex flex-col gap-3">
+              {/* Fixed USD amount */}
+              <div className="flex items-center justify-between">
+                <span className="text-xs text-zinc-400">Fixed fee (USD)</span>
+                <span className="font-mono text-sm font-extrabold text-zinc-100">$0.99</span>
+              </div>
+
+              {/* SOL equivalent */}
+              <div className="flex items-center justify-between">
+                <span className="text-xs text-zinc-400">
+                  Estimated SOL cost
+                  {feeEstimate.solPrice && (
+                    <span className="ml-1.5 text-[10px] text-zinc-600">
+                      @ ${feeEstimate.solPrice.toFixed(2)}/SOL
+                    </span>
+                  )}
+                </span>
+                <div className="flex items-center gap-2">
+                  {feeEstimate.loading ? (
+                    <span className="text-xs text-zinc-500 font-mono animate-pulse">fetching...</span>
+                  ) : feeEstimate.error || !feeEstimate.solCost ? (
+                    <span className="text-xs text-zinc-500 font-mono">unavailable</span>
+                  ) : (
+                    <span className="font-mono text-sm font-extrabold text-amber-300">
+                      ◎ {feeEstimate.solCost.toFixed(6)} SOL
+                    </span>
+                  )}
+                </div>
+              </div>
+
+              {/* Charged from */}
+              <div className="flex items-start gap-2 pt-1 border-t border-amber-500/10">
+                <div className="mt-0.5 w-1 h-1 rounded-full bg-amber-400/60 shrink-0" />
+                <p className="text-[10px] text-amber-300/60 leading-relaxed">
+                  Fee is charged in SOL from <span className="font-bold text-amber-300/80">your wallet</span> on every{" "}
+                  <code className="font-mono bg-amber-950/40 px-1 rounded">withdraw</code> call, regardless of how many
+                  tokens are claimed. Partial claims are fully supported but each call costs the full fee.
+                </p>
+              </div>
+
+              {/* Error fallback notice */}
+              {feeEstimate.error && (
+                <div className="flex items-center gap-2 pt-1 border-t border-zinc-800">
+                  <svg className="w-3 h-3 text-zinc-500 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                    <circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/>
+                  </svg>
+                  <span className="text-[10px] text-zinc-500">
+                    Could not fetch SOL price. The on-chain fee will still be charged at live oracle price.
+                  </span>
+                </div>
+              )}
+            </div>
+          </div>
+          {/* ──────────────────────────────────────────────────────────────────── */}
+
+          <button
+            disabled={withdrawDisabled}
+            onClick={() => handleAction("withdraw", withdrawForm)}
+            className={`w-full mt-5 text-white font-bold text-xs py-3 rounded-xl transition-all shadow-lg flex items-center justify-center gap-2 ${
+              withdrawDisabled
+                ? "bg-zinc-800 text-zinc-500 cursor-not-allowed shadow-none"
+                : "bg-indigo-600 hover:bg-indigo-700 hover:shadow-indigo-500/20"
+            }`}
+          >
+            {activeTxAction === "withdraw" && activeTxPhase ? (
+              <RefreshCw className="w-4 h-4 animate-spin" />
+            ) : null}
+            {getTxLabel("withdraw", "Claim Claimable Tokens")}
+          </button>
+        </div>
       )}
 
       {activeTab === "cancel" && (
@@ -1389,3 +1364,39 @@ function useFeeEstimate() {
     </>
   );
 }
+
+// ─── useFeeEstimate hook ──────────────────────────────────────────────────
+function useFeeEstimate() {
+  const [solPrice, setSolPrice] = useState<number | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState(false);
+
+  const fetchPrice = async () => {
+    setLoading(true);
+    setError(false);
+    try {
+      const res = await fetch(
+        "https://api.coingecko.com/api/v3/simple/price?ids=solana&vs_currencies=usd",
+        { signal: AbortSignal.timeout(5000) }
+      );
+      const data = await res.json();
+      setSolPrice(data?.solana?.usd ?? null);
+    } catch {
+      setError(true);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchPrice();
+    const interval = setInterval(fetchPrice, 60_000);
+    return () => clearInterval(interval);
+  }, []);
+
+  const FEE_USD = 0.99;
+  const solCost = solPrice ? FEE_USD / solPrice : null;
+
+  return { solPrice, solCost, loading, error, refetch: fetchPrice };
+}
+// ──────────────────────────────────────────────────────────────────────────
