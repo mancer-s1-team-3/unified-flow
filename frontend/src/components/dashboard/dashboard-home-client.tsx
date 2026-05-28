@@ -29,6 +29,7 @@ import {
   getDefaultMint,
   getMintPresets,
 } from "@/components/dashboard/token-mints";
+import { useOnboarding, OnboardingCompletedBanner } from "@/components/onboarding";
 
 function parseTokenAmountToBaseUnits(value: string, decimals: number) {
   const trimmed = String(value ?? "").trim().replace(/,/g, ".");
@@ -298,6 +299,14 @@ export default function Home({ initialStreams = [] }: Props) {
   const clusterLabel = useMemo(() => getClusterLabel(endpoint), [endpoint]);
   const defaultMint = useMemo(() => getDefaultMint(endpoint), [endpoint]);
   const [activeTab, setActiveTab] = useState<TabId>("streams");
+
+  // Auto-switch tabs when onboarding step changes
+  const { isActive: onboardingActive, currentStepIndex, getTargetTab } = useOnboarding();
+  useEffect(() => {
+    if (!onboardingActive) return;
+    const target = getTargetTab();
+    if (target) setActiveTab(target as TabId);
+  }, [onboardingActive, getTargetTab, currentStepIndex]);
   const [nowTs, setNowTs] = useState(() => Math.floor(Date.now() / 1000));
   const [streams, setStreams] = useState<any[]>(initialStreams);
   const [filteredStreamsCount, setFilteredStreamsCount] = useState(initialStreams.length);
@@ -1136,6 +1145,8 @@ export default function Home({ initialStreams = [] }: Props) {
           }}
         />
       )}
+
+      <OnboardingCompletedBanner />
 
       {/* Main Workspace Dashboard Grid */}
       <div className="max-w-7xl mx-auto w-full px-4 py-4 sm:px-6 sm:py-8 pb-20 md:pb-8 flex-grow flex flex-col md:flex-row gap-4 md:gap-8 relative z-10">
