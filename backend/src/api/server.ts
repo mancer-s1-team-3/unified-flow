@@ -471,6 +471,25 @@ app.post("/streams/mark-origin", async (req, res) => {
     }
 });
 
+app.post("/users/upsert", async (req, res) => {
+    const { walletAddress, displayName } = req.body as { walletAddress?: string; displayName?: string };
+
+    if (!walletAddress || typeof walletAddress !== "string" || walletAddress.trim() === "") {
+        return res.status(400).send({ error: "walletAddress is required." });
+    }
+
+    try {
+        const user = await prisma.user.upsert({
+            where: { walletAddress: walletAddress.trim() },
+            update: { lastActiveAt: new Date(), ...(displayName !== undefined ? { displayName } : {}) },
+            create: { walletAddress: walletAddress.trim(), ...(displayName !== undefined ? { displayName } : {}) },
+        });
+        res.send(JSON.stringify(user));
+    } catch (err: any) {
+        res.status(400).send({ error: err.message });
+    }
+});
+
 app.listen(3000, () => {
     console.log("API running on 3000");
 });

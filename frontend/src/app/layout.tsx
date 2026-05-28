@@ -2,6 +2,7 @@ import "./globals.css";
 import { Providers } from "@/components/wallet/provider";
 import { PwaRegister } from "@/components/pwa/pwa-register";
 import { OnboardingProvider } from "@/components/onboarding/onboarding-provider";
+import { WalletUserSync } from "@/components/wallet/wallet-user-sync";
 import type { CSSProperties, ReactNode } from "react";
 
 const htmlStyle = {
@@ -55,6 +56,7 @@ export default function RootLayout({
       <body>
         <PwaRegister />
         <Providers>
+          <WalletUserSync />
           <OnboardingProvider>{children}</OnboardingProvider>
         </Providers>
       </body>

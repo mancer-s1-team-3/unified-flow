@@ -8,3 +8,7 @@ export const api = axios.create({
 export function setApiBaseUrl(baseUrl: string) {
     api.defaults.baseURL = baseUrl;
 }
+
+export async function upsertUser(walletAddress: string): Promise<void> {
+    await api.post("/users/upsert", { walletAddress });
+}
