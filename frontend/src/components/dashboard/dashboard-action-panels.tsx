@@ -966,34 +966,54 @@ export function DashboardActionPanels(props: Props) {
                   </div>
                   <div className="border-t border-zinc-900/60 pt-3">
                     <label className="block text-[10px] font-bold text-zinc-500 uppercase tracking-widest mb-2">Milestones</label>
-                    <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-                      {milestoneAmounts.map((amt, idx) => (
-                        <div key={idx} className="flex min-w-0 flex-col gap-1">
-                          <span className="text-[10px] text-zinc-400 font-mono font-bold">#{idx}</span>
-                          <input
-                            type="text"
-                            inputMode="decimal"
-                            lang="en"
-                            value={amt}
-                            onChange={(e) => {
-                              const next = [...milestoneAmounts];
-                              const normalized = normalizeDecimalInput(e.target.value);
-                              next[idx] = normalized === "" ? "0" : normalized;
-                              setMilestoneAmounts(next);
-                            }}
-                            className="block w-full max-w-full min-w-0 bg-zinc-950 border border-zinc-800 rounded-xl px-3 py-2.5 text-xs focus:outline-none focus:border-indigo-500 font-mono"
-                            placeholder="0"
-                          />
-                        </div>
-                      ))}
-                    </div>
-                    <div className={`mt-3 text-[10px] font-semibold font-mono ${hasInvalidMilestones ? "text-rose-400" : milestonesMatchTotal ? "text-emerald-500" : "text-amber-500"}`}>
-                      {hasInvalidMilestones
-                        ? <span>⚠ Every milestone amount must be filled and greater than zero.</span>
-                        : milestonesMatchTotal
-                          ? <span>✔ Allocations sum ({milestoneSum.toLocaleString()}) matches total amount ({Number(createForm.amount || 0).toLocaleString()})!</span>
-                          : <span>⚠ Sum ({milestoneSum.toLocaleString()}) does not match total amount ({Number(createForm.amount || 0).toLocaleString()}). Diff: {(Number(createForm.amount || 0) - milestoneSum).toLocaleString()}</span>}
-                    </div>
+                 <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+  {milestoneAmounts.map((amt, idx) => {
+    const val = Number(amt || 0);
+    const isEmpty = !amt || amt === "0";
+    const isInvalid = isEmpty || val <= 0 || !Number.isFinite(val);
+    const inputBorder = isInvalid
+      ? "border-rose-500/50 focus:border-rose-500"
+      : "border-emerald-500/40 focus:border-emerald-500";
+    const pctOfTotal = Number(createForm.amount) > 0
+      ? ((val / Number(createForm.amount)) * 100).toFixed(1)
+      : "0.0";
+
+    return (
+      <div key={idx} className="flex min-w-0 flex-col gap-1">
+        <div className="flex items-center justify-between">
+          <span className="text-[10px] text-zinc-400 font-mono font-bold">#{idx}</span>
+          <span className={`text-[9px] font-mono font-bold ${isInvalid ? "text-zinc-600" : "text-indigo-400"}`}>
+            {isInvalid ? "—" : `${pctOfTotal}%`}
+          </span>
+        </div>
+        <input
+          type="text"
+          inputMode="decimal"
+          lang="en"
+          value={amt}
+          onChange={(e) => {
+            const next = [...milestoneAmounts];
+            const normalized = normalizeDecimalInput(e.target.value);
+            next[idx] = normalized === "" ? "0" : normalized;
+            setMilestoneAmounts(next);
+          }}
+          className={`block w-full max-w-full min-w-0 bg-zinc-950 border rounded-xl px-3 py-2.5 text-xs focus:outline-none font-mono transition-colors duration-150 ${inputBorder}`}
+          placeholder="0"
+        />
+      </div>
+    );
+  })}
+</div>
+
+{/* Live Counter — ganti teks status lama */}
+<div className="mt-3">
+  <MilestoneAllocationCounter
+    amounts={milestoneAmounts}
+    total={Number(createForm.amount || 0)}
+    hasInvalid={hasInvalidMilestones}
+    isMatch={milestonesMatchTotal}
+  />
+</div>
                   </div>
                 </div>
               )}
@@ -1481,19 +1501,21 @@ export function DashboardActionPanels(props: Props) {
                 </div>
               ))}
 
-              <div className="sm:col-span-2 rounded-2xl border border-zinc-900 bg-zinc-950/60 px-4 py-3 text-[11px] font-mono text-zinc-400">
-                {editMilestoneHasInvalidAmounts ? (
-                  <span className="text-rose-400">Every milestone amount must be filled and greater than zero.</span>
-                ) : editMilestoneHasTargetTotal ? (
-                  editMilestoneMatchesTotal ? (
-                    <span className="text-emerald-400">Milestone sum {formatBaseUnitsToTokenAmount(editMilestoneSum, editMilestoneDecimals)} matches the stream total {formatBaseUnitsToTokenAmount(editMilestoneTargetTotal, editMilestoneDecimals)}.</span>
-                  ) : (
-                    <span className="text-amber-400">Milestone sum {formatBaseUnitsToTokenAmount(editMilestoneSum, editMilestoneDecimals)} must match total {formatBaseUnitsToTokenAmount(editMilestoneTargetTotal, editMilestoneDecimals)} before saving.</span>
-                  )
-                ) : (
-                  <span>Prefilled milestone amounts are ready for editing.</span>
-                )}
-              </div>
+             <div className="sm:col-span-2">
+  <MilestoneAllocationCounter
+    amounts={editMilestoneAmounts.map((v: string) =>
+      formatBaseUnitsToTokenAmount(
+        parseTokenAmountToBaseUnits(String(v || "0"), editMilestoneDecimals),
+        editMilestoneDecimals
+      )
+    )}
+    total={Number(
+      formatBaseUnitsToTokenAmount(editMilestoneTargetTotal, editMilestoneDecimals)
+    )}
+    hasInvalid={editMilestoneHasInvalidAmounts}
+    isMatch={editMilestoneMatchesTotal}
+  />
+</div>
             </div>
           )}
           <button
@@ -1565,5 +1587,109 @@ function useFeeEstimate() {
   const solCost = solPrice ? FEE_USD / solPrice : null;
 
   return { solPrice, solCost, loading, error, refetch: fetchPrice };
+}
+// ──────────────────────────────────────────────────────────────────────────
+// ─── MilestoneAllocationCounter ──────────────────────────────────────────
+function MilestoneAllocationCounter({
+  amounts,
+  total,
+  hasInvalid,
+  isMatch,
+}: {
+  amounts: string[];
+  total: number;
+  hasInvalid: boolean;
+  isMatch: boolean;
+}) {
+  const filled = amounts.reduce((acc, v) => acc + Number(v || 0), 0);
+  const remaining = total - filled;
+  const pct = total > 0 ? Math.min(100, (filled / total) * 100) : 0;
+
+  const barColor = hasInvalid
+    ? "bg-rose-500"
+    : isMatch
+    ? "bg-emerald-500"
+    : pct > 100
+    ? "bg-rose-500"
+    : "bg-amber-400";
+
+  const borderColor = hasInvalid
+    ? "border-rose-500/40"
+    : isMatch
+    ? "border-emerald-500/40"
+    : "border-amber-500/30";
+
+  const textColor = hasInvalid
+    ? "text-rose-400"
+    : isMatch
+    ? "text-emerald-400"
+    : pct > 100
+    ? "text-rose-400"
+    : "text-amber-400";
+
+  return (
+    <div className={`rounded-2xl border ${borderColor} bg-zinc-950/80 overflow-hidden transition-all duration-300`}>
+      {/* Header row */}
+      <div className="flex items-center justify-between px-4 py-3 border-b border-zinc-900/60">
+        <span className="text-[10px] font-black uppercase tracking-widest text-zinc-500">
+          Milestone Allocation
+        </span>
+        <span className={`text-[11px] font-black font-mono ${textColor} transition-colors duration-200`}>
+          {pct.toFixed(1)}%
+        </span>
+      </div>
+
+      {/* Progress bar */}
+      <div className="px-4 pt-3 pb-1">
+        <div className="relative h-2 w-full rounded-full bg-zinc-900 overflow-hidden">
+          <div
+            className={`absolute left-0 top-0 h-full rounded-full transition-all duration-500 ease-out ${barColor}`}
+            style={{ width: `${Math.min(pct, 100)}%` }}
+          />
+          {/* Overflow indicator */}
+          {pct > 100 && (
+            <div className="absolute right-0 top-0 h-full w-1.5 rounded-full bg-rose-500 animate-pulse" />
+          )}
+        </div>
+      </div>
+
+      {/* Stats row */}
+      <div className="grid grid-cols-3 divide-x divide-zinc-900 px-0 pb-3 pt-2">
+        <div className="flex flex-col items-center px-3 py-1">
+          <span className="text-[9px] font-bold uppercase tracking-wider text-zinc-600 mb-0.5">Allocated</span>
+          <span className={`text-[13px] font-black font-mono ${textColor} transition-colors`}>
+            {filled.toLocaleString()}
+          </span>
+        </div>
+        <div className="flex flex-col items-center px-3 py-1">
+          <span className="text-[9px] font-bold uppercase tracking-wider text-zinc-600 mb-0.5">Total</span>
+          <span className="text-[13px] font-black font-mono text-zinc-300">
+            {total.toLocaleString()}
+          </span>
+        </div>
+        <div className="flex flex-col items-center px-3 py-1">
+          <span className="text-[9px] font-bold uppercase tracking-wider text-zinc-600 mb-0.5">
+            {remaining < 0 ? "Excess" : "Remaining"}
+          </span>
+          <span className={`text-[13px] font-black font-mono ${remaining < 0 ? "text-rose-400" : remaining === 0 ? "text-emerald-400" : "text-zinc-400"} transition-colors`}>
+            {Math.abs(remaining).toLocaleString()}
+          </span>
+        </div>
+      </div>
+
+      {/* Status message */}
+      <div className={`px-4 py-2 border-t border-zinc-900/60 text-[10px] font-semibold flex items-center gap-1.5 ${textColor}`}>
+        {hasInvalid ? (
+          <><span className="text-rose-400">●</span> All milestone fields must be filled and greater than zero</>
+        ) : isMatch ? (
+          <><span className="text-emerald-400">●</span> Allocations balanced — ready to deploy</>
+        ) : pct > 100 ? (
+          <><span className="text-rose-400">●</span> Over-allocated by {Math.abs(remaining).toLocaleString()} tokens</>
+        ) : (
+          <><span className="text-amber-400">●</span> {remaining.toLocaleString()} tokens unallocated</>
+        )}
+      </div>
+    </div>
+  );
 }
 // ──────────────────────────────────────────────────────────────────────────
