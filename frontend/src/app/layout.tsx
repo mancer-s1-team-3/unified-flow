@@ -1,6 +1,7 @@
 import "./globals.css";
 import { Providers } from "@/components/wallet/provider";
 import { PwaRegister } from "@/components/pwa/pwa-register";
+import { OnboardingProvider } from "@/components/onboarding/onboarding-provider";
 import type { CSSProperties, ReactNode } from "react";
 
 const htmlStyle = {
@@ -12,7 +13,6 @@ const siteDescription =
   "Unified Flow is a Solana token vesting and distribution protocol for linear, cliff, and milestone-based streams with an indexer, dashboard, CLI, and MCP tools.";
 const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || "http://localhost:3000";
 const siteImage = new URL("/logo-512.png", siteUrl).toString();
-
 
 export default function RootLayout({
   children,
@@ -54,7 +54,9 @@ export default function RootLayout({
       </head>
       <body>
         <PwaRegister />
-        <Providers>{children}</Providers>
+        <Providers>
+          <OnboardingProvider>{children}</OnboardingProvider>
+        </Providers>
       </body>
     </html>
   );
