@@ -305,6 +305,7 @@ export default function Home({ initialStreams = [] }: Props) {
     if (!onboardingActive) return;
     const target = getTargetTab();
     if (target) setActiveTab(target as TabId);
+    if (target === "create_streams") setCreateMode("csv");
   }, [onboardingActive, getTargetTab, currentStepIndex]);
   const [nowTs, setNowTs] = useState(() => Math.floor(Date.now() / 1000));
   const [streams, setStreams] = useState<any[]>(initialStreams);
