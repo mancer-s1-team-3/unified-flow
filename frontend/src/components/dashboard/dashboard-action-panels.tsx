@@ -7,6 +7,12 @@ import Image from "next/image";
 import { AlertTriangle, Check, ChevronDown, Shield, Download, Layers, Lock, RefreshCw, Terminal, Upload, XCircle } from "lucide-react";
 import { CsvDiffPanel } from "@/components/dashboard/csv-diff-panel";
 import type { MintPreset } from "@/components/dashboard/token-mints";
+const QUICK_DURATIONS = [
+  { label: "1M", value: 60 * 60 * 24 * 30 },
+  { label: "3M", value: 60 * 60 * 24 * 90 },
+  { label: "6M", value: 60 * 60 * 24 * 180 },
+  { label: "1Y", value: 60 * 60 * 24 * 365 },
+];
 
 // ─── Cancel Confirmation Dialog ───────────────────────────────────────────
 function CancelConfirmDialog({
@@ -805,6 +811,24 @@ export function DashboardActionPanels(props: Props) {
                       style={{ WebkitAppearance: "none" }}
                     />
                   )}
+                  <div className="mt-2 flex flex-wrap gap-2">
+  {QUICK_DURATIONS.map((p) => (
+    <button
+      key={p.label}
+      type="button"
+      onClick={() =>
+        setCreateForm({
+          ...createForm,
+          duration: String(p.value),
+          endDate: "",
+        })
+      }
+      className="px-2.5 py-1 rounded-lg border border-zinc-800 bg-zinc-900 text-[10px] font-black uppercase text-zinc-300 hover:border-indigo-500 hover:text-white transition"
+    >
+      {p.label}
+    </button>
+  ))}
+</div>
                   {durationSeconds > 0 && (
                     <div className="mt-1.5 text-[10px] font-mono text-zinc-500">
                       {durationInputMode === "duration"
@@ -873,6 +897,24 @@ export function DashboardActionPanels(props: Props) {
                       style={{ WebkitAppearance: "none" }}
                     />
                   )}
+                  <div className="mt-2 flex flex-wrap gap-2">
+  {QUICK_DURATIONS.map((p) => (
+    <button
+      key={p.label}
+      type="button"
+      onClick={() =>
+        setCreateForm({
+          ...createForm,
+          cliffDuration: String(p.value),
+          cliffDate: "",
+        })
+      }
+      className="px-2.5 py-1 rounded-lg border border-zinc-800 bg-zinc-900 text-[10px] font-black uppercase text-zinc-300 hover:border-indigo-500 hover:text-white transition"
+    >
+      {p.label}
+    </button>
+  ))}
+</div>
                   {cliffDurationSeconds > 0 && (
                     <div className="mt-1.5 text-[10px] font-mono text-zinc-500">
                       {cliffInputMode === "duration"
@@ -952,7 +994,77 @@ export function DashboardActionPanels(props: Props) {
                   </div>
                 </div>
               )}
+{/* ─── Stream Preview Card ───────────────────────────── */}
+<div className="md:col-span-2 mt-2 rounded-2xl border border-zinc-800 bg-zinc-950/80 overflow-hidden">
+  <div className="px-4 py-3 border-b border-zinc-900 flex items-center justify-between">
+    <div className="flex items-center gap-2">
+      <Terminal className="w-4 h-4 text-indigo-400" />
+      <span className="text-[11px] font-black uppercase tracking-widest text-zinc-400">
+        Stream Preview
+      </span>
+    </div>
 
+    <span className="text-[10px] font-mono text-zinc-500">
+      {clusterLabel}
+    </span>
+  </div>
+
+  <div className="grid gap-3 px-4 py-4 sm:grid-cols-2 text-[11px]">
+    <div>
+      <div className="text-zinc-500">Recipient</div>
+      <div className="font-mono text-zinc-200 truncate">
+        {createForm.recipient || "—"}
+      </div>
+    </div>
+
+    <div>
+      <div className="text-zinc-500">Amount</div>
+      <div className="font-semibold text-zinc-100">
+        {createForm.amount || "0"}
+      </div>
+    </div>
+
+    <div>
+      <div className="text-zinc-500">Mint</div>
+      <div className="font-mono truncate text-zinc-300">
+        {selectedMintPreset?.label || createForm.mint || "—"}
+      </div>
+    </div>
+
+    <div>
+      <div className="text-zinc-500">Schedule</div>
+      <div className="text-zinc-100">
+        {createForm.type === "0"
+          ? "Linear"
+          : createForm.type === "1"
+          ? "Cliff"
+          : "Milestone"}
+      </div>
+    </div>
+
+    {createForm.type !== "2" && (
+      <>
+        <div>
+          <div className="text-zinc-500">Start</div>
+          <div className="font-mono text-zinc-300">
+            {new Date(startDateMs).toLocaleString()}
+          </div>
+        </div>
+
+        <div>
+          <div className="text-zinc-500">Ends</div>
+          <div className="font-mono text-zinc-300">
+            {durationSeconds > 0
+              ? new Date(
+                  startDateMs + durationSeconds * 1000
+                ).toLocaleString()
+              : "—"}
+          </div>
+        </div>
+      </>
+    )}
+  </div>
+</div>
               <button
                 disabled={createDisabled}
                 onClick={() => handleAction("create_stream", createForm)}
@@ -1361,6 +1473,7 @@ export function DashboardActionPanels(props: Props) {
         <div className="flex items-center gap-2 text-indigo-400 font-bold mb-2"><Terminal className="w-4 h-4 shrink-0" /><span>Equivalent CLI / Agent Skill Call</span></div>
         <div className="text-zinc-400 select-all overflow-hidden whitespace-normal break-words py-1 sm:overflow-x-auto sm:whitespace-nowrap sm:break-normal">{activeTab === "create_streams" && <span>{createMode === "manual" ? `$ unified-flow create-stream --recipient ${createForm.recipient || "<address>"} --amount ${createForm.amount} --type ${createForm.type === "0" ? "linear" : createForm.type === "1" ? "milestone" : "cliff"} --duration ${createForm.duration}` : `$ unified-flow create-bulk --csv ./vesting_list.csv --endpoint devnet`}</span>}{activeTab === "edit_csv" && <span>$ unified-flow edit-bulk --csv ./vesting_edits.csv --endpoint devnet</span>}{activeTab === "withdraw" && <span>$ unified-flow claim-tokens --stream {withdrawForm.streamId || "<stream_pda>"}</span>}{activeTab === "cancel" && <span>$ unified-flow cancel-stream --stream {cancelForm.streamId || "<stream_pda>"}</span>}{activeTab === "unlock_milestone" && <span>$ unified-flow unlock-milestone --stream {unlockForm.streamId || "<stream_pda>"}</span>}{activeTab === "edit_milestone" && <span>$ unified-flow edit-milestone --stream {editMilestoneForm.streamId || "<stream_pda>"} --all-indexes</span>}{activeTab === "edit_linear" && <span>$ unified-flow edit-linear --stream {editLinearForm.streamId || "<stream_pda>"} {editLinearForm.newEndDuration ? `--duration ${editLinearForm.newEndDuration}` : ""} {editLinearForm.topupAmount ? `--topup ${editLinearForm.topupAmount}` : ""}</span>}{activeTab === "edit_cliff" && <span>$ unified-flow edit-cliff --stream {editCliffForm.streamId || "<stream_pda>"} --cliff-duration {editCliffForm.newCliffDuration || "<duration_seconds>"}</span>}</div>
       </div>
+      
     </>
   );
 }
