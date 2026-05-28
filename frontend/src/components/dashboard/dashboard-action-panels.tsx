@@ -1064,6 +1064,18 @@ export function DashboardActionPanels(props: Props) {
               : "—"}
           </div>
         </div>
+
+        {createForm.type === "1" && cliffDurationSeconds > 0 && (
+          <div>
+            <div className="text-zinc-500">Cliff Date</div>
+            <div className="font-mono text-amber-300">
+              {cliffDateInLocalIso
+                ? new Date(cliffDateInLocalIso).toLocaleString()
+                : "—"}
+            </div>
+          </div>
+        )}
+
         {/* Withdraw Fee Preview */}
 {/* Withdraw Fee Preview */}
 <div>
