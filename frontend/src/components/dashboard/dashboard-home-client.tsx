@@ -590,6 +590,15 @@ export default function Home({ initialStreams = [] }: Props) {
     setMilestoneAmounts(buildEvenMilestoneAmounts(createForm.amount, count, decimals));
   }, [createForm.amount, createForm.mint, mintPresets]);
 
+  // Re-distribute milestone amounts when total amount or mint changes
+  useEffect(() => {
+    if (createForm.type !== "2") return;
+    const count = parseInt(createForm.milestoneCount, 10);
+    if (Number.isNaN(count) || count <= 0) return;
+    const decimals = mintPresets.find((preset) => preset.mint === createForm.mint)?.decimals ?? 0;
+    setMilestoneAmounts(buildEvenMilestoneAmounts(createForm.amount, count, decimals));
+  }, [createForm.amount, createForm.mint, createForm.type, createForm.milestoneCount, mintPresets]);
+
   // Format Helpers
   const formatDate = (ts: string) => new Date(Number(ts) * 1000).toLocaleString();
   const shorten = (address: string) => address ? `${address.slice(0, 6)}...${address.slice(-6)}` : "";
