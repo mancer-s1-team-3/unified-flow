@@ -120,6 +120,13 @@ exports.Prisma.TransactionIsolationLevel = makeStrictEnum({
   Serializable: 'Serializable'
 });
 
+exports.Prisma.UserScalarFieldEnum = {
+  walletAddress: 'walletAddress',
+  createdAt: 'createdAt',
+  lastActiveAt: 'lastActiveAt',
+  displayName: 'displayName'
+};
+
 exports.Prisma.StreamScalarFieldEnum = {
   id: 'id',
   creator: 'creator',
@@ -191,6 +198,7 @@ exports.Prisma.JsonNullValueFilter = {
 
 
 exports.Prisma.ModelName = {
+  User: 'User',
   Stream: 'Stream',
   Transaction: 'Transaction',
   CsvUpload: 'CsvUpload'
