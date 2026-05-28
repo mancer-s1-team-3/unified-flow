@@ -3,6 +3,7 @@ import { Providers } from "@/components/wallet/provider";
 import { PwaRegister } from "@/components/pwa/pwa-register";
 import { OnboardingProvider } from "@/components/onboarding/onboarding-provider";
 import { WalletUserSync } from "@/components/wallet/wallet-user-sync";
+import { NotificationToastStack } from "@/components/dashboard/notification-banner";
 import type { CSSProperties, ReactNode } from "react";
 
 const htmlStyle = {
@@ -57,6 +58,7 @@ export default function RootLayout({
         <PwaRegister />
         <Providers>
           <WalletUserSync />
+          <NotificationToastStack className="top-20" />
           <OnboardingProvider>{children}</OnboardingProvider>
         </Providers>
       </body>

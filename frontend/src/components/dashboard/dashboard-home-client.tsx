@@ -7,7 +7,6 @@ import { CheckCircle2, Copy, Check, X, ExternalLink } from "lucide-react";
 import { api } from "@/lib/api";
 import { useClusterState, useWalletConnection } from "@solana/react-hooks";
 import { DashboardSidebar } from "@/components/dashboard/dashboard-sidebar";
-import { NotificationToastStack } from "@/components/dashboard/notification-banner";
 import { StreamDetailsDrawer } from "@/components/dashboard/stream-details-drawer";
 import { DashboardStreamsPanel } from "@/components/dashboard/dashboard-streams-panel";
 import { ChatbotWidget } from "@/components/dashboard/chatbot-widget";
@@ -1141,8 +1140,6 @@ export default function Home({ initialStreams = [] }: Props) {
       {/* Background Decorative Glow */}
       <div className="hidden md:block absolute top-0 left-1/4 w-[500px] h-[500px] bg-indigo-950/20 rounded-full blur-[140px] pointer-events-none" />
       <div className="hidden md:block absolute bottom-0 right-1/4 w-[600px] h-[600px] bg-purple-950/15 rounded-full blur-[160px] pointer-events-none" />
-
-      <NotificationToastStack />
 
       {createStreamSuccess && (
         <CreateStreamSuccessModal

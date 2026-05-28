@@ -211,7 +211,11 @@ const SingleToast = memo(function SingleToast({
 
 const MAX_VISIBLE_TOASTS = 3;
 
-export const NotificationToastStack = memo(function NotificationToastStack() {
+export const NotificationToastStack = memo(function NotificationToastStack({
+  className,
+}: {
+  className?: string;
+}) {
   const { notifications, activeToastIds, dismissToast } = useNotifications();
 
   const activeToasts = activeToastIds
@@ -222,7 +226,7 @@ export const NotificationToastStack = memo(function NotificationToastStack() {
   if (activeToasts.length === 0) return null;
 
   return (
-    <div className="fixed top-5 right-5 z-[80] w-full max-w-sm flex flex-col gap-2 pointer-events-none">
+    <div className={`fixed right-5 z-[80] w-full max-w-sm flex flex-col gap-2 pointer-events-none ${className ?? "top-5"}`}>
       {activeToasts.map((n) => (
         <div key={n.id} className="pointer-events-auto">
           <SingleToast notification={n} onDismiss={dismissToast} />
