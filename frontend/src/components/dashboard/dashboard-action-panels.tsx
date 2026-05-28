@@ -363,7 +363,10 @@ export function DashboardActionPanels(props: Props) {
   const [cliffInputMode, setCliffInputMode] = useState<"duration" | "date">("duration");
   const [durationInputMode, setDurationInputMode] = useState<"duration" | "date">("duration");
   const feeEstimate = useFeeEstimate();
-
+  const withdrawFeeUsd =
+  feeEstimate.solCost && feeEstimate.solPrice
+    ? feeEstimate.solCost * feeEstimate.solPrice
+    : null;
   // ─── FIX: Auto-populate startDate with a future default when type is non-milestone ───
   useEffect(() => {
     if (createForm.type === "2") return;
@@ -1061,6 +1064,45 @@ export function DashboardActionPanels(props: Props) {
               : "—"}
           </div>
         </div>
+        {/* Withdraw Fee Preview */}
+{/* Withdraw Fee Preview */}
+<div>
+  <div className="text-zinc-500">
+    Withdraw Fee
+  </div>
+
+  {feeEstimate.loading ? (
+    <div className="font-mono text-zinc-500 animate-pulse">
+      fetching...
+    </div>
+  ) : feeEstimate.error || !feeEstimate.solCost ? (
+    <div className="font-mono text-zinc-500">
+      unavailable
+    </div>
+  ) : (
+    <>
+      <div className="flex items-center gap-2 flex-wrap">
+        <span className="font-semibold text-amber-300">
+          ${withdrawFeeUsd?.toFixed(2)}
+        </span>
+
+        <span className="text-[10px] text-zinc-500 font-mono">
+          ◎ {feeEstimate.solCost.toFixed(6)} SOL
+        </span>
+      </div>
+
+      {feeEstimate.solPrice && (
+        <div className="mt-1 text-[9px] text-zinc-600 font-mono">
+          @ ${feeEstimate.solPrice.toFixed(2)} / SOL
+        </div>
+      )}
+
+      <div className="mt-1 text-[9px] text-zinc-600">
+        charged on every withdraw call
+      </div>
+    </>
+  )}
+</div>
       </>
     )}
   </div>
