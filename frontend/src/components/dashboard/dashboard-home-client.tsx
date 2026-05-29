@@ -1223,6 +1223,7 @@ export default function Home({ initialStreams = [] }: Props) {
                 isStreamCsvCreated={isStreamCsvCreated}
                 activeTxAction={activeTxAction}
                 activeTxPhase={activeTxPhase}
+                connected={!!connected}
               />
             )}
 
