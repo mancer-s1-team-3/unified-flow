@@ -1146,7 +1146,7 @@ export function DashboardActionPanels(props: Props) {
                 className={`md:col-span-2 w-full mt-4 text-white font-bold text-xs py-3 rounded-xl transition-all shadow-lg flex items-center justify-center gap-2 ${createDisabled ? "bg-zinc-800 text-zinc-500 cursor-not-allowed shadow-none" : "bg-indigo-600 hover:bg-indigo-700 hover:shadow-indigo-500/20"}`}
               >
                 {activeTxAction === "create_stream" && activeTxPhase ? <RefreshCw className="w-4 h-4 animate-spin" /> : null}
-                {getTxLabel("create_stream", "Simulate / Deploy Stream")}
+                {getTxLabel("create_stream", "Deploy Stream")}
               </button>
             </div>
           ) : (
