@@ -308,6 +308,7 @@ type Props = {
   isStreamCsvCreated: (id: string) => boolean;
   activeTxAction: string | null;
   activeTxPhase: "wallet_approval" | "sending" | "confirming" | null;
+  connected: boolean;
 };
 
 export function DashboardActionPanels(props: Props) {
@@ -356,6 +357,7 @@ export function DashboardActionPanels(props: Props) {
     isStreamCsvCreated,
     activeTxAction,
     activeTxPhase,
+    connected,
   } = props;
 
   const mintPickerRef = useRef<HTMLDivElement | null>(null);
@@ -505,6 +507,7 @@ export function DashboardActionPanels(props: Props) {
     (createForm.type === "2" ? Boolean(createForm.milestoneCount?.trim()) : Boolean(createForm.duration?.trim())) &&
     (createForm.type !== "1" || Boolean(createForm.cliffDuration?.trim()));
   const createDisabled =
+    !connected ||
     !createRequiredValid ||
     startDateInPast ||
     cliffExceedsDuration ||
