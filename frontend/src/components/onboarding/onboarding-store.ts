@@ -71,10 +71,11 @@ export const ONBOARDING_STEPS: OnboardingStepMeta[] = [
     number: 5,
     title: "Bulk Edit CSV",
     description:
-      "Use Bulk Edit CSV to update your stream data in one place and review the changes before proceeding.",
-    highlight: "Edit and review your stream data",
+      "Open Bulk Edit CSV to update stream details in one place. You can edit milestone index amount, adjust cliff and linear duration, and top up token linear stream allocations before proceeding.",
+    highlight: "Update milestone, duration, and token allocations",
     action: "Go to Bulk Edit CSV",
   },
+
 
 ];
 
