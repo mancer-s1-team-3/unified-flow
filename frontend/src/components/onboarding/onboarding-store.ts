@@ -41,12 +41,13 @@ export const ONBOARDING_STEPS: OnboardingStepMeta[] = [
   {
     id: "create_stream",
     number: 2,
-    title: "Create a Test Stream",
+    title: "Create a Stream",
     description:
-      'Navigate to "Create Stream" in the sidebar and set up a small token vesting stream. You can use linear, cliff, or milestone types.',
-    highlight: "Create your first token vesting stream",
+      'Navigate to "Create Stream" in the sidebar, download the CSV template, then upload your file or edit allocations directly in the editor. Choose the vesting type that fits your distribution: (0) Linear (tokens unlock gradually over time), (1) Cliff (tokens unlock on a specific date), or (2) Milestone (tokens unlock when milestones are completed).',
+    highlight: "Create your first token vesting stream with CSV",
     action: "Go to Create Stream",
   },
+
   {
     id: "view_stream",
     number: 3,
