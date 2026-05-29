@@ -9,14 +9,14 @@ export type OnboardingStep =
   | "create_stream"
   | "view_stream"
   | "withdraw_cancel"
-  | "export_csv";
+  | "bulk_edit_csv";
 
 const STEP_ORDER: OnboardingStep[] = [
   "connect_wallet",
   "create_stream",
   "view_stream",
   "withdraw_cancel",
-  "export_csv",
+  "bulk_edit_csv",
 ];
 
 export interface OnboardingStepMeta {
@@ -67,14 +67,15 @@ export const ONBOARDING_STEPS: OnboardingStepMeta[] = [
     action: "Try Withdraw",
   },
   {
-    id: "export_csv",
+    id: "bulk_edit_csv",
     number: 5,
-    title: "Export CSV & Review",
+    title: "Bulk Edit CSV",
     description:
-      "Use the Bulk Edit CSV feature to export your stream data. Review the full workflow you just completed — you're ready to go!",
-    highlight: "Export data and review what you learned",
+      "Use Bulk Edit CSV to update your stream data in one place and review the changes before proceeding.",
+    highlight: "Edit and review your stream data",
     action: "Go to Bulk Edit CSV",
   },
+
 ];
 
 interface OnboardingState {
@@ -167,7 +168,7 @@ export const useOnboarding = create<OnboardingState>((set, get) => ({
         return "streams";
       case "withdraw_cancel":
         return "withdraw";
-      case "export_csv":
+      case "bulk_edit_csv":
         return "edit_csv";
       default:
         return null;
