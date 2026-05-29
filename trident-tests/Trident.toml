@@ -1,0 +1,8 @@
+[fuzz.metrics]
+enabled = true
+
+
+[[fuzz.programs]]
+address = "8M5yieUh7pxwUi1YBByDF82nqoorZwaKi8dBoMVpurFa"
+program = "../target/deploy/solana_program.so"
+ 
