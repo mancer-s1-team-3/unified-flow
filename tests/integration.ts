@@ -10,6 +10,10 @@ import {
     Transaction,
 } from "@solana/web3.js";
 import {
+    getTransferSolInstruction,
+} from "@solana-program/system";
+import { address, appendTransactionMessageInstructions, createKeyPairSignerFromBytes, createTransactionMessage, lamports, setTransactionMessageFeePayerSigner, setTransactionMessageLifetimeUsingBlockhash, signTransactionMessageWithSigners } from "@solana/kit"
+import {
     MINT_SIZE,
     createInitializeMintInstruction,
     createMintToInstruction,
@@ -477,4 +481,327 @@ describe("integration-and-edge-cases", () => {
             "NothingToWithdraw"
         );
     });
+
+    // ══════════════════════════════════════════════════════════════════════════
+    // 7. Full flow pakai LiteSVM pure (tanpa anchor-bankrun)
+    // ══════════════════════════════════════════════════════════════════════════
+    it("full flow: create_stream -> wait 50% -> withdraw -> verify balance (LiteSVM)", async () => {
+        // ── Setup SVM ──────────────────────────────────────────────────────────
+        const lsvm = new LiteSVM();
+
+        // Load program .so dari hasil build
+        const programId = new PublicKey(IDL.address);
+        const programBytes = require("fs").readFileSync(
+            "./target/deploy/solana_program.so"
+        );
+        lsvm.addProgram(address(programId.toBase58()), new Uint8Array(programBytes));
+
+        // ── Keypairs & airdrop ─────────────────────────────────────────────────
+        const lAdmin = Keypair.generate();
+        const lCreator = Keypair.generate();
+        const lRecipient = Keypair.generate();
+
+        lsvm.airdrop(address(lAdmin.publicKey.toBase58()), lamports(100_000_000_000n));
+        lsvm.airdrop(address(lCreator.publicKey.toBase58()), lamports(100_000_000_000n));
+        lsvm.airdrop(address(lRecipient.publicKey.toBase58()), lamports(100_000_000_000n));
+
+        // ── Helper: kirim transaction via LiteSVM ──────────────────────────────
+        async function sendTxLsvm(
+            payer: Keypair,
+            ixs: anchor.web3.TransactionInstruction[],
+            signers: Keypair[] = []
+        ) {
+            // Buat map address -> signer untuk semua keypair yang ikut sign
+            const allKeypairs = [payer, ...signers];
+            const signerMap = new Map<string, Awaited<ReturnType<typeof createKeyPairSignerFromBytes>>>();
+            for (const kp of allKeypairs) {
+                const s = await createKeyPairSignerFromBytes(kp.secretKey);
+                signerMap.set(kp.publicKey.toBase58(), s);
+            }
+
+            const payerSigner = signerMap.get(payer.publicKey.toBase58())!;
+
+            // Convert instructions: kalau account adalah signer yang kita punya keypair-nya,
+            // inject TransactionSigner object supaya signTransactionMessageWithSigners tahu siapa yang harus sign
+            const kitIxs = ixs.map(ix => ({
+                programAddress: address(ix.programId.toBase58()),
+                accounts: ix.keys.map(k => {
+                    const addrStr = k.pubkey.toBase58();
+                    const role =
+                        k.isSigner && k.isWritable ? 3
+                            : k.isSigner ? 2
+                                : k.isWritable ? 1
+                                    : 0;
+
+                    // Kalau account ini adalah signer yang kita punya, inject signer object-nya
+                    if ((role === 2 || role === 3) && signerMap.has(addrStr)) {
+                        return {
+                            address: address(addrStr),
+                            role,
+                            signer: signerMap.get(addrStr)!,
+                        };
+                    }
+
+                    return {
+                        address: address(addrStr),
+                        role,
+                    };
+                }),
+                data: new Uint8Array(ix.data),
+            }));
+
+            const blockhash = lsvm.latestBlockhash();
+
+            const txMsg = appendTransactionMessageInstructions(
+                kitIxs,
+                setTransactionMessageFeePayerSigner(
+                    payerSigner,
+                    setTransactionMessageLifetimeUsingBlockhash(
+                        { blockhash, lastValidBlockHeight: 999999999n },
+                        createTransactionMessage({ version: 0 })
+                    )
+                )
+            );
+
+            const signedTx = await signTransactionMessageWithSigners(txMsg);
+
+            const result = lsvm.sendTransaction(signedTx);
+            if (result && "err" in result && result.err) {
+                throw new Error(
+                    `Transaction failed: ${JSON.stringify(result.err)}\nLogs: ${(result as any).logs?.join("\n")}`
+                );
+            }
+            return result;
+        }
+        // ── Helper: set clock di LiteSVM ───────────────────────────────────────
+        // LiteSVM tidak punya setClock, workaround: override SysvarC1ock account
+        function setLsvmClock(unixTs: number) {
+            // Sysvar Clock layout (40 bytes):
+            // slot (u64) + epoch_start_slot (u64) + epoch (u64) + leader_schedule_epoch (u64) + unix_timestamp (i64)
+            const clockData = Buffer.alloc(40, 0);
+            clockData.writeBigInt64LE(BigInt(unixTs), 32); // unix_timestamp di offset 32
+            lsvm.setAccount({
+                address: address("SysvarC1ock11111111111111111111111111111111"),
+                lamports: lamports(1000000n),
+                data: new Uint8Array(clockData),
+                programAddress: address("Sysvar1111111111111111111111111111111111111"),
+                executable: false,
+                space: 0n
+            });
+        }
+
+        // ── Mock Chainlink feed ────────────────────────────────────────────────
+        function setLsvmFeed(unixTs: number) {
+            const feedData = buildFeedData(PRICE_RAW, PRICE_DECIMALS, unixTs);
+            lsvm.setAccount({
+                address: address(SOL_USD_FEED.toBase58()),
+                lamports: lamports(1000000000n),
+                data: new Uint8Array(feedData),
+                programAddress: address(CHAINLINK_PROGRAM_ID.toBase58()),
+                executable: false,
+                space: 0n
+            });
+        }
+
+        // ── Helper: baca token balance dari raw account data ───────────────────
+        function getLsvmTokenBalance(ata: PublicKey): bigint {
+            const acc = lsvm.getAccount(address(ata.toBase58()));
+            if (!acc || !acc.exists) return 0n;
+            return Buffer.from(acc.data).readBigUInt64LE(64);
+        }
+
+        function getLsvmSolBalance(pubkey: PublicKey): bigint {
+            const bal = lsvm.getBalance(address(pubkey.toBase58()));
+            return bal != null ? BigInt(bal) : 0n;
+        }
+
+        // ── PDAs ───────────────────────────────────────────────────────────────
+        const [lConfigPda] = PublicKey.findProgramAddressSync(
+            [Buffer.from("config")],
+            programId
+        );
+        const [lFeeVaultPda] = PublicKey.findProgramAddressSync(
+            [Buffer.from("fee_vault")],
+            programId
+        );
+
+        // ── Set waktu awal & feed ──────────────────────────────────────────────
+        setLsvmClock(BASE_NOW);
+        setLsvmFeed(BASE_NOW);
+
+        // ── Buat provider Anchor yang pakai LiteSVM sebagai connection ─────────
+        // Kita buat Connection palsu yang forward ke lsvm untuk Anchor Program
+        // Tapi karena LiteSVM tidak punya RPC server, kita pakai BankrunProvider
+        // yang sudah ada dari `context` (shared setup) HANYA untuk build IX,
+        // lalu kirim manual via lsvm.
+        //
+        // Approach: gunakan program.methods(...).instruction() untuk dapat IX,
+        // lalu sendTxLsvm() untuk eksekusi.
+
+        // ── initialize_config ──────────────────────────────────────────────────
+        const initConfigIx = await program.methods
+            .initializeConfig()
+            .accountsStrict({
+                admin: lAdmin.publicKey,
+                config: lConfigPda,
+                systemProgram: SystemProgram.programId,
+            })
+            .instruction();
+
+        await sendTxLsvm(lAdmin, [initConfigIx], []);
+
+        // ── Buat mint ──────────────────────────────────────────────────────────
+        const lMintKp = Keypair.generate();
+        const MINT_RENT = 1_461_600n; // lamports rent-exempt untuk MINT_SIZE
+
+        await sendTxLsvm(
+            lAdmin,
+            [
+                SystemProgram.createAccount({
+                    fromPubkey: lAdmin.publicKey,
+                    newAccountPubkey: lMintKp.publicKey,
+                    space: MINT_SIZE,
+                    lamports: Number(MINT_RENT),
+                    programId: TOKEN_PROGRAM_ID,
+                }),
+                createInitializeMintInstruction(
+                    lMintKp.publicKey,
+                    6,
+                    lAdmin.publicKey,
+                    null
+                ),
+            ],
+            [lMintKp]
+        );
+
+        // ── Buat ATA creator & mint token ──────────────────────────────────────
+        const lCreatorAta = getAssociatedTokenAddressSync(
+            lMintKp.publicKey,
+            lCreator.publicKey,
+            true,
+            TOKEN_PROGRAM_ID
+        );
+        await sendTxLsvm(lAdmin, [
+            createAssociatedTokenAccountIdempotentInstruction(
+                lAdmin.publicKey,
+                lCreatorAta,
+                lCreator.publicKey,
+                lMintKp.publicKey,
+                TOKEN_PROGRAM_ID,
+                ASSOCIATED_TOKEN_PROGRAM_ID
+            ),
+        ]);
+        await sendTxLsvm(lAdmin, [
+            createMintToInstruction(
+                lMintKp.publicKey,
+                lCreatorAta,
+                lAdmin.publicKey,
+                TOKEN_AMOUNT
+            ),
+        ]);
+
+        // ── Buat ATA recipient ─────────────────────────────────────────────────
+        const lRecipientAta = getAssociatedTokenAddressSync(
+            lMintKp.publicKey,
+            lRecipient.publicKey,
+            true,
+            TOKEN_PROGRAM_ID
+        );
+        await sendTxLsvm(lAdmin, [
+            createAssociatedTokenAccountIdempotentInstruction(
+                lAdmin.publicKey,
+                lRecipientAta,
+                lRecipient.publicKey,
+                lMintKp.publicKey,
+                TOKEN_PROGRAM_ID,
+                ASSOCIATED_TOKEN_PROGRAM_ID
+            ),
+        ]);
+
+        // ── create_stream ──────────────────────────────────────────────────────
+        const lNonce = new BN(99999); // nonce unik untuk test ini
+        const lStartTs = BASE_NOW;
+        const lEndTs = BASE_NOW + STREAM_DURATION;
+
+        const [lStreamPda] = PublicKey.findProgramAddressSync(
+            [
+                Buffer.from("stream"),
+                lCreator.publicKey.toBuffer(),
+                lRecipient.publicKey.toBuffer(),
+                Buffer.from(lNonce.toArrayLike(Buffer, "le", 8)),
+            ],
+            programId
+        );
+
+        const lVaultAta = getAssociatedTokenAddressSync(
+            lMintKp.publicKey,
+            lStreamPda,
+            true,
+            TOKEN_PROGRAM_ID
+        );
+
+        const createStreamIx = await program.methods
+            .createStream(
+                new BN(TOKEN_AMOUNT),
+                new BN(lStartTs),
+                new BN(lStartTs),
+                new BN(lEndTs),
+                0,
+                [],
+                lNonce
+            )
+            .accountsStrict({
+                creator: lCreator.publicKey,
+                recipient: lRecipient.publicKey,
+                mint: lMintKp.publicKey,
+                stream: lStreamPda,
+                vault: lVaultAta,
+                creatorTokenAccount: lCreatorAta,
+                config: lConfigPda,
+                tokenProgram: TOKEN_PROGRAM_ID,
+                associatedTokenProgram: ASSOCIATED_TOKEN_PROGRAM_ID,
+                systemProgram: SystemProgram.programId,
+            })
+            .instruction();
+
+        await sendTxLsvm(lCreator, [createStreamIx], []);
+
+        // ── Warp ke 50% ───────────────────────────────────────────────────────
+        const lMidTs = lStartTs + Math.floor((lEndTs - lStartTs) / 2);
+        setLsvmClock(lMidTs);
+        setLsvmFeed(lMidTs);
+
+        // ── Withdraw ───────────────────────────────────────────────────────────
+        const tokenBefore = getLsvmTokenBalance(lRecipientAta);
+        const feeVaultBefore = getLsvmSolBalance(lFeeVaultPda);
+
+        const withdrawIx = await program.methods
+            .withdraw()
+            .accountsStrict({
+                recipient: lRecipient.publicKey,
+                stream: lStreamPda,
+                mint: lMintKp.publicKey,
+                vault: lVaultAta,
+                recipientAta: lRecipientAta,
+                feeVault: lFeeVaultPda,
+                config: lConfigPda,
+                chainlinkFeed: SOL_USD_FEED,
+                tokenProgram: TOKEN_PROGRAM_ID,
+                systemProgram: SystemProgram.programId,
+            })
+            .instruction();
+
+        await sendTxLsvm(lRecipient, [withdrawIx], []);
+
+        // ── Verify ─────────────────────────────────────────────────────────────
+        const tokenAfter = getLsvmTokenBalance(lRecipientAta);
+        const feeVaultAfter = getLsvmSolBalance(lFeeVaultPda);
+
+        const expectedTokens = Math.floor(TOKEN_AMOUNT / 2);
+        expect(Number(tokenAfter - tokenBefore)).to.be.closeTo(expectedTokens, 1);
+        const feeVaultDiff = BigInt(feeVaultAfter) - BigInt(feeVaultBefore);
+        expect(Number(feeVaultDiff)).to.equal(EXPECTED_FEE_LAMPORTS);
+    });
 });
+
+
