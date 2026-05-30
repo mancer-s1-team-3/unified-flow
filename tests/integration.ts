@@ -9,9 +9,7 @@ import {
     SystemProgram,
     Transaction,
 } from "@solana/web3.js";
-import {
-    getTransferSolInstruction,
-} from "@solana-program/system";
+
 import { address, appendTransactionMessageInstructions, createKeyPairSignerFromBytes, createTransactionMessage, lamports, setTransactionMessageFeePayerSigner, setTransactionMessageLifetimeUsingBlockhash, signTransactionMessageWithSigners } from "@solana/kit"
 import {
     MINT_SIZE,
@@ -574,20 +572,10 @@ describe("integration-and-edge-cases", () => {
             return result;
         }
         // ── Helper: set clock di LiteSVM ───────────────────────────────────────
-        // LiteSVM tidak punya setClock, workaround: override SysvarC1ock account
         function setLsvmClock(unixTs: number) {
-            // Sysvar Clock layout (40 bytes):
-            // slot (u64) + epoch_start_slot (u64) + epoch (u64) + leader_schedule_epoch (u64) + unix_timestamp (i64)
-            const clockData = Buffer.alloc(40, 0);
-            clockData.writeBigInt64LE(BigInt(unixTs), 32); // unix_timestamp di offset 32
-            lsvm.setAccount({
-                address: address("SysvarC1ock11111111111111111111111111111111"),
-                lamports: lamports(1000000n),
-                data: new Uint8Array(clockData),
-                programAddress: address("Sysvar1111111111111111111111111111111111111"),
-                executable: false,
-                space: 0n
-            });
+            const clock = lsvm.getClock();
+            clock.unixTimestamp = BigInt(unixTs);
+            lsvm.setClock(clock);
         }
 
         // ── Mock Chainlink feed ────────────────────────────────────────────────
