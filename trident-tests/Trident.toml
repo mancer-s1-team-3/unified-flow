@@ -1,5 +1,6 @@
 [fuzz.metrics]
 enabled = true
+
 [fuzz.coverage]
 enable = true               # default: false
 server_port = 58432         # default: 58432
