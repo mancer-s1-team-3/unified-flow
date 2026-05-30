@@ -219,14 +219,16 @@ pub fn create_stream<'info>(
                 ErrorCode::InvalidMilestonePda
             );
 
-            let space = 8 + MilestoneAccount::INIT_SPACE;
+              let space = 8_usize
+      .checked_add(MilestoneAccount::INIT_SPACE)
+      .ok_or(ErrorCode::MathOverflow)?;
             let rent = Rent::get()?;
             let required_lamports = rent.minimum_balance(space);
             
             //Cek saldo saat ini, jika kurang baru top-up (Anti-DoS)
             let current_lamports = milestone_info.lamports();
             if current_lamports < required_lamports {
-                let diff = required_lamports.checked_sub(current_lamports).unwrap();
+                let diff = required_lamports.checked_sub(current_lamports).ok_or(ErrorCode::MathOverflow)?;
                 anchor_lang::system_program::transfer(
                     CpiContext::new(
                         ctx.accounts.system_program.to_account_info(),

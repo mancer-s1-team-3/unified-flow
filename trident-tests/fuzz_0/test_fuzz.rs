@@ -143,17 +143,17 @@ impl FuzzTest {
         let (amount, start_ts, cliff_ts, end_ts, milestones, remaining) = match vesting_type {
             0 => {
                 let amount: u64 = self.trident.random_from_range(1..=1_000_000_000);
-                let start_ts = now + self.trident.random_from_range(1..=3600i64);
+                let start_ts = now.checked_add(self.trident.random_from_range(1..=3600i64)).unwrap();
                 let duration = self.trident.random_from_range(60..=86400i64);
-                (amount, start_ts, start_ts, start_ts + duration, vec![], vec![])
+                (amount, start_ts, start_ts, start_ts.checked_add( duration).unwrap(), vec![], vec![])
             }
             1 => {
                 let amount: u64 = self.trident.random_from_range(1..=1_000_000_000);
-                let start_ts = now + self.trident.random_from_range(1..=3600i64);
+                let start_ts = now.checked_add(self.trident.random_from_range(1..=3600i64)).unwrap();
                 let duration = self.trident.random_from_range(60..=86400i64);
-                let end_ts = start_ts + duration;
+                let end_ts = start_ts.checked_add( duration).unwrap();
                 let cliff_offset = self.trident.random_from_range(0..=duration);
-                (amount, start_ts, start_ts + cliff_offset, end_ts, vec![], vec![])
+                (amount, start_ts, start_ts.checked_add(cliff_offset).unwrap(), end_ts, vec![], vec![])
             }
             _ => {
                 let cnt: usize = self.trident.random_from_range(1..=5usize);
