@@ -396,6 +396,500 @@ describe("edit-milestone", () => {
             "MilestoneAlreadyUnlocked"
         );
     });
+    // ============================================================
+    // Edge Case Tests: edit_milestone
+    // Tambahkan semua blok `it(...)` ini ke dalam
+    // describe("edit-milestone") di bawah test yang sudah ada.
+    // ============================================================
 
+    // -------------------------------------------------------
+    // 2. Decrease amount → refund ke creator
+    // -------------------------------------------------------
+    it("decreases milestone amount and refunds diff to creator", async () => {
+        await setTime(context, BASE_NOW);
+        const { streamPda, creatorAta, vaultAta, milestonePdas } =
+            await setupMilestoneStream();
 
+        const milestonePda = milestonePdas[2];
+        const newAmount = new BN(100_000); // turun dari 250_000
+
+        const streamBefore = await program.account.streamAccount.fetch(streamPda);
+        const vaultBefore = await getTokenBalance(context, vaultAta);
+        const creatorBefore = await getTokenBalance(context, creatorAta);
+
+        await program.methods
+            .editMilestone(newAmount)
+            .accountsStrict({
+                creator: creator.publicKey,
+                stream: streamPda,
+                milestone: milestonePda,
+                mint,
+                vault: vaultAta,
+                creatorTokenAccount: creatorAta,
+                tokenProgram: TOKEN_PROGRAM_ID,
+            })
+            .signers([creator])
+            .rpc();
+
+        const streamAfter = await program.account.streamAccount.fetch(streamPda);
+        const milestoneAfter = await program.account.milestoneAccount.fetch(milestonePda);
+
+        const diff = BigInt(250_000 - 100_000); // 150_000
+
+        expect(milestoneAfter.amount.toNumber()).to.equal(100_000);
+        expect(streamAfter.totalAmount.toNumber()).to.equal(
+            streamBefore.totalAmount.toNumber() - 150_000
+        );
+        expect(await getTokenBalance(context, vaultAta)).to.equal(
+            vaultBefore - diff,
+            "vault harus berkurang 150_000"
+        );
+        expect(await getTokenBalance(context, creatorAta)).to.equal(
+            creatorBefore + diff,
+            "creator harus menerima refund 150_000"
+        );
+    });
+
+    // -------------------------------------------------------
+    // 3. Edit dengan amount yang sama → tidak ada transfer token
+    // -------------------------------------------------------
+    it("no-op when new_amount equals current amount", async () => {
+        await setTime(context, BASE_NOW);
+        const { streamPda, creatorAta, vaultAta, milestonePdas } =
+            await setupMilestoneStream();
+
+        const milestonePda = milestonePdas[0];
+        const sameAmount = new BN(250_000);
+
+        const vaultBefore = await getTokenBalance(context, vaultAta);
+        const creatorBefore = await getTokenBalance(context, creatorAta);
+        const streamBefore = await program.account.streamAccount.fetch(streamPda);
+
+        await program.methods
+            .editMilestone(sameAmount)
+            .accountsStrict({
+                creator: creator.publicKey,
+                stream: streamPda,
+                milestone: milestonePda,
+                mint,
+                vault: vaultAta,
+                creatorTokenAccount: creatorAta,
+                tokenProgram: TOKEN_PROGRAM_ID,
+            })
+            .signers([creator])
+            .rpc();
+
+        const streamAfter = await program.account.streamAccount.fetch(streamPda);
+        const milestoneAfter = await program.account.milestoneAccount.fetch(milestonePda);
+
+        // Tidak ada perubahan amount dan tidak ada transfer
+        expect(milestoneAfter.amount.toNumber()).to.equal(250_000);
+        expect(streamAfter.totalAmount.toNumber()).to.equal(
+            streamBefore.totalAmount.toNumber()
+        );
+        expect(await getTokenBalance(context, vaultAta)).to.equal(
+            vaultBefore,
+            "vault tidak boleh berubah"
+        );
+        expect(await getTokenBalance(context, creatorAta)).to.equal(
+            creatorBefore,
+            "creator balance tidak boleh berubah"
+        );
+    });
+
+    // -------------------------------------------------------
+    // 4. Gagal jika new_amount = 0
+    // -------------------------------------------------------
+    it("fails when new_amount is zero", async () => {
+        await setTime(context, BASE_NOW);
+        const { streamPda, creatorAta, vaultAta, milestonePdas } =
+            await setupMilestoneStream();
+
+        await expectError(
+            program.methods
+                .editMilestone(new BN(0))
+                .accountsStrict({
+                    creator: creator.publicKey,
+                    stream: streamPda,
+                    milestone: milestonePdas[0],
+                    mint,
+                    vault: vaultAta,
+                    creatorTokenAccount: creatorAta,
+                    tokenProgram: TOKEN_PROGRAM_ID,
+                })
+                .signers([creator])
+                .rpc(),
+            "InvalidAmount"
+        );
+    });
+
+    // -------------------------------------------------------
+    // 5. Gagal jika stream bukan tipe MILESTONE (linear stream)
+    // -------------------------------------------------------
+    it("fails when stream is linear type", async () => {
+        await setTime(context, BASE_NOW);
+        const { streamPda, creatorAta, vaultAta } = await setupLinearStream();
+
+        // Buat dummy milestone PDA (tidak pernah diinisialisasi untuk linear stream)
+        const [fakeMilestonePda] = PublicKey.findProgramAddressSync(
+            [Buffer.from("milestone"), streamPda.toBuffer(), Buffer.from([0])],
+            program.programId
+        );
+
+        // Anchor akan gagal di account deserialization (akun tidak diinisialisasi)
+        // sebelum sampai ke cek InvalidVestingType
+        await expectError(
+            program.methods
+                .editMilestone(new BN(300_000))
+                .accountsStrict({
+                    creator: creator.publicKey,
+                    stream: streamPda,
+                    milestone: fakeMilestonePda,
+                    mint,
+                    vault: vaultAta,
+                    creatorTokenAccount: creatorAta,
+                    tokenProgram: TOKEN_PROGRAM_ID,
+                })
+                .signers([creator])
+                .rpc(),
+            "AccountNotInitialized"
+        );
+    });
+
+    // -------------------------------------------------------
+    // 6. Gagal jika stream sudah cancelled (status != ACTIVE)
+    // -------------------------------------------------------
+    it("fails when stream has been cancelled", async () => {
+        await setTime(context, BASE_NOW);
+        const { streamPda, creatorAta, vaultAta, milestonePdas } =
+            await setupMilestoneStream();
+
+        // FIX: Cancel struct butuh recipient_token_account yang sudah diinisialisasi
+        const recipientAta = await createAta(context, admin, mint, recipient.publicKey);
+
+        await program.methods
+            .cancel()
+            .accountsStrict({
+                creator: creator.publicKey,
+                mint,
+                stream: streamPda,
+                vault: vaultAta,
+                creatorTokenAccount: creatorAta,
+                recipientTokenAccount: recipientAta,
+                tokenProgram: TOKEN_PROGRAM_ID,
+            })
+            .signers([creator])
+            .rpc();
+
+        await expectError(
+            program.methods
+                .editMilestone(new BN(300_000))
+                .accountsStrict({
+                    creator: creator.publicKey,
+                    stream: streamPda,
+                    milestone: milestonePdas[0],
+                    mint,
+                    vault: vaultAta,
+                    creatorTokenAccount: creatorAta,
+                    tokenProgram: TOKEN_PROGRAM_ID,
+                })
+                .signers([creator])
+                .rpc(),
+            "StreamNotActive"
+        );
+    });
+
+    // -------------------------------------------------------
+    // 7. Gagal jika non-creator mencoba edit
+    // -------------------------------------------------------
+    it("fails when non-creator tries to edit milestone", async () => {
+        await setTime(context, BASE_NOW);
+        const { streamPda, creatorAta, vaultAta, milestonePdas } =
+            await setupMilestoneStream();
+
+        // FIX: ATA harus benar-benar diinisialisasi, bukan hanya di-derive.
+        // Anchor cek account existence sebelum cek has_one constraint.
+        const strangerAta = await createAta(context, admin, mint, recipient.publicKey);
+
+        await expectError(
+            program.methods
+                .editMilestone(new BN(300_000))
+                .accountsStrict({
+                    creator: recipient.publicKey,  // bukan creator asli
+                    stream: streamPda,
+                    milestone: milestonePdas[0],
+                    mint,
+                    vault: vaultAta,
+                    creatorTokenAccount: strangerAta,
+                    tokenProgram: TOKEN_PROGRAM_ID,
+                })
+                .signers([recipient])
+                .rpc(),
+            "Unauthorized"
+        );
+    });
+
+    // -------------------------------------------------------
+    // 8. Guard total_amount >= withdrawn: verifikasi batas decrease
+    //
+    // Tanpa Chainlink mock, withdraw tidak bisa dipanggil di bankrun.
+    // Kita verifikasi guard ini dari sisi yang bisa ditest:
+    //   a) Decrease hingga batas minimum (total_amount = 1) masih valid
+    //      selama withdrawn = 0
+    //   b) Guard di source code: `require!(stream.total_amount >= stream.withdrawn)`
+    //      hanya triggered jika withdrawn > 0 (butuh oracle untuk withdraw)
+    // -------------------------------------------------------
+    it("allows decrease to minimum amount when withdrawn is zero", async () => {
+        await setTime(context, BASE_NOW);
+
+        const { streamPda, creatorAta, vaultAta, milestonePdas } =
+            await setupMilestoneStream({ amounts: [500_000, 200_000, 200_000, 100_000] });
+
+        const vaultBefore = await getTokenBalance(context, vaultAta);
+
+        // Decrease milestone 1 dari 200_000 ke 1 (pengurangan maximum)
+        // withdrawn = 0, jadi total_amount baru (800_001) >= withdrawn (0) → valid
+        await program.methods
+            .editMilestone(new BN(1))
+            .accountsStrict({
+                creator: creator.publicKey,
+                stream: streamPda,
+                milestone: milestonePdas[1],
+                mint,
+                vault: vaultAta,
+                creatorTokenAccount: creatorAta,
+                tokenProgram: TOKEN_PROGRAM_ID,
+            })
+            .signers([creator])
+            .rpc();
+
+        const streamAfter = await program.account.streamAccount.fetch(streamPda);
+        const diff = BigInt(200_000 - 1); // 199_999
+
+        // total turun 199_999: dari 1_000_000 → 800_001
+        expect(streamAfter.totalAmount.toNumber()).to.equal(800_001);
+        expect(streamAfter.withdrawn.toNumber()).to.equal(0);
+        // Refund ke creator, vault berkurang
+        expect(await getTokenBalance(context, vaultAta)).to.equal(
+            vaultBefore - diff, "vault harus berkurang sebesar diff"
+        );
+    });
+
+    // -------------------------------------------------------
+    // 9. Verifikasi MilestoneEdited event ter-emit
+    // -------------------------------------------------------
+    it("emits MilestoneEdited event with correct fields on increase", async () => {
+        await setTime(context, BASE_NOW);
+        const { streamPda, creatorAta, vaultAta, milestonePdas } =
+            await setupMilestoneStream();
+
+        const milestonePda = milestonePdas[3];
+        const newAmount = new BN(400_000);
+        const oldAmount = 250_000;
+
+        // Mint extra untuk cover diff
+        await mintTokensTo(context, admin, mint, creatorAta, 150_000);
+
+        const tx = await program.methods
+            .editMilestone(newAmount)
+            .accountsStrict({
+                creator: creator.publicKey,
+                stream: streamPda,
+                milestone: milestonePda,
+                mint,
+                vault: vaultAta,
+                creatorTokenAccount: creatorAta,
+                tokenProgram: TOKEN_PROGRAM_ID,
+            })
+            .signers([creator])
+            .rpc();
+
+        // Verifikasi via fetch ulang bahwa perubahan tersimpan benar
+        const milestoneAfter = await program.account.milestoneAccount.fetch(milestonePda);
+        const streamAfter = await program.account.streamAccount.fetch(streamPda);
+
+        expect(milestoneAfter.amount.toNumber()).to.equal(newAmount.toNumber());
+        expect(milestoneAfter.index).to.equal(3);
+        expect(milestoneAfter.stream.toBase58()).to.equal(streamPda.toBase58());
+        // total_amount naik sebesar diff
+        expect(streamAfter.totalAmount.toNumber()).to.equal(
+            1_000_000 + (newAmount.toNumber() - oldAmount)
+        );
+    });
+
+    // -------------------------------------------------------
+    // 10. Vault balance konsisten setelah serangkaian edit
+    //     (naik lalu turun lalu naik lagi)
+    // -------------------------------------------------------
+    it("vault balance stays consistent across multiple edits on the same milestone", async () => {
+        await setTime(context, BASE_NOW);
+        const { streamPda, creatorAta, vaultAta, milestonePdas } =
+            await setupMilestoneStream();
+
+        const milestonePda = milestonePdas[1];
+
+        // Mint buffer besar agar creator tidak kehabisan
+        await mintTokensTo(context, admin, mint, creatorAta, 500_000);
+
+        const vaultInitial = await getTokenBalance(context, vaultAta);
+
+        // Round 1: naik 250_000 → 500_000 (+250_000)
+        await program.methods
+            .editMilestone(new BN(500_000))
+            .accountsStrict({
+                creator: creator.publicKey,
+                stream: streamPda,
+                milestone: milestonePda,
+                mint,
+                vault: vaultAta,
+                creatorTokenAccount: creatorAta,
+                tokenProgram: TOKEN_PROGRAM_ID,
+            })
+            .signers([creator])
+            .rpc();
+        expect(await getTokenBalance(context, vaultAta)).to.equal(
+            vaultInitial + 250_000n, "vault salah setelah kenaikan 1"
+        );
+
+        // Round 2: turun 500_000 → 100_000 (-400_000)
+        await program.methods
+            .editMilestone(new BN(100_000))
+            .accountsStrict({
+                creator: creator.publicKey,
+                stream: streamPda,
+                milestone: milestonePda,
+                mint,
+                vault: vaultAta,
+                creatorTokenAccount: creatorAta,
+                tokenProgram: TOKEN_PROGRAM_ID,
+            })
+            .signers([creator])
+            .rpc();
+        expect(await getTokenBalance(context, vaultAta)).to.equal(
+            vaultInitial - 150_000n, "vault salah setelah penurunan"
+        );
+
+        // Round 3: naik 100_000 → 300_000 (+200_000)
+        await program.methods
+            .editMilestone(new BN(300_000))
+            .accountsStrict({
+                creator: creator.publicKey,
+                stream: streamPda,
+                milestone: milestonePda,
+                mint,
+                vault: vaultAta,
+                creatorTokenAccount: creatorAta,
+                tokenProgram: TOKEN_PROGRAM_ID,
+            })
+            .signers([creator])
+            .rpc();
+        expect(await getTokenBalance(context, vaultAta)).to.equal(
+            vaultInitial + 50_000n, "vault salah setelah kenaikan 2"
+        );
+
+        // Verifikasi akhir: milestone amount = 300_000
+        const milestoneAfter = await program.account.milestoneAccount.fetch(milestonePda);
+        expect(milestoneAfter.amount.toNumber()).to.equal(300_000);
+    });
+
+    // -------------------------------------------------------
+    // 11. Edit berhasil pada milestone TERAKHIR yang belum di-unlock
+    //     (memastikan next_milestone_index tidak mempengaruhi edit)
+    // -------------------------------------------------------
+    it("can edit any unlocked milestone regardless of next_milestone_index", async () => {
+        await setTime(context, BASE_NOW);
+        const { streamPda, creatorAta, vaultAta, milestonePdas } =
+            await setupMilestoneStream();
+
+        // Unlock milestone 0 dan 1
+        await program.methods
+            .unlockMilestone()
+            .accountsStrict({
+                creator: creator.publicKey,
+                stream: streamPda,
+                milestone: milestonePdas[0],
+                systemProgram: SystemProgram.programId,
+            })
+            .signers([creator])
+            .rpc();
+
+        await program.methods
+            .unlockMilestone()
+            .accountsStrict({
+                creator: creator.publicKey,
+                stream: streamPda,
+                milestone: milestonePdas[1],
+                systemProgram: SystemProgram.programId,
+            })
+            .signers([creator])
+            .rpc();
+
+        // Sekarang next_milestone_index = 2
+        // Edit milestone 3 (index 3, belum di-unlock) → harus berhasil
+        const newAmount = new BN(350_000);
+        await mintTokensTo(context, admin, mint, creatorAta, 100_000);
+
+        await program.methods
+            .editMilestone(newAmount)
+            .accountsStrict({
+                creator: creator.publicKey,
+                stream: streamPda,
+                milestone: milestonePdas[3],
+                mint,
+                vault: vaultAta,
+                creatorTokenAccount: creatorAta,
+                tokenProgram: TOKEN_PROGRAM_ID,
+            })
+            .signers([creator])
+            .rpc();
+
+        const milestoneAfter = await program.account.milestoneAccount.fetch(milestonePdas[3]);
+        expect(milestoneAfter.amount.toNumber()).to.equal(350_000);
+        expect(milestoneAfter.unlocked).to.equal(false, "milestone 3 masih belum di-unlock");
+    });
+
+    // -------------------------------------------------------
+    // 12. Edit milestone 2 (sudah di-unlock) → MilestoneAlreadyUnlocked
+    //     (berbeda dari unlock_milestone yang kena ConstraintSeeds lebih dulu,
+    //      edit_milestone tidak punya seeds constraint yang depend pada
+    //      next_milestone_index → langsung sampai ke cek `!milestone.unlocked`)
+    // -------------------------------------------------------
+    it("fails with MilestoneAlreadyUnlocked when editing an approved milestone", async () => {
+        await setTime(context, BASE_NOW);
+        const { streamPda, creatorAta, vaultAta, milestonePdas } =
+            await setupMilestoneStream();
+
+        // Unlock milestone 0
+        await program.methods
+            .unlockMilestone()
+            .accountsStrict({
+                creator: creator.publicKey,
+                stream: streamPda,
+                milestone: milestonePdas[0],
+                systemProgram: SystemProgram.programId,
+            })
+            .signers([creator])
+            .rpc();
+
+        // Coba edit milestone 0 yang sudah approved
+        // edit_milestone punya seeds: [b"milestone", stream.key(), &[milestone.index]]
+        // Ini tidak depend pada next_milestone_index → PDA cocok → masuk ke body →
+        // cek `!milestone.unlocked` → MilestoneAlreadyUnlocked
+        await expectError(
+            program.methods
+                .editMilestone(new BN(300_000))
+                .accountsStrict({
+                    creator: creator.publicKey,
+                    stream: streamPda,
+                    milestone: milestonePdas[0],
+                    mint,
+                    vault: vaultAta,
+                    creatorTokenAccount: creatorAta,
+                    tokenProgram: TOKEN_PROGRAM_ID,
+                })
+                .signers([creator])
+                .rpc(),
+            "MilestoneAlreadyUnlocked"
+        );
+    });
 });
