@@ -1502,6 +1502,736 @@ describe("create-stream", () => {
     expect(await getTokenBalance(context, vaultA)).to.equal(BigInt(amount.toString()));
     expect(await getTokenBalance(context, vaultB)).to.equal(BigInt(amount.toString()));
   });
+  // ============================================================
+  // Edge Case Tests: create_stream
+  // Tambahkan semua blok `it(...)` ini ke dalam
+  // describe("create-stream") di bawah test yang sudah ada.
+  // ============================================================
 
+  // -------------------------------------------------------
+  // 1. Mint dengan decimals = 0 ditolak
+  // -------------------------------------------------------
+  it("Fails when mint decimals is zero", async () => {
+    const zeroDecimalMint = await createTestMint(context, admin, admin.publicKey, 0);
+    const zeroDecimalAta = await createAta(context, admin, zeroDecimalMint, creator.publicKey);
+    await mintTokensTo(context, admin, zeroDecimalMint, zeroDecimalAta, amount.toNumber());
+
+    const nonce = new BN(1100001);
+    const startTs = BASE_NOW + 60;
+    const endTs = startTs + 100;
+
+    await expectError(
+      program.methods
+        .createStream(
+          amount,
+          new BN(startTs),
+          new BN(startTs),
+          new BN(endTs),
+          VESTING_TYPE_LINEAR,
+          [],
+          nonce
+        )
+        .accounts({
+          creator: creator.publicKey,
+          recipient: recipient.publicKey,
+          mint: zeroDecimalMint,
+          creatorTokenAccount: zeroDecimalAta,
+          tokenProgram: TOKEN_PROGRAM_ID,
+        })
+        .signers([creator])
+        .rpc(),
+      "InvalidMintDecimals"
+    );
+  });
+
+  // -------------------------------------------------------
+  // 2. Linear stream tidak boleh punya milestones
+  // -------------------------------------------------------
+  it("Fails when linear stream has non-empty milestones", async () => {
+    const nonce = new BN(1100002);
+    const startTs = BASE_NOW + 60;
+    const endTs = startTs + 100;
+
+    const [streamPDA] = PublicKey.findProgramAddressSync(
+      [
+        Buffer.from("stream"),
+        creator.publicKey.toBuffer(),
+        recipient.publicKey.toBuffer(),
+        nonce.toArrayLike(Buffer, "le", 8),
+      ],
+      program.programId
+    );
+
+    const remainingAccounts = buildMilestoneRemainingAccounts(streamPDA, 2, program.programId);
+
+    await expectError(
+      program.methods
+        .createStream(
+          amount,
+          new BN(startTs),
+          new BN(startTs),
+          new BN(endTs),
+          VESTING_TYPE_LINEAR,
+          [
+            { amount: amount.div(new BN(2)) },
+            { amount: amount.div(new BN(2)) },
+          ],
+          nonce
+        )
+        .accounts({
+          creator: creator.publicKey,
+          recipient: recipient.publicKey,
+          mint,
+          creatorTokenAccount,
+          tokenProgram: TOKEN_PROGRAM_ID,
+        })
+        .remainingAccounts(remainingAccounts)
+        .signers([creator])
+        .rpc(),
+      "InvalidMilestoneCount"
+    );
+  });
+
+  // -------------------------------------------------------
+  // 3. Cliff stream tidak boleh punya milestones
+  // -------------------------------------------------------
+  it("Fails when cliff stream has non-empty milestones", async () => {
+    const nonce = new BN(1100003);
+    const startTs = BASE_NOW + 60;
+    const cliffTs = startTs + 50;
+    const endTs = startTs + 100;
+
+    const [streamPDA] = PublicKey.findProgramAddressSync(
+      [
+        Buffer.from("stream"),
+        creator.publicKey.toBuffer(),
+        recipient.publicKey.toBuffer(),
+        nonce.toArrayLike(Buffer, "le", 8),
+      ],
+      program.programId
+    );
+
+    const remainingAccounts = buildMilestoneRemainingAccounts(streamPDA, 2, program.programId);
+
+    await expectError(
+      program.methods
+        .createStream(
+          amount,
+          new BN(startTs),
+          new BN(cliffTs),
+          new BN(endTs),
+          VESTING_TYPE_CLIFF,
+          [
+            { amount: amount.div(new BN(2)) },
+            { amount: amount.div(new BN(2)) },
+          ],
+          nonce
+        )
+        .accounts({
+          creator: creator.publicKey,
+          recipient: recipient.publicKey,
+          mint,
+          creatorTokenAccount,
+          tokenProgram: TOKEN_PROGRAM_ID,
+        })
+        .remainingAccounts(remainingAccounts)
+        .signers([creator])
+        .rpc(),
+      "InvalidMilestoneCount"
+    );
+  });
+
+  // -------------------------------------------------------
+  // 4. Vesting type tidak valid (nilai > 2)
+  // -------------------------------------------------------
+  it("Fails when vesting type is invalid", async () => {
+    const nonce = new BN(1100004);
+    const startTs = BASE_NOW + 60;
+    const endTs = startTs + 100;
+
+    await expectError(
+      program.methods
+        .createStream(
+          amount,
+          new BN(startTs),
+          new BN(startTs),
+          new BN(endTs),
+          3, // vesting type tidak valid
+          [],
+          nonce
+        )
+        .accounts({
+          creator: creator.publicKey,
+          recipient: recipient.publicKey,
+          mint,
+          creatorTokenAccount,
+          tokenProgram: TOKEN_PROGRAM_ID,
+        })
+        .signers([creator])
+        .rpc(),
+      "InvalidVestingType"
+    );
+  });
+
+  // -------------------------------------------------------
+  // 5. start_ts tepat di `now` masih valid (boundary: start_ts >= now)
+  // -------------------------------------------------------
+  it("Allows stream when startTs equals current time exactly", async () => {
+    const nonce = new BN(1100005);
+    const startTs = BASE_NOW; // tepat sama dengan now
+    const endTs = startTs + 200; // > MIN_STREAM_DURATION (60)
+
+    const [streamPDA] = PublicKey.findProgramAddressSync(
+      [
+        Buffer.from("stream"),
+        creator.publicKey.toBuffer(),
+        recipient.publicKey.toBuffer(),
+        nonce.toArrayLike(Buffer, "le", 8),
+      ],
+      program.programId
+    );
+
+    await program.methods
+      .createStream(
+        amount,
+        new BN(startTs),
+        new BN(startTs),
+        new BN(endTs),
+        VESTING_TYPE_LINEAR,
+        [],
+        nonce
+      )
+      .accounts({
+        creator: creator.publicKey,
+        recipient: recipient.publicKey,
+        mint,
+        creatorTokenAccount,
+        tokenProgram: TOKEN_PROGRAM_ID,
+      })
+      .signers([creator])
+      .rpc();
+
+    const stream = await program.account.streamAccount.fetch(streamPDA);
+    expect(stream.startTs.toNumber()).to.equal(startTs);
+    expect(stream.endTs.toNumber()).to.equal(endTs);
+  });
+
+  // -------------------------------------------------------
+  // 6. Duration tepat MIN_STREAM_DURATION (60s) diterima
+  // -------------------------------------------------------
+  it("Allows stream with duration exactly at minimum (60s)", async () => {
+    const nonce = new BN(1100006);
+    const startTs = BASE_NOW + 60;
+    const endTs = startTs + 60; // tepat 60 detik = MIN_STREAM_DURATION
+
+    const [streamPDA] = PublicKey.findProgramAddressSync(
+      [
+        Buffer.from("stream"),
+        creator.publicKey.toBuffer(),
+        recipient.publicKey.toBuffer(),
+        nonce.toArrayLike(Buffer, "le", 8),
+      ],
+      program.programId
+    );
+
+    await program.methods
+      .createStream(
+        amount,
+        new BN(startTs),
+        new BN(startTs),
+        new BN(endTs),
+        VESTING_TYPE_LINEAR,
+        [],
+        nonce
+      )
+      .accounts({
+        creator: creator.publicKey,
+        recipient: recipient.publicKey,
+        mint,
+        creatorTokenAccount,
+        tokenProgram: TOKEN_PROGRAM_ID,
+      })
+      .signers([creator])
+      .rpc();
+
+    const stream = await program.account.streamAccount.fetch(streamPDA);
+    const duration = stream.endTs.toNumber() - stream.startTs.toNumber();
+    expect(duration).to.equal(60);
+  });
+
+  // -------------------------------------------------------
+  // 7. Duration 59s (satu detik kurang dari minimum) ditolak
+  // -------------------------------------------------------
+  it("Fails when duration is one second below minimum (59s)", async () => {
+    const nonce = new BN(1100007);
+    const startTs = BASE_NOW + 60;
+    const endTs = startTs + 59; // 1 detik kurang dari MIN_STREAM_DURATION
+
+    await expectError(
+      program.methods
+        .createStream(
+          amount,
+          new BN(startTs),
+          new BN(startTs),
+          new BN(endTs),
+          VESTING_TYPE_LINEAR,
+          [],
+          nonce
+        )
+        .accounts({
+          creator: creator.publicKey,
+          recipient: recipient.publicKey,
+          mint,
+          creatorTokenAccount,
+          tokenProgram: TOKEN_PROGRAM_ID,
+        })
+        .signers([creator])
+        .rpc(),
+      "DurationTooShort"
+    );
+  });
+
+  // -------------------------------------------------------
+  // 8. State awal StreamAccount tersimpan benar (linear)
+  //    Verifikasi semua field penting setelah create
+  // -------------------------------------------------------
+  it("Stores all initial StreamAccount fields correctly for linear stream", async () => {
+    const nonce = new BN(1100008);
+    const startTs = BASE_NOW + 60;
+    const endTs = startTs + 200;
+
+    const [streamPDA] = PublicKey.findProgramAddressSync(
+      [
+        Buffer.from("stream"),
+        creator.publicKey.toBuffer(),
+        recipient.publicKey.toBuffer(),
+        nonce.toArrayLike(Buffer, "le", 8),
+      ],
+      program.programId
+    );
+
+    const vault = getAssociatedTokenAddressSync(mint, streamPDA, true, TOKEN_PROGRAM_ID);
+
+    await program.methods
+      .createStream(
+        amount,
+        new BN(startTs),
+        new BN(startTs),
+        new BN(endTs),
+        VESTING_TYPE_LINEAR,
+        [],
+        nonce
+      )
+      .accounts({
+        creator: creator.publicKey,
+        recipient: recipient.publicKey,
+        mint,
+        creatorTokenAccount,
+        tokenProgram: TOKEN_PROGRAM_ID,
+      })
+      .signers([creator])
+      .rpc();
+
+    const stream = await program.account.streamAccount.fetch(streamPDA);
+
+    expect(stream.creator.toBase58()).to.equal(creator.publicKey.toBase58());
+    expect(stream.recipient.toBase58()).to.equal(recipient.publicKey.toBase58());
+    expect(stream.mint.toBase58()).to.equal(mint.toBase58());
+    expect(stream.vault.toBase58()).to.equal(vault.toBase58());
+    expect(stream.totalAmount.toNumber()).to.equal(amount.toNumber());
+    expect(stream.withdrawn.toNumber()).to.equal(0);
+    expect(stream.vestingType).to.equal(VESTING_TYPE_LINEAR);
+    expect(stream.status).to.equal(1); // STREAM_STATUS_ACTIVE
+    expect(stream.cancelable).to.equal(true);
+    expect(stream.cancelled).to.equal(false);
+    expect(stream.milestoneCount).to.equal(0);
+    expect(stream.nextMilestoneIndex).to.equal(0);
+    expect(stream.nonce.toNumber()).to.equal(nonce.toNumber());
+    expect(stream.unlockedMilestoneAmount.toNumber()).to.equal(0);
+  });
+
+  // -------------------------------------------------------
+  // 9. Vault menerima token yang benar setelah create
+  // -------------------------------------------------------
+  it("Vault receives exact token amount after stream creation", async () => {
+    const nonce = new BN(1100009);
+    const startTs = BASE_NOW + 60;
+    const endTs = startTs + 200;
+
+    const [streamPDA] = PublicKey.findProgramAddressSync(
+      [
+        Buffer.from("stream"),
+        creator.publicKey.toBuffer(),
+        recipient.publicKey.toBuffer(),
+        nonce.toArrayLike(Buffer, "le", 8),
+      ],
+      program.programId
+    );
+
+    const vault = getAssociatedTokenAddressSync(mint, streamPDA, true, TOKEN_PROGRAM_ID);
+
+    const creatorBalanceBefore = await getTokenBalance(context, creatorTokenAccount);
+
+    await program.methods
+      .createStream(
+        amount,
+        new BN(startTs),
+        new BN(startTs),
+        new BN(endTs),
+        VESTING_TYPE_LINEAR,
+        [],
+        nonce
+      )
+      .accounts({
+        creator: creator.publicKey,
+        recipient: recipient.publicKey,
+        mint,
+        creatorTokenAccount,
+        tokenProgram: TOKEN_PROGRAM_ID,
+      })
+      .signers([creator])
+      .rpc();
+
+    const vaultBalance = await getTokenBalance(context, vault);
+    const creatorBalanceAfter = await getTokenBalance(context, creatorTokenAccount);
+
+    expect(vaultBalance).to.equal(BigInt(amount.toNumber()), "vault harus menerima exact amount");
+    expect(creatorBalanceAfter).to.equal(
+      creatorBalanceBefore - BigInt(amount.toNumber()),
+      "creator balance harus berkurang sebesar amount"
+    );
+  });
+
+  // -------------------------------------------------------
+  // 10. State awal MilestoneAccount tersimpan benar
+  //     Verifikasi setiap milestone account setelah create
+  // -------------------------------------------------------
+  it("Stores all MilestoneAccount fields correctly after creation", async () => {
+    const nonce = new BN(1100010);
+    const startTs = BASE_NOW + 60;
+    const endTs = BASE_NOW + 86400;
+    const milestoneAmounts = [400_000, 300_000, 200_000, 100_000];
+    const total = milestoneAmounts.reduce((s, v) => s + v, 0);
+
+    const [streamPDA] = PublicKey.findProgramAddressSync(
+      [
+        Buffer.from("stream"),
+        creator.publicKey.toBuffer(),
+        recipient.publicKey.toBuffer(),
+        nonce.toArrayLike(Buffer, "le", 8),
+      ],
+      program.programId
+    );
+
+    const remainingAccounts = buildMilestoneRemainingAccounts(streamPDA, 4, program.programId);
+
+    await program.methods
+      .createStream(
+        new BN(total),
+        new BN(startTs),
+        new BN(startTs),
+        new BN(endTs),
+        VESTING_TYPE_MILESTONE,
+        milestoneAmounts.map((a) => ({ amount: new BN(a) })),
+        nonce
+      )
+      .accounts({
+        creator: creator.publicKey,
+        recipient: recipient.publicKey,
+        mint,
+        creatorTokenAccount,
+        tokenProgram: TOKEN_PROGRAM_ID,
+      })
+      .remainingAccounts(remainingAccounts)
+      .signers([creator])
+      .rpc();
+
+    for (let i = 0; i < 4; i++) {
+      const milestone = await program.account.milestoneAccount.fetch(
+        remainingAccounts[i].pubkey
+      );
+      expect(milestone.stream.toBase58()).to.equal(streamPDA.toBase58(), `milestone[${i}] stream mismatch`);
+      expect(milestone.index).to.equal(i, `milestone[${i}] index salah`);
+      expect(milestone.amount.toNumber()).to.equal(milestoneAmounts[i], `milestone[${i}] amount salah`);
+      expect(milestone.approved).to.equal(false, `milestone[${i}] approved harus false`);
+      expect(milestone.unlocked).to.equal(false, `milestone[${i}] unlocked harus false`);
+      expect(milestone.unlockTs.toNumber()).to.equal(0, `milestone[${i}] unlock_ts harus 0`);
+    }
+
+    const stream = await program.account.streamAccount.fetch(streamPDA);
+    expect(stream.milestoneCount).to.equal(4);
+    expect(stream.nextMilestoneIndex).to.equal(0);
+    expect(stream.unlockedMilestoneAmount.toNumber()).to.equal(0);
+  });
+
+  // -------------------------------------------------------
+  // 11. Milestone stream dengan hanya 1 milestone (minimum valid)
+  // -------------------------------------------------------
+  it("Creates milestone stream with single milestone", async () => {
+    const nonce = new BN(1100011);
+    const startTs = BASE_NOW + 60;
+    const endTs = BASE_NOW + 86400;
+
+    const [streamPDA] = PublicKey.findProgramAddressSync(
+      [
+        Buffer.from("stream"),
+        creator.publicKey.toBuffer(),
+        recipient.publicKey.toBuffer(),
+        nonce.toArrayLike(Buffer, "le", 8),
+      ],
+      program.programId
+    );
+
+    const remainingAccounts = buildMilestoneRemainingAccounts(streamPDA, 1, program.programId);
+
+    await program.methods
+      .createStream(
+        amount,
+        new BN(startTs),
+        new BN(startTs),
+        new BN(endTs),
+        VESTING_TYPE_MILESTONE,
+        [{ amount: amount }],
+        nonce
+      )
+      .accounts({
+        creator: creator.publicKey,
+        recipient: recipient.publicKey,
+        mint,
+        creatorTokenAccount,
+        tokenProgram: TOKEN_PROGRAM_ID,
+      })
+      .remainingAccounts(remainingAccounts)
+      .signers([creator])
+      .rpc();
+
+    const stream = await program.account.streamAccount.fetch(streamPDA);
+    expect(stream.milestoneCount).to.equal(1);
+    expect(stream.vestingType).to.equal(VESTING_TYPE_MILESTONE);
+    expect(stream.totalAmount.toNumber()).to.equal(amount.toNumber());
+
+    const milestone = await program.account.milestoneAccount.fetch(remainingAccounts[0].pubkey);
+    expect(milestone.amount.toNumber()).to.equal(amount.toNumber());
+    expect(milestone.index).to.equal(0);
+  });
+
+  // -------------------------------------------------------
+  // 12. Protocol paused → semua create_stream ditolak
+  // -------------------------------------------------------
+  it("Fails when protocol is paused", async () => {
+    // Pause protocol via set_paused (asumsi ada instruksi ini),
+    // atau langsung modifikasi config account via bankrun
+    // Karena program tidak expose set_paused di IDL yang diberikan,
+    // kita verifikasi guard ini dengan memodifikasi state config via bankrun.
+    // Jika set_paused tersedia, ganti dengan pemanggilan instruksi tersebut.
+
+    const [configPDA] = PublicKey.findProgramAddressSync(
+      [Buffer.from("config")],
+      program.programId
+    );
+
+    // Baca raw config account dan set byte paused = true (offset 8+32+32 = 72)
+    const configAccountInfo = await context.banksClient.getAccount(configPDA);
+    expect(configAccountInfo).to.not.be.null;
+
+    const configData = Buffer.from(configAccountInfo!.data);
+    // Layout ConfigAccount: discriminator(8) + admin_authority(32) + fee_authority(32) + paused(1)
+    const pausedOffset = 8 + 32 + 32;
+    configData[pausedOffset] = 1; // set paused = true
+
+    // Inject modified account ke bankrun context
+    await context.setAccount(configPDA, {
+      lamports: configAccountInfo!.lamports,
+      data: configData,
+      owner: new PublicKey(configAccountInfo!.owner),
+      executable: false,
+    });
+
+    const nonce = new BN(1100012);
+    const startTs = BASE_NOW + 60;
+    const endTs = startTs + 200;
+
+    try {
+      await expectError(
+        program.methods
+          .createStream(
+            amount,
+            new BN(startTs),
+            new BN(startTs),
+            new BN(endTs),
+            VESTING_TYPE_LINEAR,
+            [],
+            nonce
+          )
+          .accounts({
+            creator: creator.publicKey,
+            recipient: recipient.publicKey,
+            mint,
+            creatorTokenAccount,
+            tokenProgram: TOKEN_PROGRAM_ID,
+          })
+          .signers([creator])
+          .rpc(),
+        "ProtocolPaused"
+      );
+    } finally {
+      // Selalu restore paused = false agar test selanjutnya tidak terpengaruh
+      configData[pausedOffset] = 0;
+      await context.setAccount(configPDA, {
+        lamports: configAccountInfo!.lamports,
+        data: configData,
+        owner: new PublicKey(configAccountInfo!.owner),
+        executable: false,
+      });
+    }
+  });
+
+  // -------------------------------------------------------
+  // 13. Creator token account dari wallet berbeda (bukan creator)
+  //     tapi mint-nya sama → InvalidTokenOwner
+  // -------------------------------------------------------
+  it("Fails when creator token account belongs to recipient", async () => {
+    const nonce = new BN(1100013);
+    const startTs = BASE_NOW + 60;
+    const endTs = startTs + 200;
+
+    // recipient punya ATA dengan mint yang sama
+    const recipientAta = getAssociatedTokenAddressSync(mint, recipient.publicKey, true, TOKEN_PROGRAM_ID);
+
+    await expectError(
+      program.methods
+        .createStream(
+          amount,
+          new BN(startTs),
+          new BN(startTs),
+          new BN(endTs),
+          VESTING_TYPE_LINEAR,
+          [],
+          nonce
+        )
+        .accounts({
+          creator: creator.publicKey,
+          recipient: recipient.publicKey,
+          mint,
+          creatorTokenAccount: recipientAta, // ATA milik recipient, bukan creator
+          tokenProgram: TOKEN_PROGRAM_ID,
+        })
+        .signers([creator])
+        .rpc(),
+      "InvalidTokenOwner"
+    );
+  });
+
+  // -------------------------------------------------------
+  // 14. Milestone stream: non-uniform amounts (distribusi tidak rata)
+  //     memastikan sum tetap harus == total_amount
+  // -------------------------------------------------------
+  it("Creates milestone stream with non-uniform milestone amounts", async () => {
+    const nonce = new BN(1100014);
+    const startTs = BASE_NOW + 60;
+    const endTs = BASE_NOW + 86400;
+    // Distribusi tidak rata tapi sum = 1_000_000
+    const milestoneAmounts = [500_000, 300_000, 150_000, 50_000];
+    const total = milestoneAmounts.reduce((s, v) => s + v, 0); // = 1_000_000
+
+    const [streamPDA] = PublicKey.findProgramAddressSync(
+      [
+        Buffer.from("stream"),
+        creator.publicKey.toBuffer(),
+        recipient.publicKey.toBuffer(),
+        nonce.toArrayLike(Buffer, "le", 8),
+      ],
+      program.programId
+    );
+
+    const remainingAccounts = buildMilestoneRemainingAccounts(streamPDA, 4, program.programId);
+
+    await program.methods
+      .createStream(
+        new BN(total),
+        new BN(startTs),
+        new BN(startTs),
+        new BN(endTs),
+        VESTING_TYPE_MILESTONE,
+        milestoneAmounts.map((a) => ({ amount: new BN(a) })),
+        nonce
+      )
+      .accounts({
+        creator: creator.publicKey,
+        recipient: recipient.publicKey,
+        mint,
+        creatorTokenAccount,
+        tokenProgram: TOKEN_PROGRAM_ID,
+      })
+      .remainingAccounts(remainingAccounts)
+      .signers([creator])
+      .rpc();
+
+    const stream = await program.account.streamAccount.fetch(streamPDA);
+    expect(stream.totalAmount.toNumber()).to.equal(total);
+    expect(stream.milestoneCount).to.equal(4);
+
+    // Verifikasi setiap amount tersimpan benar
+    for (let i = 0; i < 4; i++) {
+      const m = await program.account.milestoneAccount.fetch(remainingAccounts[i].pubkey);
+      expect(m.amount.toNumber()).to.equal(milestoneAmounts[i]);
+    }
+  });
+
+  // -------------------------------------------------------
+  // 15. nonce berbeda menghasilkan PDA berbeda untuk pair
+  //     creator-recipient yang sama (properti deterministik)
+  // -------------------------------------------------------
+  it("Different nonces produce unique stream PDAs for same creator-recipient pair", async () => {
+    const startTs = BASE_NOW + 60;
+    const endTs = startTs + 200;
+    const nonces = [new BN(1100015), new BN(1100016), new BN(1100017)];
+
+    const pdas = nonces.map((nonce) => {
+      const [pda] = PublicKey.findProgramAddressSync(
+        [
+          Buffer.from("stream"),
+          creator.publicKey.toBuffer(),
+          recipient.publicKey.toBuffer(),
+          nonce.toArrayLike(Buffer, "le", 8),
+        ],
+        program.programId
+      );
+      return pda;
+    });
+
+    // Semua PDA harus unik
+    const pdaSet = new Set(pdas.map((p) => p.toBase58()));
+    expect(pdaSet.size).to.equal(3, "setiap nonce harus menghasilkan PDA unik");
+
+    // Buat ketiga stream
+    for (const nonce of nonces) {
+      await program.methods
+        .createStream(
+          amount,
+          new BN(startTs),
+          new BN(startTs),
+          new BN(endTs),
+          VESTING_TYPE_LINEAR,
+          [],
+          nonce
+        )
+        .accounts({
+          creator: creator.publicKey,
+          recipient: recipient.publicKey,
+          mint,
+          creatorTokenAccount,
+          tokenProgram: TOKEN_PROGRAM_ID,
+        })
+        .signers([creator])
+        .rpc();
+    }
+
+    // Verifikasi masing-masing stream ada dan independen
+    for (let i = 0; i < 3; i++) {
+      const stream = await program.account.streamAccount.fetch(pdas[i]);
+      expect(stream.nonce.toNumber()).to.equal(nonces[i].toNumber());
+    }
+  });
 
 });
