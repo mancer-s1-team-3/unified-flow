@@ -489,6 +489,11 @@ describe("unlock-milestone", () => {
             .signers([creator])
             .rpc();
 
+        // Advance clock agar blockhash berubah di bankrun.
+        // Tanpa ini, tx kedua (accounts + data identik) menghasilkan signature
+        // yang sama → bankrun reject dengan "already processed".
+        await setTime(context, BASE_NOW + 1);
+
         // Coba unlock milestone 0 lagi:
         // next_milestone_index sudah = 1, Anchor derive PDA dari index 1,
         // tapi kita pass PDA index 0 → ConstraintSeeds
