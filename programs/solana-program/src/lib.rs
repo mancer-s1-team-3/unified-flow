@@ -219,9 +219,9 @@ pub fn create_stream<'info>(
                 ErrorCode::InvalidMilestonePda
             );
 
-              let space = 8_usize
-      .checked_add(MilestoneAccount::INIT_SPACE)
-      .ok_or(ErrorCode::MathOverflow)?;
+            let space = 8_usize
+                .checked_add(MilestoneAccount::INIT_SPACE)
+                .ok_or(ErrorCode::MathOverflow)?;
             let rent = Rent::get()?;
             let required_lamports = rent.minimum_balance(space);
             

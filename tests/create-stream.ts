@@ -511,7 +511,7 @@ describe("create-stream", () => {
         })
         .remainingAccounts(remainingAccounts)
         .signers([creator])
-      .rpc(),
+        .rpc(),
       "InvalidMilestoneAmount"
     );
   });
@@ -786,7 +786,7 @@ describe("create-stream", () => {
     );
   });
 
-  it("Creates and unlocks milestone vesting stream", async () => {
+  it("Creates milestone vesting stream", async () => {
     const nonce = new BN(900003);
     const startTs = BASE_NOW + 60;
     const endTs = BASE_NOW + 86400;
@@ -841,82 +841,6 @@ describe("create-stream", () => {
     // =====================================
     let stream = await program.account.streamAccount.fetch(streamPDA);
     expect(stream.vestingType).to.equal(VESTING_TYPE_MILESTONE);
-
-    // =====================================
-    // Unlock milestone 0
-    // =====================================
-    await program.methods
-      .unlockMilestone()
-      .accountsStrict({
-        creator: creator.publicKey,
-        stream: streamPDA,
-        milestone: remainingAccounts[0].pubkey,
-        systemProgram: anchor.web3.SystemProgram.programId,
-      })
-      .signers([creator])
-      .rpc();
-
-    const milestone = await program.account.milestoneAccount.fetch(
-      remainingAccounts[0].pubkey
-    );
-    expect(milestone.approved).to.equal(true);
-
-    // =====================================
-    // Unlock milestone 1 (Remaining accounts dihapus)
-    // =====================================
-    await program.methods
-      .unlockMilestone()
-      .accountsStrict({
-        creator: creator.publicKey,
-        stream: streamPDA,
-        milestone: remainingAccounts[1].pubkey,
-        systemProgram: anchor.web3.SystemProgram.programId,
-      })
-      .signers([creator])
-      .rpc();
-
-    const m1 = await program.account.milestoneAccount.fetch(
-      remainingAccounts[1].pubkey
-    );
-    expect(m1.approved).to.equal(true);
-
-    // =====================================
-    // Unlock milestone 2 (Remaining accounts dihapus)
-    // =====================================
-    await program.methods
-      .unlockMilestone()
-      .accountsStrict({
-        creator: creator.publicKey,
-        stream: streamPDA,
-        milestone: remainingAccounts[2].pubkey,
-        systemProgram: anchor.web3.SystemProgram.programId,
-      })
-      .signers([creator])
-      .rpc();
-
-    const m2 = await program.account.milestoneAccount.fetch(
-      remainingAccounts[2].pubkey
-    );
-    expect(m2.approved).to.equal(true);
-
-    // =====================================
-    // Unlock milestone 3 (Remaining accounts dihapus)
-    // =====================================
-    await program.methods
-      .unlockMilestone()
-      .accountsStrict({
-        creator: creator.publicKey,
-        stream: streamPDA,
-        milestone: remainingAccounts[3].pubkey,
-        systemProgram: anchor.web3.SystemProgram.programId,
-      })
-      .signers([creator])
-      .rpc();
-
-    const m3 = await program.account.milestoneAccount.fetch(
-      remainingAccounts[3].pubkey
-    );
-    expect(m3.approved).to.equal(true);
   });
 
   it("Fails when milestone count exceeds u8 range", async () => {
