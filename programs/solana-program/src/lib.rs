@@ -1029,6 +1029,10 @@ pub struct EditLinear<'info> {
         associated_token::mint = mint,
         associated_token::authority = stream,
         associated_token::token_program = token_program,
+        constraint = vault.owner == stream.key()
+           @ ErrorCode::InvalidTokenOwner,
+       constraint = vault.mint == mint.key()
+           @ ErrorCode::InvalidMint,
     )]
     pub vault: InterfaceAccount<'info, TokenAccount>,
 
@@ -1081,6 +1085,10 @@ pub struct EditMilestone<'info> {
         associated_token::mint = mint,
         associated_token::authority = stream,
         associated_token::token_program = token_program,
+        constraint = vault.owner == stream.key()
+           @ ErrorCode::InvalidTokenOwner,
+       constraint = vault.mint == mint.key()
+           @ ErrorCode::InvalidMint,
     )]
     pub vault: InterfaceAccount<'info, TokenAccount>,
 
