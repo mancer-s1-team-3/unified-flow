@@ -2390,5 +2390,327 @@ describe("create-stream", () => {
     expect(streamAccountInfo).to.be.null;
   });
 
+  it("[0-SIGNER] create_stream: recipient cannot impersonate creator", async () => {
+    const nonce = new BN(3300001);
+    const startTs = BASE_NOW + 60;
+    const endTs = startTs + 200;
+
+    // recipient sign tapi kita pass recipient sebagai creator
+    // PDA akan di-derive dari recipient key → stream unik baru yang valid secara teknis
+    // tapi constraint creatorTokenAccount.owner == creator.key() akan gagal
+    // karena creatorTokenAccount dimiliki oleh creator asli, bukan recipient
+    const recipientOwnedAta = getAssociatedTokenAddressSync(mint, recipient.publicKey, true, TOKEN_PROGRAM_ID);
+
+    await expectError(
+      program.methods
+        .createStream(amount, new BN(startTs), new BN(startTs), new BN(endTs), VESTING_TYPE_LINEAR, [], nonce)
+        .accounts({
+          creator: recipient.publicKey,    // recipient impersonate creator
+          recipient: creator.publicKey,
+          mint,
+          creatorTokenAccount: recipientOwnedAta,
+          tokenProgram: TOKEN_PROGRAM_ID,
+        })
+        .signers([recipient])
+        .rpc(),
+      "InsufficientBalance"  // recipient ATA kosong → tidak bisa transfer
+    );
+  });
+
+  // -------------------------------------------------------
+  // [1-DATA] A-2
+  // Pass ConfigAccount dengan data valid tapi seeds yang berbeda
+  // → Anchor seeds constraint [b"config"] protect ini
+  // -------------------------------------------------------
+  it("[1-DATA] create_stream: fails when wrong config PDA is passed", async () => {
+    const nonce = new BN(3300002);
+    const startTs = BASE_NOW + 60;
+    const endTs = startTs + 200;
+
+    // Config PDA yang benar adalah [b"config"]
+    // Jika kita pass random account, Anchor seeds constraint reject
+    const fakeConfig = Keypair.generate().publicKey;
+
+    await expectError(
+      program.methods
+        .createStream(amount, new BN(startTs), new BN(startTs), new BN(endTs), VESTING_TYPE_LINEAR, [], nonce)
+        .accountsStrict({
+          creator: creator.publicKey,
+          recipient: recipient.publicKey,
+          mint,
+          config: fakeConfig,
+          stream: PublicKey.findProgramAddressSync(
+            [Buffer.from("stream"), creator.publicKey.toBuffer(), recipient.publicKey.toBuffer(), nonce.toArrayLike(Buffer, "le", 8)],
+            program.programId
+          )[0],
+          vault: getAssociatedTokenAddressSync(
+            mint,
+            PublicKey.findProgramAddressSync(
+              [Buffer.from("stream"), creator.publicKey.toBuffer(), recipient.publicKey.toBuffer(), nonce.toArrayLike(Buffer, "le", 8)],
+              program.programId
+            )[0],
+            true, TOKEN_PROGRAM_ID
+          ),
+          creatorTokenAccount,
+          systemProgram: anchor.web3.SystemProgram.programId,
+          tokenProgram: TOKEN_PROGRAM_ID,
+          associatedTokenProgram: ASSOCIATED_TOKEN_PROGRAM_ID,
+        })
+        .signers([creator])
+        .rpc(),
+      // fakeConfig adalah random keypair yang tidak pernah diinisialisasi
+      // Anchor cek discriminator (step 1) sebelum seeds (step 2)
+      // akun tidak exist → AccountNotInitialized
+      "AccountNotInitialized"
+    );
+  });
+
+  // -------------------------------------------------------
+  // [3-COSPLAY] A-3
+  // Pass MilestoneAccount sebagai StreamAccount
+  // → Anchor 8-byte discriminator mismatch → AccountDiscriminatorMismatch
+  // -------------------------------------------------------
+  it("[3-COSPLAY] create_stream: fails when milestone account is passed as stream account", async () => {
+    // Buat stream milestone dulu agar milestone account exist
+    const setupNonce = new BN(3300003);
+    const [setupStreamPDA] = PublicKey.findProgramAddressSync(
+      [Buffer.from("stream"), creator.publicKey.toBuffer(), recipient.publicKey.toBuffer(), setupNonce.toArrayLike(Buffer, "le", 8)],
+      program.programId
+    );
+    const setupMilestones = buildMilestoneRemainingAccounts(setupStreamPDA, 4, program.programId);
+    await program.methods
+      .createStream(amount, new BN(BASE_NOW + 60), new BN(BASE_NOW + 60), new BN(BASE_NOW + 86400), VESTING_TYPE_MILESTONE,
+        [{ amount: amount.div(new BN(4)) }, { amount: amount.div(new BN(4)) }, { amount: amount.div(new BN(4)) }, { amount: amount.div(new BN(4)) }], setupNonce)
+      .accounts({ creator: creator.publicKey, recipient: recipient.publicKey, mint, creatorTokenAccount, tokenProgram: TOKEN_PROGRAM_ID })
+      .remainingAccounts(setupMilestones)
+      .signers([creator])
+      .rpc();
+
+    // Sekarang coba pakai MilestoneAccount[0] sebagai config account di instruksi lain
+    // Discriminator MilestoneAccount != ConfigAccount → AccountDiscriminatorMismatch
+    const nonce = new BN(3300004);
+    const milestoneAsConfig = setupMilestones[0].pubkey;
+
+    await expectError(
+      program.methods
+        .createStream(amount, new BN(BASE_NOW + 60), new BN(BASE_NOW + 60), new BN(BASE_NOW + 86400), VESTING_TYPE_LINEAR, [], nonce)
+        .accountsStrict({
+          creator: creator.publicKey,
+          recipient: recipient.publicKey,
+          mint,
+          config: milestoneAsConfig,  // milestone account dipass sebagai config
+          stream: PublicKey.findProgramAddressSync(
+            [Buffer.from("stream"), creator.publicKey.toBuffer(), recipient.publicKey.toBuffer(), nonce.toArrayLike(Buffer, "le", 8)],
+            program.programId
+          )[0],
+          vault: getAssociatedTokenAddressSync(
+            mint,
+            PublicKey.findProgramAddressSync(
+              [Buffer.from("stream"), creator.publicKey.toBuffer(), recipient.publicKey.toBuffer(), nonce.toArrayLike(Buffer, "le", 8)],
+              program.programId
+            )[0],
+            true, TOKEN_PROGRAM_ID
+          ),
+          creatorTokenAccount,
+          systemProgram: anchor.web3.SystemProgram.programId,
+          tokenProgram: TOKEN_PROGRAM_ID,
+          associatedTokenProgram: ASSOCIATED_TOKEN_PROGRAM_ID,
+        })
+        .signers([creator])
+        .rpc(),
+      // Anchor step 1: deserialize config → discriminator MilestoneAccount != ConfigAccount
+      // → AccountDiscriminatorMismatch sebelum seeds check (step 2) tercapai
+      "AccountDiscriminatorMismatch"
+    );
+  });
+
+  // -------------------------------------------------------
+  // [5-ARBI-CPI] A-4
+  // Pass program ID palsu sebagai token_program
+  // → Interface<'info, TokenInterface> Anchor validate program ID
+  // -------------------------------------------------------
+  it("[5-ARBI-CPI] create_stream: fails when fake token_program is passed", async () => {
+    const nonce = new BN(3300005);
+    const startTs = BASE_NOW + 60;
+    const endTs = startTs + 200;
+
+    // Pass system program sebagai token_program (bukan SPL Token)
+    await expectError(
+      program.methods
+        .createStream(amount, new BN(startTs), new BN(startTs), new BN(endTs), VESTING_TYPE_LINEAR, [], nonce)
+        .accounts({
+          creator: creator.publicKey,
+          recipient: recipient.publicKey,
+          mint,
+          creatorTokenAccount,
+          tokenProgram: anchor.web3.SystemProgram.programId, // fake token program
+        })
+        .signers([creator])
+        .rpc(),
+      "InvalidProgramId"
+    );
+  });
+
+  // -------------------------------------------------------
+  // [7-BUMP] A-5
+  // Verify bump yang disimpan di StreamAccount == canonical bump
+  // → proteksi terhadap non-canonical bump yang bisa menghasilkan multiple PDAs
+  // -------------------------------------------------------
+  it("[7-BUMP] create_stream: stored bump equals canonical bump derived by find_program_address", async () => {
+    const nonce = new BN(3300006);
+    const startTs = BASE_NOW + 60;
+    const endTs = startTs + 200;
+
+    const [streamPDA, canonicalBump] = PublicKey.findProgramAddressSync(
+      [
+        Buffer.from("stream"),
+        creator.publicKey.toBuffer(),
+        recipient.publicKey.toBuffer(),
+        nonce.toArrayLike(Buffer, "le", 8),
+      ],
+      program.programId
+    );
+
+    await program.methods
+      .createStream(amount, new BN(startTs), new BN(startTs), new BN(endTs), VESTING_TYPE_LINEAR, [], nonce)
+      .accounts({ creator: creator.publicKey, recipient: recipient.publicKey, mint, creatorTokenAccount, tokenProgram: TOKEN_PROGRAM_ID })
+      .signers([creator])
+      .rpc();
+
+    const stream = await program.account.streamAccount.fetch(streamPDA);
+
+    // stream.bump HARUS == canonical bump dari find_program_address
+    // Jika tidak, program rentan terhadap bump manipulation attack
+    expect(stream.bump).to.equal(canonicalBump,
+      "stream.bump harus == canonical bump dari find_program_address"
+    );
+  });
+
+  // -------------------------------------------------------
+  // [7-BUMP] A-6
+  // Verify bump milestone yang disimpan == canonical bump
+  // -------------------------------------------------------
+  it("[7-BUMP] create_stream: stored milestone bumps equal canonical bumps", async () => {
+    const nonce = new BN(3300007);
+    const startTs = BASE_NOW + 60;
+    const endTs = BASE_NOW + 86400;
+
+    const [streamPDA] = PublicKey.findProgramAddressSync(
+      [Buffer.from("stream"), creator.publicKey.toBuffer(), recipient.publicKey.toBuffer(), nonce.toArrayLike(Buffer, "le", 8)],
+      program.programId
+    );
+
+    const remainingAccounts = buildMilestoneRemainingAccounts(streamPDA, 4, program.programId);
+
+    await program.methods
+      .createStream(amount, new BN(startTs), new BN(startTs), new BN(endTs), VESTING_TYPE_MILESTONE,
+        [{ amount: amount.div(new BN(4)) }, { amount: amount.div(new BN(4)) }, { amount: amount.div(new BN(4)) }, { amount: amount.div(new BN(4)) }], nonce)
+      .accounts({ creator: creator.publicKey, recipient: recipient.publicKey, mint, creatorTokenAccount, tokenProgram: TOKEN_PROGRAM_ID })
+      .remainingAccounts(remainingAccounts)
+      .signers([creator])
+      .rpc();
+
+    for (let i = 0; i < 4; i++) {
+      const [, canonicalBump] = PublicKey.findProgramAddressSync(
+        [Buffer.from("milestone"), streamPDA.toBuffer(), Buffer.from([i])],
+        program.programId
+      );
+      const milestone = await program.account.milestoneAccount.fetch(remainingAccounts[i].pubkey);
+      expect(milestone.bump).to.equal(canonicalBump,
+        `milestone[${i}].bump harus == canonical bump`
+      );
+    }
+  });
+
+  // -------------------------------------------------------
+  // [8-SHARING] A-7
+  // Verifikasi dua stream dengan creator-recipient yang sama tapi nonce berbeda
+  // tidak share akun apapun (vault, stream PDA)
+  // -------------------------------------------------------
+  it("[8-SHARING] create_stream: two streams with same creator-recipient have no shared accounts", async () => {
+    const nonceA = new BN(3300008);
+    const nonceB = new BN(3300009);
+    const startTs = BASE_NOW + 60;
+    const endTs = startTs + 200;
+
+    const [streamA] = PublicKey.findProgramAddressSync(
+      [Buffer.from("stream"), creator.publicKey.toBuffer(), recipient.publicKey.toBuffer(), nonceA.toArrayLike(Buffer, "le", 8)],
+      program.programId
+    );
+    const [streamB] = PublicKey.findProgramAddressSync(
+      [Buffer.from("stream"), creator.publicKey.toBuffer(), recipient.publicKey.toBuffer(), nonceB.toArrayLike(Buffer, "le", 8)],
+      program.programId
+    );
+    const vaultA = getAssociatedTokenAddressSync(mint, streamA, true, TOKEN_PROGRAM_ID);
+    const vaultB = getAssociatedTokenAddressSync(mint, streamB, true, TOKEN_PROGRAM_ID);
+
+    for (const nonce of [nonceA, nonceB]) {
+      await program.methods
+        .createStream(amount, new BN(startTs), new BN(startTs), new BN(endTs), VESTING_TYPE_LINEAR, [], nonce)
+        .accounts({ creator: creator.publicKey, recipient: recipient.publicKey, mint, creatorTokenAccount, tokenProgram: TOKEN_PROGRAM_ID })
+        .signers([creator])
+        .rpc();
+    }
+
+    // Semua akun harus unique — tidak ada sharing
+    expect(streamA.toBase58()).to.not.equal(streamB.toBase58(), "stream PDAs harus unik");
+    expect(vaultA.toBase58()).to.not.equal(vaultB.toBase58(), "vault PDAs harus unik");
+
+    // Satu stream tidak bisa mengakses vault stream lain
+    const streamAData = await program.account.streamAccount.fetch(streamA);
+    const streamBData = await program.account.streamAccount.fetch(streamB);
+    expect(streamAData.vault.toBase58()).to.equal(vaultA.toBase58());
+    expect(streamBData.vault.toBase58()).to.equal(vaultB.toBase58());
+    expect(streamAData.vault.toBase58()).to.not.equal(streamBData.vault.toBase58());
+  });
+
+  // -------------------------------------------------------
+  // [9-CLOSE] A-8
+  // Stream cancelled tidak bisa di-reinitialize (nonce sama)
+  // cancel() tidak close akun → akun masih ada → init dengan nonce sama → "already in use"
+  // -------------------------------------------------------
+  it("[9-CLOSE] create_stream: cancelled stream cannot be reinitialized with same nonce", async () => {
+    const nonce = new BN(3300010);
+    const startTs = BASE_NOW + 60;
+    const endTs = startTs + 200;
+
+    const [streamPDA] = PublicKey.findProgramAddressSync(
+      [Buffer.from("stream"), creator.publicKey.toBuffer(), recipient.publicKey.toBuffer(), nonce.toArrayLike(Buffer, "le", 8)],
+      program.programId
+    );
+    const vault = getAssociatedTokenAddressSync(mint, streamPDA, true, TOKEN_PROGRAM_ID);
+    const recipientAta = getAssociatedTokenAddressSync(mint, recipient.publicKey, true, TOKEN_PROGRAM_ID);
+
+    // Buat stream
+    await program.methods
+      .createStream(amount, new BN(startTs), new BN(startTs), new BN(endTs), VESTING_TYPE_LINEAR, [], nonce)
+      .accounts({ creator: creator.publicKey, recipient: recipient.publicKey, mint, creatorTokenAccount, tokenProgram: TOKEN_PROGRAM_ID })
+      .signers([creator])
+      .rpc();
+
+    // Cancel stream
+    await program.methods
+      .cancel()
+      .accountsStrict({
+        creator: creator.publicKey, mint, stream: streamPDA, vault,
+        creatorTokenAccount, recipientTokenAccount: recipientAta, tokenProgram: TOKEN_PROGRAM_ID,
+      })
+      .signers([creator])
+      .rpc();
+
+    // Verifikasi stream masih exist (tidak benar-benar "closed")
+    const streamData = await program.account.streamAccount.fetch(streamPDA);
+    expect(streamData.cancelled).to.equal(true);
+
+    // Coba reinitialize dengan nonce yang sama → harus gagal (akun masih ada)
+    await expectError(
+      program.methods
+        .createStream(amount, new BN(startTs), new BN(startTs), new BN(endTs), VESTING_TYPE_LINEAR, [], nonce)
+        .accounts({ creator: creator.publicKey, recipient: recipient.publicKey, mint, creatorTokenAccount, tokenProgram: TOKEN_PROGRAM_ID })
+        .signers([creator])
+        .rpc(),
+      "already in use"
+    );
+  });
 
 });

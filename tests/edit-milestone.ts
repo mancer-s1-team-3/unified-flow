@@ -1103,4 +1103,205 @@ describe("edit-milestone", () => {
         );
         expect(vaultAfter).to.equal(vaultBefore, "vault balance tidak boleh berubah");
     });
+
+    // -------------------------------------------------------
+    // [0-SIGNER] C-1
+    // Recipient mencoba call edit_milestone sebagai creator
+    // → has_one = creator: stream.creator != recipient → Unauthorized
+    // -------------------------------------------------------
+    it("[0-SIGNER] edit_milestone: recipient cannot edit milestone pretending to be creator", async () => {
+        await setTime(context, BASE_NOW);
+        const { streamPda, vaultAta, milestonePdas } = await setupMilestoneStream();
+
+        // Buat ATA recipient untuk dipakai sebagai creatorTokenAccount
+        const recipientAta = getAssociatedTokenAddressSync(mint, recipient.publicKey, true, TOKEN_PROGRAM_ID);
+
+        await expectError(
+            program.methods
+                .editMilestone(new BN(300_000))
+                .accountsStrict({
+                    creator: recipient.publicKey,   // recipient impersonate creator
+                    stream: streamPda,
+                    milestone: milestonePdas[0],
+                    mint,
+                    vault: vaultAta,
+                    creatorTokenAccount: recipientAta,
+                    tokenProgram: TOKEN_PROGRAM_ID,
+                })
+                .signers([recipient])
+                .rpc(),
+            "Unauthorized"
+        );
+    });
+
+    // -------------------------------------------------------
+    // [3-COSPLAY] C-2
+    // Pass StreamAccount sebagai MilestoneAccount
+    // Anchor validation order:
+    //   Step 1: deserialize milestone → discriminator StreamAccount != MilestoneAccount
+    //           → AccountDiscriminatorMismatch
+    //   Step 2 (seeds): tidak pernah dicapai
+    // -------------------------------------------------------
+    it("[3-COSPLAY] edit_milestone: fails when stream account passed as milestone (type cosplay)", async () => {
+        await setTime(context, BASE_NOW);
+        const { streamPda, creatorAta, vaultAta } = await setupMilestoneStream();
+
+        // Pass streamPda sebagai milestone
+        // Anchor step 1: discriminator StreamAccount != MilestoneAccount → AccountDiscriminatorMismatch
+        await expectError(
+            program.methods
+                .editMilestone(new BN(300_000))
+                .accountsStrict({
+                    creator: creator.publicKey,
+                    stream: streamPda,
+                    milestone: streamPda,  // stream dipass sebagai milestone
+                    mint,
+                    vault: vaultAta,
+                    creatorTokenAccount: creatorAta,
+                    tokenProgram: TOKEN_PROGRAM_ID,
+                })
+                .signers([creator])
+                .rpc(),
+            "AccountDiscriminatorMismatch"
+        );
+    });
+
+    // -------------------------------------------------------
+    // [5-ARBI-CPI] C-3
+    // Pass program ID palsu sebagai token_program ke edit_milestone
+    // → Interface<'info, TokenInterface> validate program ID
+    // -------------------------------------------------------
+    it("[5-ARBI-CPI] edit_milestone: fails when fake token_program is passed", async () => {
+        await setTime(context, BASE_NOW);
+        const { streamPda, creatorAta, vaultAta, milestonePdas } = await setupMilestoneStream();
+
+        await expectError(
+            program.methods
+                .editMilestone(new BN(300_000))
+                .accountsStrict({
+                    creator: creator.publicKey,
+                    stream: streamPda,
+                    milestone: milestonePdas[1],
+                    mint,
+                    vault: vaultAta,
+                    creatorTokenAccount: creatorAta,
+                    tokenProgram: anchor.web3.SystemProgram.programId,  // fake token program
+                })
+                .signers([creator])
+                .rpc(),
+            "InvalidProgramId"
+        );
+    });
+
+    // -------------------------------------------------------
+    // [6-DUPE] C-4
+    // Pass vault sebagai creatorTokenAccount sekaligus (duplicate mutable accounts)
+    // Program constraint: creatorTokenAccount.owner == creator.key() @ InvalidTokenOwner
+    // Ini adalah custom program error, bukan Anchor ConstraintTokenOwner
+    // vault.owner = streamPDA != creator → InvalidTokenOwner (custom error code 6009)
+    // -------------------------------------------------------
+    it("[6-DUPE] edit_milestone: fails when vault and creatorTokenAccount are the same account", async () => {
+        await setTime(context, BASE_NOW);
+        const { streamPda, vaultAta, milestonePdas } = await setupMilestoneStream();
+
+        await expectError(
+            program.methods
+                .editMilestone(new BN(100_000))
+                .accountsStrict({
+                    creator: creator.publicKey,
+                    stream: streamPda,
+                    milestone: milestonePdas[0],
+                    mint,
+                    vault: vaultAta,
+                    creatorTokenAccount: vaultAta,  // vault == creatorTokenAccount (duplicate)
+                    tokenProgram: TOKEN_PROGRAM_ID,
+                })
+                .signers([creator])
+                .rpc(),
+            // Program custom constraint: creatorTokenAccount.owner == creator
+            // vault.owner = streamPDA != creator → InvalidTokenOwner (custom error, bukan Anchor ConstraintTokenOwner)
+            "InvalidTokenOwner"
+        );
+    });
+
+    // -------------------------------------------------------
+    // [7-BUMP] C-5
+    // Verify stream.bump dan milestone.bump tidak berubah setelah edit
+    // -------------------------------------------------------
+    it("[7-BUMP] edit_milestone: bumps remain canonical after edit", async () => {
+        await setTime(context, BASE_NOW);
+        const { streamPda, creatorAta, vaultAta, milestonePdas } = await setupMilestoneStream();
+
+        const streamBefore = await program.account.streamAccount.fetch(streamPda);
+        const milestoneBefore = await program.account.milestoneAccount.fetch(milestonePdas[2]);
+        const bumpBefore = milestoneBefore.bump;
+
+        await mintTokensTo(context, admin, mint, creatorAta, 100_000);
+        await program.methods
+            .editMilestone(new BN(350_000))
+            .accountsStrict({
+                creator: creator.publicKey,
+                stream: streamPda,
+                milestone: milestonePdas[2],
+                mint,
+                vault: vaultAta,
+                creatorTokenAccount: creatorAta,
+                tokenProgram: TOKEN_PROGRAM_ID,
+            })
+            .signers([creator])
+            .rpc();
+
+        const streamAfter = await program.account.streamAccount.fetch(streamPda);
+        const milestoneAfter = await program.account.milestoneAccount.fetch(milestonePdas[2]);
+
+        // Bumps tidak boleh berubah setelah edit
+        expect(streamAfter.bump).to.equal(streamBefore.bump, "stream.bump tidak boleh berubah");
+        expect(milestoneAfter.bump).to.equal(bumpBefore, "milestone.bump tidak boleh berubah");
+
+        // Verify masih canonical
+        const [, canonicalStreamBump] = PublicKey.findProgramAddressSync(
+            [Buffer.from("stream"), creator.publicKey.toBuffer(), recipient.publicKey.toBuffer(),
+            streamBefore.nonce.toArrayLike(Buffer, "le", 8)],
+            program.programId
+        );
+        expect(streamAfter.bump).to.equal(canonicalStreamBump, "stream.bump harus == canonical");
+    });
+
+    // -------------------------------------------------------
+    // [8-SHARING] C-6
+    // Verifikasi milestone dari stream A tidak bisa dipakai untuk "drain" stream B
+    // Ini kombinasi PDA-sharing + cross-stream substitution
+    // -------------------------------------------------------
+    it("[8-SHARING] edit_milestone: milestone from stream A cannot affect stream B balances", async () => {
+        await setTime(context, BASE_NOW);
+
+        const { streamPda: streamA, creatorAta, vaultAta: vaultA, milestonePdas: milestonesA } = await setupMilestoneStream();
+        const { streamPda: streamB, vaultAta: vaultB } = await setupMilestoneStream();
+
+        const vaultABefore = await getTokenBalance(context, vaultA);
+        const vaultBBefore = await getTokenBalance(context, vaultB);
+
+        // Coba pass milestone dari stream A ke edit stream B
+        // Seeds akan fail → ConstraintSeeds (milestone.stream = streamA != streamB)
+        await expectError(
+            program.methods
+                .editMilestone(new BN(1))   // decrease → harusnya drain vaultB
+                .accountsStrict({
+                    creator: creator.publicKey,
+                    stream: streamB,          // target stream B
+                    milestone: milestonesA[0], // milestone dari stream A
+                    mint,
+                    vault: vaultB,
+                    creatorTokenAccount: creatorAta,
+                    tokenProgram: TOKEN_PROGRAM_ID,
+                })
+                .signers([creator])
+                .rpc(),
+            "ConstraintSeeds"
+        );
+
+        // Verifikasi tidak ada dana yang bergerak dari vault manapun
+        expect(await getTokenBalance(context, vaultA)).to.equal(vaultABefore, "vaultA tidak boleh berubah");
+        expect(await getTokenBalance(context, vaultB)).to.equal(vaultBBefore, "vaultB tidak boleh berubah");
+    });
 });

@@ -472,7 +472,7 @@ describe("unlock-milestone", () => {
     // sebelum sempat cek flag `approved`.
     // -------------------------------------------------------
     it("Fails when trying to unlock an already-unlocked milestone", async () => {
-        const nonce = new BN(910099); // nonce fresh, hindari tx cache bankrun
+        const nonce = new BN(910198); // nonce fresh, hindari tx cache bankrun
         const { streamPDA, remainingAccounts } = await createMilestoneStream(
             program, creator, recipient, mint, creatorTokenAccount, nonce
         );
@@ -874,6 +874,159 @@ describe("unlock-milestone", () => {
         );
         // Status masih ACTIVE karena masih ada milestone yang belum unlock
         expect(streamAfter.status).to.equal(1, "status harus tetap ACTIVE");
+    });
+    it("[0-SIGNER] unlock_milestone: recipient cannot call unlock pretending to be creator", async () => {
+        const nonce = new BN(3400001);
+        const { streamPDA, remainingAccounts } = await createMilestoneStream(
+            program, creator, recipient, mint, creatorTokenAccount, nonce
+        );
+
+        await expectError(
+            program.methods
+                .unlockMilestone()
+                .accountsStrict({
+                    creator: recipient.publicKey,  // recipient mencoba impersonate creator
+                    stream: streamPDA,
+                    milestone: remainingAccounts[0].pubkey,
+                    systemProgram: anchor.web3.SystemProgram.programId,
+                })
+                .signers([recipient])
+                .rpc(),
+            "Unauthorized"
+        );
+    });
+
+    // -------------------------------------------------------
+    // [3-COSPLAY] B-2
+    // Pass StreamAccount sebagai MilestoneAccount (type cosplay)
+    // Anchor validation order:
+    //   Step 1: deserialize milestone → baca discriminator StreamAccount
+    //           → tidak cocok dengan MilestoneAccount discriminator → AccountDiscriminatorMismatch
+    //   Step 2 (seeds): tidak pernah dicapai
+    // -------------------------------------------------------
+    it("[3-COSPLAY] unlock_milestone: fails when stream account is passed as milestone (type cosplay)", async () => {
+        const nonce = new BN(3400002);
+        const { streamPDA } = await createMilestoneStream(
+            program, creator, recipient, mint, creatorTokenAccount, nonce
+        );
+
+        // Pass streamPDA sebagai milestone account
+        // StreamAccount discriminator != MilestoneAccount discriminator → AccountDiscriminatorMismatch (step 1)
+        await expectError(
+            program.methods
+                .unlockMilestone()
+                .accountsStrict({
+                    creator: creator.publicKey,
+                    stream: streamPDA,
+                    milestone: streamPDA,  // stream dipass sebagai milestone
+                    systemProgram: anchor.web3.SystemProgram.programId,
+                })
+                .signers([creator])
+                .rpc(),
+            "AccountDiscriminatorMismatch"
+        );
+    });
+
+    // -------------------------------------------------------
+    // [5-ARBI-CPI] B-3
+    // unlock_milestone tidak melakukan token CPI langsung,
+    // hanya update state. Tapi system_program di-validate oleh Anchor.
+    // Pass fake system_program → InvalidProgramId
+    // -------------------------------------------------------
+    it("[5-ARBI-CPI] unlock_milestone: fails when fake system_program is passed", async () => {
+        const nonce = new BN(3400003);
+        const { streamPDA, remainingAccounts } = await createMilestoneStream(
+            program, creator, recipient, mint, creatorTokenAccount, nonce
+        );
+
+        // Pass token program sebagai system program (arbitrary CPI target)
+        await expectError(
+            program.methods
+                .unlockMilestone()
+                .accountsStrict({
+                    creator: creator.publicKey,
+                    stream: streamPDA,
+                    milestone: remainingAccounts[0].pubkey,
+                    systemProgram: TOKEN_PROGRAM_ID,  // fake system program
+                })
+                .signers([creator])
+                .rpc(),
+            "InvalidProgramId"
+        );
+    });
+
+    // -------------------------------------------------------
+    // [7-BUMP] B-4
+    // Verify bumps stream dan milestone konsisten setelah unlock
+    // next_milestone_index menggunakan bump dari stored value, bukan re-derive
+    // -------------------------------------------------------
+    it("[7-BUMP] unlock_milestone: stream and milestone bump remain canonical after unlock", async () => {
+        const nonce = new BN(3400004);
+        const { streamPDA, remainingAccounts } = await createMilestoneStream(
+            program, creator, recipient, mint, creatorTokenAccount, nonce
+        );
+
+        const [, canonicalStreamBump] = PublicKey.findProgramAddressSync(
+            [Buffer.from("stream"), creator.publicKey.toBuffer(), recipient.publicKey.toBuffer(), nonce.toArrayLike(Buffer, "le", 8)],
+            program.programId
+        );
+        const [, canonicalMilestoneBump] = PublicKey.findProgramAddressSync(
+            [Buffer.from("milestone"), streamPDA.toBuffer(), Buffer.from([0])],
+            program.programId
+        );
+
+        await program.methods
+            .unlockMilestone()
+            .accountsStrict({
+                creator: creator.publicKey,
+                stream: streamPDA,
+                milestone: remainingAccounts[0].pubkey,
+                systemProgram: anchor.web3.SystemProgram.programId,
+            })
+            .signers([creator])
+            .rpc();
+
+        const stream = await program.account.streamAccount.fetch(streamPDA);
+        const milestone = await program.account.milestoneAccount.fetch(remainingAccounts[0].pubkey);
+
+        // Bumps tidak boleh berubah setelah unlock
+        expect(stream.bump).to.equal(canonicalStreamBump, "stream.bump harus tetap canonical");
+        expect(milestone.bump).to.equal(canonicalMilestoneBump, "milestone.bump harus tetap canonical");
+    });
+
+    // -------------------------------------------------------
+    // [6-DUPE] B-5  
+    // Pass stream yang sama sebagai dua akun berbeda
+    // (stream sebagai milestone — impossible secara seeds tapi verify)
+    // -------------------------------------------------------
+    // -------------------------------------------------------
+    // [6-DUPE] B-5
+    // Pass stream yang sama sebagai milestone (duplicate account)
+    // → Anchor step 1: deserialize milestone sebagai MilestoneAccount
+    //   → discriminator StreamAccount != MilestoneAccount → AccountDiscriminatorMismatch
+    // Seeds check tidak pernah tercapai karena discriminator gagal lebih dulu
+    // -------------------------------------------------------
+    it("[6-DUPE] unlock_milestone: stream PDA cannot be used as both stream and milestone", async () => {
+        const nonce = new BN(3400005);
+        const { streamPDA } = await createMilestoneStream(
+            program, creator, recipient, mint, creatorTokenAccount, nonce
+        );
+
+        // Pass streamPDA untuk kedua stream dan milestone
+        // Anchor deserialize milestone → discriminator StreamAccount != MilestoneAccount → AccountDiscriminatorMismatch
+        await expectError(
+            program.methods
+                .unlockMilestone()
+                .accountsStrict({
+                    creator: creator.publicKey,
+                    stream: streamPDA,
+                    milestone: streamPDA,  // duplikat: stream dipakai sebagai milestone
+                    systemProgram: anchor.web3.SystemProgram.programId,
+                })
+                .signers([creator])
+                .rpc(),
+            "AccountDiscriminatorMismatch"
+        );
     });
 
 });
