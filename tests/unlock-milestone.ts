@@ -109,6 +109,72 @@ async function mintTokensTo(
         createMintToInstruction(mint, destination, payer.publicKey, amount, [], tokenProgram),
     ]);
 }
+// -------------------------------------------------------
+// Helper: buat stream milestone baru dengan nonce unik
+// Milestone count HARUS habis bagi TOKEN_AMOUNT (1_000_000)
+// Default = 4 (250_000 each, exact)
+// -------------------------------------------------------
+async function createMilestoneStream(
+    program: Program<SolanaProgram>,
+    creator: Keypair,
+    recipient: Keypair,
+    mint: PublicKey,
+    creatorTokenAccount: PublicKey,
+    nonce: BN,
+    milestoneCount: number = 4   // FIX: 4 habis bagi 1_000_000
+) {
+    const total = new BN(TOKEN_AMOUNT);
+
+    // FIX: distribusi sisa ke milestone terakhir agar sum == total_amount
+    const perMilestone = Math.floor(TOKEN_AMOUNT / milestoneCount);
+    const lastMilestone = TOKEN_AMOUNT - perMilestone * (milestoneCount - 1);
+
+    const [streamPDA] = PublicKey.findProgramAddressSync(
+        [
+            Buffer.from("stream"),
+            creator.publicKey.toBuffer(),
+            recipient.publicKey.toBuffer(),
+            nonce.toArrayLike(Buffer, "le", 8),
+        ],
+        program.programId
+    );
+
+    const remainingAccounts: { pubkey: PublicKey; isWritable: boolean; isSigner: boolean }[] = [];
+    for (let i = 0; i < milestoneCount; i++) {
+        const [pda] = PublicKey.findProgramAddressSync(
+            [Buffer.from("milestone"), streamPDA.toBuffer(), Buffer.from([i])],
+            program.programId
+        );
+        remainingAccounts.push({ pubkey: pda, isWritable: true, isSigner: false });
+    }
+
+    const milestones = Array.from({ length: milestoneCount }, (_, i) => ({
+        amount: new BN(i === milestoneCount - 1 ? lastMilestone : perMilestone),
+    }));
+
+    await program.methods
+        .createStream(
+            total,
+            new BN(BASE_NOW + 60),
+            new BN(BASE_NOW + 60),
+            new BN(BASE_NOW + 86400),
+            VESTING_TYPE_MILESTONE,
+            milestones,
+            nonce
+        )
+        .accounts({
+            creator: creator.publicKey,
+            recipient: recipient.publicKey,
+            mint,
+            creatorTokenAccount,
+            tokenProgram: TOKEN_PROGRAM_ID,
+        })
+        .remainingAccounts(remainingAccounts)
+        .signers([creator])
+        .rpc();
+
+    return { streamPDA, remainingAccounts, perMilestone, lastMilestone };
+}
 
 async function getTokenBalance(context: ProgramTestContext, tokenAccount: PublicKey): Promise<bigint> {
     const account = await context.banksClient.getAccount(tokenAccount);
@@ -335,72 +401,6 @@ describe("unlock-milestone", () => {
     // Edge Case Tests: unlock_milestone  (FIXED)
     // ============================================================
 
-    // -------------------------------------------------------
-    // Helper: buat stream milestone baru dengan nonce unik
-    // Milestone count HARUS habis bagi TOKEN_AMOUNT (1_000_000)
-    // Default = 4 (250_000 each, exact)
-    // -------------------------------------------------------
-    async function createMilestoneStream(
-        program: Program<SolanaProgram>,
-        creator: Keypair,
-        recipient: Keypair,
-        mint: PublicKey,
-        creatorTokenAccount: PublicKey,
-        nonce: BN,
-        milestoneCount: number = 4   // FIX: 4 habis bagi 1_000_000
-    ) {
-        const total = new BN(TOKEN_AMOUNT);
-
-        // FIX: distribusi sisa ke milestone terakhir agar sum == total_amount
-        const perMilestone = Math.floor(TOKEN_AMOUNT / milestoneCount);
-        const lastMilestone = TOKEN_AMOUNT - perMilestone * (milestoneCount - 1);
-
-        const [streamPDA] = PublicKey.findProgramAddressSync(
-            [
-                Buffer.from("stream"),
-                creator.publicKey.toBuffer(),
-                recipient.publicKey.toBuffer(),
-                nonce.toArrayLike(Buffer, "le", 8),
-            ],
-            program.programId
-        );
-
-        const remainingAccounts: { pubkey: PublicKey; isWritable: boolean; isSigner: boolean }[] = [];
-        for (let i = 0; i < milestoneCount; i++) {
-            const [pda] = PublicKey.findProgramAddressSync(
-                [Buffer.from("milestone"), streamPDA.toBuffer(), Buffer.from([i])],
-                program.programId
-            );
-            remainingAccounts.push({ pubkey: pda, isWritable: true, isSigner: false });
-        }
-
-        const milestones = Array.from({ length: milestoneCount }, (_, i) => ({
-            amount: new BN(i === milestoneCount - 1 ? lastMilestone : perMilestone),
-        }));
-
-        await program.methods
-            .createStream(
-                total,
-                new BN(BASE_NOW + 60),
-                new BN(BASE_NOW + 60),
-                new BN(BASE_NOW + 86400),
-                VESTING_TYPE_MILESTONE,
-                milestones,
-                nonce
-            )
-            .accounts({
-                creator: creator.publicKey,
-                recipient: recipient.publicKey,
-                mint,
-                creatorTokenAccount,
-                tokenProgram: TOKEN_PROGRAM_ID,
-            })
-            .remainingAccounts(remainingAccounts)
-            .signers([creator])
-            .rpc();
-
-        return { streamPDA, remainingAccounts, perMilestone, lastMilestone };
-    }
 
     // -------------------------------------------------------
     // 1. Stranger (bukan creator) tidak bisa unlock milestone
@@ -472,7 +472,7 @@ describe("unlock-milestone", () => {
     // sebelum sempat cek flag `approved`.
     // -------------------------------------------------------
     it("Fails when trying to unlock an already-unlocked milestone", async () => {
-        const nonce = new BN(910033); // nonce berbeda dari test lain untuk hindari tx cache bankrun
+        const nonce = new BN(910099); // nonce fresh, hindari tx cache bankrun
         const { streamPDA, remainingAccounts } = await createMilestoneStream(
             program, creator, recipient, mint, creatorTokenAccount, nonce
         );
@@ -685,6 +685,195 @@ describe("unlock-milestone", () => {
         expect(milestone.unlockTs.toNumber()).to.be.greaterThan(0, "unlock_ts harus terisi");
         expect(milestone.stream.toBase58()).to.equal(streamPDA.toBase58(), "stream key harus cocok");
         expect(milestone.index).to.equal(0, "index milestone harus 0");
+    });
+    // -------------------------------------------------------
+    // [AUTH] B-1: Creator dari stream LAIN mencoba unlock
+    // Keypair valid, sudah sign, tapi bukan creator stream ini
+    // -------------------------------------------------------
+    it("[AUTH] unlock_milestone: fails when signer is creator of a different stream", async () => {
+        // Setup: buat dua keypair creator berbeda
+        const creatorB = stranger; // stranger punya lamports dari before()
+
+        // creatorB buat stream-nya sendiri
+        const nonceB = new BN(2300001);
+        const [streamB] = PublicKey.findProgramAddressSync(
+            [Buffer.from("stream"), creatorB.publicKey.toBuffer(), recipient.publicKey.toBuffer(), nonceB.toArrayLike(Buffer, "le", 8)],
+            program.programId
+        );
+        const strangerAta = getAssociatedTokenAddressSync(mint, creatorB.publicKey, true, TOKEN_PROGRAM_ID);
+
+        // Mint tokens ke strangerAta
+        await sendIx(context, admin, [
+            createAssociatedTokenAccountIdempotentInstruction(admin.publicKey, strangerAta, creatorB.publicKey, mint, TOKEN_PROGRAM_ID, ASSOCIATED_TOKEN_PROGRAM_ID)
+        ]);
+        await mintTokensTo(context, admin, mint, strangerAta, TOKEN_AMOUNT);
+
+        const milestonesB = buildMilestoneRemainingAccounts(streamB, 4, program.programId);
+        await program.methods
+            .createStream(amount, new BN(BASE_NOW + 60), new BN(BASE_NOW + 60), new BN(BASE_NOW + 86400), VESTING_TYPE_MILESTONE,
+                [{ amount: amount.div(new BN(4)) }, { amount: amount.div(new BN(4)) }, { amount: amount.div(new BN(4)) }, { amount: amount.div(new BN(4)) }], nonceB)
+            .accounts({ creator: creatorB.publicKey, recipient: recipient.publicKey, mint, creatorTokenAccount: strangerAta, tokenProgram: TOKEN_PROGRAM_ID })
+            .remainingAccounts(milestonesB)
+            .signers([creatorB])
+            .rpc();
+
+        // creatorA buat stream-nya sendiri
+        const nonceA = new BN(2300002);
+        const { streamPDA: streamA, remainingAccounts: milestonesA } = await createMilestoneStream(
+            program, creator, recipient, mint, creatorTokenAccount, nonceA
+        );
+
+        // creatorB (stranger) coba unlock milestone dari stream milik creatorA
+        // has_one = creator constraint akan reject: stream.creator != creatorB
+        await expectError(
+            program.methods
+                .unlockMilestone()
+                .accountsStrict({
+                    creator: creatorB.publicKey,   // signed tapi bukan creator stream A
+                    stream: streamA,
+                    milestone: milestonesA[0].pubkey,
+                    systemProgram: anchor.web3.SystemProgram.programId,
+                })
+                .signers([creatorB])
+                .rpc(),
+            "Unauthorized"
+        );
+    });
+
+    // -------------------------------------------------------
+    // [PDA] B-2: Milestone dari stream LAIN disuplai ke unlock_milestone stream ini
+    // seeds = [b"milestone", stream.key(), &[stream.next_milestone_index]]
+    // cross-stream milestone PDA → tidak cocok → ConstraintSeeds
+    // -------------------------------------------------------
+    it("[PDA] unlock_milestone: fails when milestone PDA belongs to a different stream", async () => {
+        const nonceA = new BN(2300003);
+        const nonceB = new BN(2300004);
+
+        const { streamPDA: streamA, remainingAccounts: milestonesA } = await createMilestoneStream(
+            program, creator, recipient, mint, creatorTokenAccount, nonceA
+        );
+        const { streamPDA: streamB, remainingAccounts: milestonesB } = await createMilestoneStream(
+            program, creator, recipient, mint, creatorTokenAccount, nonceB
+        );
+
+        // Coba unlock milestone[0] dari stream B, tapi pass ke stream A
+        // Anchor derive seeds dari streamA.key() → tidak cocok dengan milestonesB[0] → ConstraintSeeds
+        await expectError(
+            program.methods
+                .unlockMilestone()
+                .accountsStrict({
+                    creator: creator.publicKey,
+                    stream: streamA,
+                    milestone: milestonesB[0].pubkey, // milestone dari stream lain
+                    systemProgram: anchor.web3.SystemProgram.programId,
+                })
+                .signers([creator])
+                .rpc(),
+            "ConstraintSeeds"
+        );
+    });
+
+    // -------------------------------------------------------
+    // [OVERFLOW] B-3: unlocked_milestone_amount tidak overflow
+    // saat milestone amounts sangat besar (mendekati u64::MAX / milestoneCount)
+    // -------------------------------------------------------
+    it("[OVERFLOW] unlock_milestone: unlocked_milestone_amount accumulates without overflow for large amounts", async () => {
+        const nonce = new BN(2300005);
+        // Gunakan amount besar yang masih reasonable untuk mint di bankrun
+        // u64::MAX = 18_446_744_073_709_551_615
+        // Kita pakai 4 milestone × 250_000_000 = 1_000_000_000 (1 miliar, fit dalam u64)
+        const largeAmount = 1_000_000_000;
+        const perMilestone = largeAmount / 4; // 250_000_000
+
+        const [streamPDA] = PublicKey.findProgramAddressSync(
+            [Buffer.from("stream"), creator.publicKey.toBuffer(), recipient.publicKey.toBuffer(), nonce.toArrayLike(Buffer, "le", 8)],
+            program.programId
+        );
+
+        const remainingAccounts = buildMilestoneRemainingAccounts(streamPDA, 4, program.programId);
+
+        // Mint token sebesar largeAmount ke creator
+        await mintTokensTo(context, admin, mint, creatorTokenAccount, largeAmount);
+
+        await program.methods
+            .createStream(new BN(largeAmount), new BN(BASE_NOW + 60), new BN(BASE_NOW + 60), new BN(BASE_NOW + 86400), VESTING_TYPE_MILESTONE,
+                Array(4).fill({ amount: new BN(perMilestone) }), nonce)
+            .accounts({ creator: creator.publicKey, recipient: recipient.publicKey, mint, creatorTokenAccount, tokenProgram: TOKEN_PROGRAM_ID })
+            .remainingAccounts(remainingAccounts)
+            .signers([creator])
+            .rpc();
+
+        // Unlock semua 4 milestone → unlocked_milestone_amount harus = largeAmount tanpa overflow
+        let expectedUnlocked = 0;
+        for (let i = 0; i < 4; i++) {
+            await program.methods.unlockMilestone()
+                .accountsStrict({
+                    creator: creator.publicKey,
+                    stream: streamPDA,
+                    milestone: remainingAccounts[i].pubkey,
+                    systemProgram: anchor.web3.SystemProgram.programId,
+                })
+                .signers([creator])
+                .rpc();
+
+            expectedUnlocked += perMilestone;
+            const stream = await program.account.streamAccount.fetch(streamPDA);
+            expect(stream.unlockedMilestoneAmount.toNumber()).to.equal(
+                expectedUnlocked,
+                `unlocked_milestone_amount salah setelah milestone ${i}`
+            );
+        }
+
+        const streamFinal = await program.account.streamAccount.fetch(streamPDA);
+        expect(streamFinal.unlockedMilestoneAmount.toNumber()).to.equal(largeAmount);
+        expect(streamFinal.status).to.equal(2); // COMPLETED
+    });
+
+    // -------------------------------------------------------
+    // [CEI] B-4: State (approved, unlocked, next_milestone_index) diupdate atomik
+    // Verifikasi: setelah unlock sukses, semua field langsung konsisten
+    // tanpa state yang "setengah terupdate"
+    // -------------------------------------------------------
+    it("[CEI] unlock_milestone: all state fields update atomically in single transaction", async () => {
+        const nonce = new BN(2300006);
+        const { streamPDA, remainingAccounts } = await createMilestoneStream(
+            program, creator, recipient, mint, creatorTokenAccount, nonce
+        );
+
+        const streamBefore = await program.account.streamAccount.fetch(streamPDA);
+        const unlockedBefore = streamBefore.unlockedMilestoneAmount.toNumber();
+        const nextIndexBefore = streamBefore.nextMilestoneIndex;
+
+        await program.methods.unlockMilestone()
+            .accountsStrict({
+                creator: creator.publicKey,
+                stream: streamPDA,
+                milestone: remainingAccounts[0].pubkey,
+                systemProgram: anchor.web3.SystemProgram.programId,
+            })
+            .signers([creator])
+            .rpc();
+
+        // Setelah SATU transaksi, semua field harus konsisten sekaligus
+        const streamAfter = await program.account.streamAccount.fetch(streamPDA);
+        const milestoneAfter = await program.account.milestoneAccount.fetch(remainingAccounts[0].pubkey);
+
+        // MilestoneAccount fields
+        expect(milestoneAfter.approved).to.equal(true, "approved harus true");
+        expect(milestoneAfter.unlocked).to.equal(true, "unlocked harus true");
+        expect(milestoneAfter.unlockTs.toNumber()).to.be.greaterThan(0, "unlock_ts harus terisi");
+
+        // StreamAccount fields — semua naik sebesar perMilestone dalam satu tx
+        expect(streamAfter.unlockedMilestoneAmount.toNumber()).to.equal(
+            unlockedBefore + milestoneAfter.amount.toNumber(),
+            "unlocked_milestone_amount harus naik persis sebesar milestone.amount"
+        );
+        expect(streamAfter.nextMilestoneIndex).to.equal(
+            nextIndexBefore + 1,
+            "next_milestone_index harus increment 1"
+        );
+        // Status masih ACTIVE karena masih ada milestone yang belum unlock
+        expect(streamAfter.status).to.equal(1, "status harus tetap ACTIVE");
     });
 
 });

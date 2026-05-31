@@ -396,11 +396,6 @@ describe("edit-milestone", () => {
             "MilestoneAlreadyUnlocked"
         );
     });
-    // ============================================================
-    // Edge Case Tests: edit_milestone
-    // Tambahkan semua blok `it(...)` ini ke dalam
-    // describe("edit-milestone") di bawah test yang sudah ada.
-    // ============================================================
 
     // -------------------------------------------------------
     // 2. Decrease amount → refund ke creator
@@ -891,5 +886,221 @@ describe("edit-milestone", () => {
                 .rpc(),
             "MilestoneAlreadyUnlocked"
         );
+    });
+
+    it("[AUTH] edit_milestone: fails when signer is valid but not creator of this stream", async () => {
+        await setTime(context, BASE_NOW);
+
+        // Setup stream milik creator (asli)
+        const { streamPda, creatorAta, vaultAta, milestonePdas } = await setupMilestoneStream();
+
+        // Buat attacker keypair lokal, fund via bankrun setAccount
+        const attacker = Keypair.generate();
+        await context.setAccount(attacker.publicKey, {
+            lamports: 10e9,
+            data: Buffer.alloc(0),
+            owner: SystemProgram.programId,
+            executable: false,
+        });
+
+        // Buat dan fund ATA untuk attacker
+        const attackerAta = await createAta(context, admin, mint, attacker.publicKey);
+
+        // Attacker (bukan creator stream) coba edit milestone
+        // has_one = creator → stream.creator != attacker → Unauthorized
+        await expectError(
+            program.methods
+                .editMilestone(new BN(300_000))
+                .accountsStrict({
+                    creator: attacker.publicKey,
+                    stream: streamPda,
+                    milestone: milestonePdas[1],
+                    mint,
+                    vault: vaultAta,
+                    creatorTokenAccount: attackerAta,
+                    tokenProgram: TOKEN_PROGRAM_ID,
+                })
+                .signers([attacker])
+                .rpc(),
+            "Unauthorized"
+        );
+    });
+
+
+    // -------------------------------------------------------
+    // [PDA] C-2: Milestone dari stream LAIN disuplai ke edit_milestone stream ini
+    // edit_milestone seeds: [b"milestone", stream.key(), &[milestone.index]]
+    // Cross-stream milestone: milestone.stream != stream.key() → InvalidMilestonePda
+    // -------------------------------------------------------
+    it("[PDA] edit_milestone: fails when milestone PDA belongs to a different stream", async () => {
+        await setTime(context, BASE_NOW);
+
+        const { streamPda: streamA, creatorAta, vaultAta } = await setupMilestoneStream();
+        const { milestonePdas: milestonesB } = await setupMilestoneStream();
+
+        // Coba edit stream A tapi pass milestone dari stream B
+        // Anchor re-derive seeds dari streamA.key() + milestonesB[0].index → tidak cocok → ConstraintSeeds
+        await expectError(
+            program.methods
+                .editMilestone(new BN(300_000))
+                .accountsStrict({
+                    creator: creator.publicKey,
+                    stream: streamA,
+                    milestone: milestonesB[0], // milestone dari stream lain
+                    mint,
+                    vault: vaultAta,
+                    creatorTokenAccount: creatorAta,
+                    tokenProgram: TOKEN_PROGRAM_ID,
+                })
+                .signers([creator])
+                .rpc(),
+            "ConstraintSeeds"
+        );
+    });
+
+    // -------------------------------------------------------
+    // [OVERFLOW] C-3: increase ke new_amount sangat besar → total_amount overflow u64
+    // diff = new_amount - old_amount → total_amount + diff → MathOverflow
+    // -------------------------------------------------------
+    it("[OVERFLOW] edit_milestone: fails when increasing amount would overflow total_amount (u64)", async () => {
+        await setTime(context, BASE_NOW);
+
+        const { streamPda, creatorAta, vaultAta, milestonePdas } = await setupMilestoneStream();
+
+        // total_amount saat ini = 1_000_000
+        // new_amount = u64::MAX → diff = u64::MAX - 250_000 → total_amount + diff overflow u64
+        const u64Max = new BN("18446744073709551615");
+
+        await expectError(
+            program.methods
+                .editMilestone(u64Max)
+                .accountsStrict({
+                    creator: creator.publicKey,
+                    stream: streamPda,
+                    milestone: milestonePdas[0],
+                    mint,
+                    vault: vaultAta,
+                    creatorTokenAccount: creatorAta,
+                    tokenProgram: TOKEN_PROGRAM_ID,
+                })
+                .signers([creator])
+                .rpc(),
+            "MathOverflow"
+        );
+    });
+
+    // -------------------------------------------------------
+    // [OVERFLOW] C-4: decrease sampai total_amount = 1 (minimum tanpa underflow)
+    // Verifikasi tidak ada u64 underflow pada checked_sub
+    // -------------------------------------------------------
+    it("[OVERFLOW] edit_milestone: decrease to 1 does not underflow total_amount", async () => {
+        await setTime(context, BASE_NOW);
+
+        const { streamPda, creatorAta, vaultAta, milestonePdas } = await setupMilestoneStream({
+            amounts: [700_000, 100_000, 100_000, 100_000]
+        });
+
+        const streamBefore = await program.account.streamAccount.fetch(streamPda);
+
+        // Decrease milestone 0 dari 700_000 → 1
+        await program.methods
+            .editMilestone(new BN(1))
+            .accountsStrict({
+                creator: creator.publicKey,
+                stream: streamPda,
+                milestone: milestonePdas[0],
+                mint,
+                vault: vaultAta,
+                creatorTokenAccount: creatorAta,
+                tokenProgram: TOKEN_PROGRAM_ID,
+            })
+            .signers([creator])
+            .rpc();
+
+        const streamAfter = await program.account.streamAccount.fetch(streamPda);
+        // total turun: 1_000_000 - 699_999 = 300_001, tidak underflow
+        expect(streamAfter.totalAmount.toNumber()).to.equal(
+            streamBefore.totalAmount.toNumber() - 699_999
+        );
+        expect(streamAfter.totalAmount.toNumber()).to.be.greaterThan(0, "total_amount tidak boleh underflow ke 0 atau negatif");
+    });
+
+    // -------------------------------------------------------
+    // [OWNERSHIP] C-5: vault dari stream LAIN di-pass
+    // vault.owner == stream.key() constraint → vault milik stream B, bukan A → ConstraintAddress / InvalidTokenOwner
+    // -------------------------------------------------------
+    it("[OWNERSHIP] edit_milestone: fails when vault belongs to a different stream", async () => {
+        await setTime(context, BASE_NOW);
+
+        const { streamPda: streamA, creatorAta, milestonePdas: milestonesA } = await setupMilestoneStream();
+        const { vaultAta: vaultB } = await setupMilestoneStream();
+
+        // Pass vault dari stream B ke edit stream A
+        // vault.owner = streamB ≠ streamA → ConstraintTokenOwner
+        await expectError(
+            program.methods
+                .editMilestone(new BN(300_000))
+                .accountsStrict({
+                    creator: creator.publicKey,
+                    stream: streamA,
+                    milestone: milestonesA[1],
+                    mint,
+                    vault: vaultB,    // vault milik stream lain
+                    creatorTokenAccount: creatorAta,
+                    tokenProgram: TOKEN_PROGRAM_ID,
+                })
+                .signers([creator])
+                .rpc(),
+            "ConstraintTokenOwner"
+        );
+    });
+    // -------------------------------------------------------
+    // [CEI] C-6: State (milestone.amount, stream.total_amount) diupdate
+    // secara konsisten SEBELUM CPI transfer
+    // Verifikasi: jika kreator tidak punya cukup token untuk top-up,
+    // state tidak berubah (transaksi atomik)
+    // -------------------------------------------------------
+    it("[CEI] edit_milestone: state does not change if top-up transfer fails (insufficient balance)", async () => {
+        await setTime(context, BASE_NOW);
+
+        const { streamPda, creatorAta, vaultAta, milestonePdas } = await setupMilestoneStream();
+
+        const streamBefore = await program.account.streamAccount.fetch(streamPda);
+        const milestoneBefore = await program.account.milestoneAccount.fetch(milestonePdas[0]);
+        const vaultBefore = await getTokenBalance(context, vaultAta);
+
+        // Coba naikkan ke jumlah yang jauh melebihi balance creator
+        // Transfer CPI akan gagal → seluruh transaksi revert → state tetap
+        await expectError(
+            program.methods
+                .editMilestone(new BN(999_999_999))
+                .accountsStrict({
+                    creator: creator.publicKey,
+                    stream: streamPda,
+                    milestone: milestonePdas[0],
+                    mint,
+                    vault: vaultAta,
+                    creatorTokenAccount: creatorAta,
+                    tokenProgram: TOKEN_PROGRAM_ID,
+                })
+                .signers([creator])
+                .rpc(),
+            "insufficient"  // SPL token "insufficient funds" atau program InsufficientBalance
+        );
+
+        // Verifikasi state tidak berubah setelah gagal
+        const streamAfter = await program.account.streamAccount.fetch(streamPda);
+        const milestoneAfter = await program.account.milestoneAccount.fetch(milestonePdas[0]);
+        const vaultAfter = await getTokenBalance(context, vaultAta);
+
+        expect(streamAfter.totalAmount.toNumber()).to.equal(
+            streamBefore.totalAmount.toNumber(),
+            "total_amount tidak boleh berubah jika transaksi gagal"
+        );
+        expect(milestoneAfter.amount.toNumber()).to.equal(
+            milestoneBefore.amount.toNumber(),
+            "milestone.amount tidak boleh berubah jika transaksi gagal"
+        );
+        expect(vaultAfter).to.equal(vaultBefore, "vault balance tidak boleh berubah");
     });
 });
