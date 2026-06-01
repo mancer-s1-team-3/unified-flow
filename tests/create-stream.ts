@@ -2230,6 +2230,161 @@ describe("create-stream", () => {
     }
   });
 
+  it("Fails when mint is not in allowed_mints list", async () => {
+    const [configPDA] = PublicKey.findProgramAddressSync(
+      [Buffer.from("config")], program.programId
+    );
+    const configInfo = await context.banksClient.getAccount(configPDA);
+    const configData = Buffer.from(configInfo!.data);
+
+    // Layout ConfigAccount (Borsh):
+    // discriminator(8) + admin_authority(32) + fee_authority(32) + paused(1)
+    // + withdraw_fee_bps(2) + max_withdraw_fee_bps(2) + fee_change_timelock_seconds(8)
+    // + pending_fees: Option<PendingFees>(1 byte tag, karena None = 0x00)
+    // + allowed_mints: Vec<Pubkey> → 4 bytes len + N*32 bytes
+    const allowedMintsOffset = 8 + 32 + 32 + 1 + 2 + 2 + 8 + 1; // = 86
+
+    // Inject allowed_mints = [SystemProgram.programId] (1 entry, bukan blockedMint)
+    const dummyAllowedMint = SystemProgram.programId; // pubkey apapun asal bukan blockedMint
+    const newData = Buffer.alloc(configData.length + 36); // +4 len + 32 pubkey
+    configData.copy(newData, 0, 0, allowedMintsOffset);
+    // tulis vec len = 1
+    newData.writeUInt32LE(1, allowedMintsOffset);
+    // tulis pubkey
+    dummyAllowedMint.toBuffer().copy(newData, allowedMintsOffset + 4);
+    // sisa data setelah allowed_mints lama (len=0, 4 bytes) → bump byte
+    const oldBumpOffset = allowedMintsOffset + 4; // sebelumnya vec<0> = 4 bytes len saja
+    configData.copy(newData, allowedMintsOffset + 4 + 32, oldBumpOffset);
+
+    await context.setAccount(configPDA, {
+      lamports: configInfo!.lamports,
+      data: newData,
+      owner: new PublicKey(configInfo!.owner),
+      executable: false,
+    });
+
+    const nonce = new BN(9999001);
+    const startTs = BASE_NOW + 60;
+    const endTs = startTs + 200;
+
+    const blockedMint = await createTestMint(context, admin, admin.publicKey, 6);
+    const blockedAta = await createAta(context, admin, blockedMint, creator.publicKey);
+    await mintTokensTo(context, admin, blockedMint, blockedAta, amount.toNumber());
+
+    try {
+      await expectError(
+        program.methods.createStream(
+          amount, new BN(startTs), new BN(startTs), new BN(endTs),
+          VESTING_TYPE_LINEAR, [], nonce
+        )
+          .accounts({
+            creator: creator.publicKey, recipient: recipient.publicKey,
+            mint: blockedMint, creatorTokenAccount: blockedAta,
+            tokenProgram: TOKEN_PROGRAM_ID,
+          })
+          .signers([creator]).rpc(),
+        "MintNotAllowed"
+      );
+    } finally {
+      // restore config ke state semula (allowed_mints kosong)
+      await context.setAccount(configPDA, {
+        lamports: configInfo!.lamports,
+        data: configData,
+        owner: new PublicKey(configInfo!.owner),
+        executable: false,
+      });
+    }
+  });
+  it("Allows stream when mint is in allowed_mints list", async () => {
+    const [configPDA] = PublicKey.findProgramAddressSync(
+      [Buffer.from("config")], program.programId
+    );
+    const configInfo = await context.banksClient.getAccount(configPDA);
+    const configData = Buffer.from(configInfo!.data);
+    const allowedMintsOffset = 8 + 32 + 32 + 1 + 2 + 2 + 8 + 1; // = 86
+
+    // Inject allowed_mints = [mint] — mint yang sama yang dipakai test
+    const newData = Buffer.alloc(configData.length + 36);
+    configData.copy(newData, 0, 0, allowedMintsOffset);
+    newData.writeUInt32LE(1, allowedMintsOffset);
+    mint.toBuffer().copy(newData, allowedMintsOffset + 4); // ← mint diizinkan
+    configData.copy(newData, allowedMintsOffset + 4 + 32, allowedMintsOffset + 4);
+
+    await context.setAccount(configPDA, {
+      lamports: configInfo!.lamports,
+      data: newData,
+      owner: new PublicKey(configInfo!.owner),
+      executable: false,
+    });
+
+    const nonce = new BN(9999002);
+    const startTs = BASE_NOW + 60;
+    const endTs = startTs + 200;
+
+    try {
+      await program.methods.createStream(
+        amount, new BN(startTs), new BN(startTs), new BN(endTs),
+        VESTING_TYPE_LINEAR, [], nonce
+      )
+        .accounts({
+          creator: creator.publicKey, recipient: recipient.publicKey,
+          mint, creatorTokenAccount, tokenProgram: TOKEN_PROGRAM_ID,
+        })
+        .signers([creator]).rpc();
+
+      const [streamPDA] = PublicKey.findProgramAddressSync(
+        [Buffer.from("stream"), creator.publicKey.toBuffer(),
+        recipient.publicKey.toBuffer(), nonce.toArrayLike(Buffer, "le", 8)],
+        program.programId
+      );
+      const stream = await program.account.streamAccount.fetch(streamPDA);
+      expect(stream.totalAmount.toNumber()).to.equal(amount.toNumber());
+    } finally {
+      await context.setAccount(configPDA, {
+        lamports: configInfo!.lamports,
+        data: configData,
+        owner: new PublicKey(configInfo!.owner),
+        executable: false,
+      });
+    }
+  });
+  it("Fails when cliff stream start date is in the past", async () => {
+    const nonce = new BN(9999003);
+    const startTs = BASE_NOW - 100; // past
+    const cliffTs = BASE_NOW + 60;
+    const endTs = BASE_NOW + 200;
+
+    await expectError(
+      program.methods.createStream(
+        amount, new BN(startTs), new BN(cliffTs), new BN(endTs),
+        VESTING_TYPE_CLIFF, [], nonce
+      )
+        .accounts({
+          creator: creator.publicKey, recipient: recipient.publicKey,
+          mint, creatorTokenAccount, tokenProgram: TOKEN_PROGRAM_ID,
+        })
+        .signers([creator]).rpc(),
+      "InvalidStartDate"
+    );
+  });
+
+  it("Fails when cliff stream end date is in the past", async () => {
+    const nonce = new BN(9999004);
+    await expectError(
+      program.methods.createStream(
+        amount,
+        new BN(BASE_NOW + 60),
+        new BN(BASE_NOW + 120),
+        new BN(BASE_NOW - 1), // end in past
+        VESTING_TYPE_CLIFF, [], nonce
+      ).accounts({
+        creator: creator.publicKey, recipient: recipient.publicKey,
+        mint, creatorTokenAccount, tokenProgram: TOKEN_PROGRAM_ID
+      })
+        .signers([creator]).rpc(),
+      "InvalidEndDate"
+    );
+  });
   // -------------------------------------------------------
   // [AUTH] A-1: Unsigned transaction ditolak Anchor runtime
   // Creator ada di accounts tapi tidak di signers[]
