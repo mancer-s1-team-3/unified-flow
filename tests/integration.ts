@@ -165,7 +165,6 @@ async function expectError(promise: Promise<any>, fragment: string) {
 
 // ─── Suite ───────────────────────────────────────────────────────────────────
 describe("integration-and-edge-cases", () => {
-    const svm = new LiteSVM();
     let context: ProgramTestContext;
     let provider: BankrunProvider;
     let program: Program<UnifiedFlow>;
