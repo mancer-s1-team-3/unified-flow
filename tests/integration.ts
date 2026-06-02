@@ -184,7 +184,7 @@ describe("integration-and-edge-cases", () => {
 
     let nonceCounter = 9000; // unique range to avoid seed conflicts
 
-    before(async () => {
+    beforeEach(async () => {
         admin = Keypair.generate();
         creator = Keypair.generate();
         recipient = Keypair.generate();
