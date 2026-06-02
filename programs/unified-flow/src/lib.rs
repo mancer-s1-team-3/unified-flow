@@ -323,7 +323,51 @@ pub fn create_stream<'info>(
 
     Ok(())
 }
+pub fn withdraw_fees(
+    ctx: Context<WithdrawFees>,
+    amount: u64,
+) -> Result<()> {
+    require_keys_eq!(
+        ctx.accounts.admin.key(),
+        ctx.accounts.config.fee_authority,
+        ErrorCode::Unauthorized
+    );
 
+    require!(
+        ctx.accounts.fee_vault.lamports() >= amount,
+        ErrorCode::InsufficientBalance
+    );
+
+    let bump = ctx.bumps.fee_vault;
+
+    let signer_seeds: &[&[&[u8]]] = &[&[
+        b"fee_vault",
+        &[bump],
+    ]];
+
+    invoke_signed(
+        &system_instruction::transfer(
+            ctx.accounts.fee_vault.key,
+            ctx.accounts.destination.key,
+            amount,
+        ),
+        &[
+            ctx.accounts.fee_vault.to_account_info(),
+            ctx.accounts.destination.to_account_info(),
+            ctx.accounts.system_program.to_account_info(),
+        ],
+        signer_seeds,
+    )?;
+
+    emit!(FeesWithdrawn {
+        admin: ctx.accounts.admin.key(),
+        destination: ctx.accounts.destination.key(),
+        amount,
+        timestamp: Clock::get()?.unix_timestamp,
+    });
+
+    Ok(())
+}
     pub fn withdraw(ctx: Context<Withdraw>) -> Result<()> {
         let now = Clock::get()?.unix_timestamp;
 
@@ -947,51 +991,7 @@ pub struct Withdraw<'info> {
     pub system_program: Program<'info, System>,
 }
 
-pub fn withdraw_fees(
-    ctx: Context<WithdrawFees>,
-    amount: u64,
-) -> Result<()> {
-    require_keys_eq!(
-        ctx.accounts.admin.key(),
-        ctx.accounts.config.fee_authority,
-        ErrorCode::Unauthorized
-    );
 
-    require!(
-        ctx.accounts.fee_vault.lamports() >= amount,
-        ErrorCode::InsufficientBalance
-    );
-
-    let bump = ctx.bumps.fee_vault;
-
-    let signer_seeds: &[&[&[u8]]] = &[&[
-        b"fee_vault",
-        &[bump],
-    ]];
-
-    invoke_signed(
-        &system_instruction::transfer(
-            ctx.accounts.fee_vault.key,
-            ctx.accounts.destination.key,
-            amount,
-        ),
-        &[
-            ctx.accounts.fee_vault.to_account_info(),
-            ctx.accounts.destination.to_account_info(),
-            ctx.accounts.system_program.to_account_info(),
-        ],
-        signer_seeds,
-    )?;
-
-    emit!(FeesWithdrawn {
-        admin: ctx.accounts.admin.key(),
-        destination: ctx.accounts.destination.key(),
-        amount,
-        timestamp: Clock::get()?.unix_timestamp,
-    });
-
-    Ok(())
-}
 #[derive(Accounts)]
 pub struct Cancel<'info> {
     #[account(mut)]
