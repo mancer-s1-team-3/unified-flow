@@ -19,7 +19,7 @@ import {
 import fs from "fs";
 
 import { connection } from "../services/rpc";
-import idl from "../idl/solana_program.json";
+import idl from "../idl/unified_flow.json";
 
 // =====================================================
 // CONFIG
@@ -346,7 +346,7 @@ async function main() {
     });
 
     const remainingAccounts =
-            streamConfig.vestingType === 2
+        streamConfig.vestingType === 2
             ? streamConfig.milestoneInputs.map((_, index) => {
                 const [milestonePda] = PublicKey.findProgramAddressSync(
                     [

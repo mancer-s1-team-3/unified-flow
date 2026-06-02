@@ -8,7 +8,7 @@ const PROGRAM_ID = new PublicKey(process.env.PROGRAM_ID!);
 
 const legacyIdl = {
     version: "0.1.0",
-    name: "solana_program",
+    name: "unified_flow",
     instructions: [],
     accounts: [],
     types: [

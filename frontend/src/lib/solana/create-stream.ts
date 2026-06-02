@@ -24,7 +24,7 @@ import {
   setTransactionMessageLifetimeUsingBlockhash,
 } from "@solana/kit";
 import type { WalletSession } from "@solana/client";
-import idl from "../../../../backend/src/idl/solana_program.json";
+import idl from "../../../../backend/src/idl/unified_flow.json";
 import { getExplorerClusterParam, getProgramIdForEndpoint } from "@/lib/solana/network-config";
 
 const TOKEN_PROGRAM_ID = new PublicKey(TOKEN_PROGRAM_ADDRESS);
@@ -290,17 +290,17 @@ async function prepareCreateStreamInstruction({
   const remainingAccounts =
     vestingType === 2
       ? milestones.map((_, index) => {
-          const [milestoneAddress] = PublicKey.findProgramAddressSync(
-            [Buffer.from("milestone"), streamAddress.toBuffer(), Buffer.from([index])],
-            PROGRAM_ID
-          );
+        const [milestoneAddress] = PublicKey.findProgramAddressSync(
+          [Buffer.from("milestone"), streamAddress.toBuffer(), Buffer.from([index])],
+          PROGRAM_ID
+        );
 
-          return {
-            pubkey: milestoneAddress,
-            isWritable: true,
-            isSigner: false,
-          };
-        })
+        return {
+          pubkey: milestoneAddress,
+          isWritable: true,
+          isSigner: false,
+        };
+      })
       : [];
 
   const preInstructions: any[] = [];
@@ -580,17 +580,17 @@ export async function createStreamOnChain({
   const remainingAccounts =
     vestingType === 2
       ? milestones.map((_, index) => {
-          const [milestoneAddress] = PublicKey.findProgramAddressSync(
-            [Buffer.from("milestone"), streamAddress.toBuffer(), Buffer.from([index])],
-            PROGRAM_ID
-          );
+        const [milestoneAddress] = PublicKey.findProgramAddressSync(
+          [Buffer.from("milestone"), streamAddress.toBuffer(), Buffer.from([index])],
+          PROGRAM_ID
+        );
 
-          return {
-            pubkey: milestoneAddress,
-            isWritable: true,
-            isSigner: false,
-          };
-        })
+        return {
+          pubkey: milestoneAddress,
+          isWritable: true,
+          isSigner: false,
+        };
+      })
       : [];
 
   const preInstructions: any[] = [];

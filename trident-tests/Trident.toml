@@ -10,5 +10,5 @@ attach_extension = true     # default: false
 
 [[fuzz.programs]]
 address = "8M5yieUh7pxwUi1YBByDF82nqoorZwaKi8dBoMVpurFa"
-program = "../target/deploy/solana_program.so"
+program = "../target/deploy/unified_flow.so"
  

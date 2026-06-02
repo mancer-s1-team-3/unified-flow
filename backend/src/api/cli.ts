@@ -15,7 +15,7 @@ import path from "path";
 import dotenv from "dotenv";
 
 import { connection } from "../services/rpc";
-import idl from "../idl/solana_program.json";
+import idl from "../idl/unified_flow.json";
 
 dotenv.config();
 
@@ -201,8 +201,8 @@ ${C_BLUE}${C_BOLD}🌊 Vesting Stream Details:${C_RESET}
             case "create": {
                 if (args.length < 6) {
                     logError("Missing arguments. Usage:\n" +
-                             "  Linear/Cliff: npm run cli create <recipient> <mint> <amount> <type: 0|1> <durationSecs>\n" +
-                             "  Milestone:    npm run cli create <recipient> <mint> <amount> <type: 2> <milestones: 100,200,300>");
+                        "  Linear/Cliff: npm run cli create <recipient> <mint> <amount> <type: 0|1> <durationSecs>\n" +
+                        "  Milestone:    npm run cli create <recipient> <mint> <amount> <type: 2> <milestones: 100,200,300>");
                     process.exit(1);
                 }
 

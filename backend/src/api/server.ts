@@ -7,7 +7,7 @@ import { PublicKey } from "@solana/web3.js";
 import prisma from "../db/prisma";
 import { connection } from "../services/rpc";
 import { parseCsvText, computeCsvDiff, mapCsvRowsToStreams } from "../services/csvDiff";
-import idl from "../idl/solana_program.json";
+import idl from "../idl/unified_flow.json";
 
 const app = express();
 
@@ -217,8 +217,8 @@ app.post("/streams/edit-csv", async (req, res) => {
                 return res.status(404).send({ error: `Stream ${item.id} not found in database.` });
             }
             if (!existing.isCsvCreated) {
-                return res.status(400).send({ 
-                    error: `Stream ${item.id} was created manually. CSV editing is strictly forbidden for manual streams.` 
+                return res.status(400).send({
+                    error: `Stream ${item.id} was created manually. CSV editing is strictly forbidden for manual streams.`
                 });
             }
 

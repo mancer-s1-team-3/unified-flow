@@ -27,7 +27,7 @@ const WITHDRAW_FEE_USD_CENTS: u128 = 99; // $0.99
 const LAMPORTS_PER_SOL: u128 = 1_000_000_000;
 
 #[program]
-pub mod solana_program {
+pub mod unified_flow {
     use super::*;
 
  

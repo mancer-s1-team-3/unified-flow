@@ -13,7 +13,7 @@ jobs:
   build:
     uses: solana-developers/github-workflows/.github/workflows/reusable-build.yaml@v0.3.4
     with:
-      program: "solana-program"
+      program: "unified-flow"
       program-id: "8M5yieUh7pxwUi1YBByDF82nqoorZwaKi8dBoMVpurFa"
       network: "devnet"
       deploy: true

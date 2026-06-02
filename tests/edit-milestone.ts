@@ -17,8 +17,8 @@ import {
     TOKEN_PROGRAM_ID,
     ASSOCIATED_TOKEN_PROGRAM_ID,
 } from "@solana/spl-token";
-import { SolanaProgram } from "../target/types/solana_program";
-import IDL from "../target/idl/solana_program.json";
+import { UnifiedFlow } from "../target/types/unified_flow";
+import IDL from "../target/idl/unified_flow.json";
 import { expect } from "chai";
 
 const VESTING_TYPE_LINEAR = 0;
@@ -182,7 +182,7 @@ async function expectError(promise: Promise<any>, fragment: string) {
 describe("edit-milestone", () => {
     let context: ProgramTestContext;
     let provider: BankrunProvider;
-    let program: Program<SolanaProgram>;
+    let program: Program<UnifiedFlow>;
 
     let admin: Keypair;
     let creator: Keypair;
@@ -361,7 +361,7 @@ describe("edit-milestone", () => {
 
         provider = new BankrunProvider(context);
         anchor.setProvider(provider);
-        program = new Program<SolanaProgram>(IDL as SolanaProgram, provider);
+        program = new Program<UnifiedFlow>(IDL as UnifiedFlow, provider);
 
         await setTime(context, BASE_NOW);
 

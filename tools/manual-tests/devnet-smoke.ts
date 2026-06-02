@@ -32,27 +32,27 @@ import {
   getOrCreateAssociatedTokenAccount,
   mintTo,
 } from "@solana/spl-token";
-import { SolanaProgram } from "../unified-flow/target/types/solana_program";
-import IDL from "../unified-flow/target/idl/solana_program.json";
+import { UnifiedFlow } from "../../target/types/unified_flow";
+import IDL from "../../target/idl/unified_flow.json";
 import * as fs from "fs";
 import * as os from "os";
 import * as path from "path";
 
 // ─── Constants ───────────────────────────────────────────────────────────────
 
-const DEVNET_RPC    = "https://api.devnet.solana.com";
+const DEVNET_RPC = "https://api.devnet.solana.com";
 // const DEVNET_RPC    = "https://solana-devnet.g.alchemy.com/v2/kavdD0d3AcCK-APKJhHkW";
-const PROGRAM_ID    = new PublicKey("8M5yieUh7pxwUi1YBByDF82nqoorZwaKi8dBoMVpurFa");
-const SOL_USD_FEED  = new PublicKey("99B2bTijsU6f1GCT73HmdR7HCFFjGMBcPZY6jZ96ynrR");
-const EXPLORER      = "https://explorer.solana.com";
+const PROGRAM_ID = new PublicKey("8M5yieUh7pxwUi1YBByDF82nqoorZwaKi8dBoMVpurFa");
+const SOL_USD_FEED = new PublicKey("99B2bTijsU6f1GCT73HmdR7HCFFjGMBcPZY6jZ96ynrR");
+const EXPLORER = "https://explorer.solana.com";
 
 const STREAM_DURATION = 120;   // seconds — main vesting window
-const TOKEN_AMOUNT    = 1_000_000; // 1.000000 tokens (6 decimals)
-const MINT_DECIMALS   = 6;
+const TOKEN_AMOUNT = 1_000_000; // 1.000000 tokens (6 decimals)
+const MINT_DECIMALS = 6;
 
 // ─── Display helpers ─────────────────────────────────────────────────────────
 
-const txUrl  = (sig: string) => `${EXPLORER}/tx/${sig}?cluster=devnet`;
+const txUrl = (sig: string) => `${EXPLORER}/tx/${sig}?cluster=devnet`;
 const accUrl = (pk: PublicKey) => `${EXPLORER}/address/${pk.toBase58()}?cluster=devnet`;
 
 let _passed = 0;
@@ -113,9 +113,9 @@ async function withRetry<T>(fn: () => Promise<T>, maxAttempts = 10): Promise<T> 
     } catch (err: any) {
       const msg = err?.message ?? String(err);
       const isFlaky = msg.includes("Unknown action") ||
-                      msg.includes("blockhash") ||
-                      msg.includes("429") ||
-                      msg.includes("503");
+        msg.includes("blockhash") ||
+        msg.includes("429") ||
+        msg.includes("503");
       if (!isFlaky || attempt === maxAttempts) throw err;
       const delay = 2000 * attempt;
       process.stdout.write(`\n  ↻ RPC error, retrying in ${delay / 1000}s...`);
@@ -153,17 +153,17 @@ async function main() {
   // ── Connections & keypairs ──────────────────────────────────────────────────
 
   const connection = new Connection(DEVNET_RPC, "confirmed");
-  const admin      = loadWallet();
-  const creator    = Keypair.generate();
-  const recipient  = Keypair.generate();
-  const stranger   = Keypair.generate();
+  const admin = loadWallet();
+  const creator = Keypair.generate();
+  const recipient = Keypair.generate();
+  const stranger = Keypair.generate();
 
   console.log();
   console.log("  Keypairs");
-  info("admin",     admin.publicKey.toBase58());
-  info("creator",   creator.publicKey.toBase58());
+  info("admin", admin.publicKey.toBase58());
+  info("creator", creator.publicKey.toBase58());
   info("recipient", recipient.publicKey.toBase58());
-  info("stranger",  stranger.publicKey.toBase58());
+  info("stranger", stranger.publicKey.toBase58());
 
   // ── Anchor program ─────────────────────────────────────────────────────────
 
@@ -173,7 +173,7 @@ async function main() {
     { commitment: "confirmed" }
   );
   anchor.setProvider(provider);
-  const program = new Program<SolanaProgram>(IDL as SolanaProgram, provider);
+  const program = new Program<UnifiedFlow>(IDL as UnifiedFlow, provider);
 
   // ── Fund wallets ───────────────────────────────────────────────────────────
 
@@ -186,8 +186,8 @@ async function main() {
     fundTx.add(
       SystemProgram.transfer({
         fromPubkey: admin.publicKey,
-        toPubkey:   kp.publicKey,
-        lamports:   LAMPORTS_PER_SOL / 10,
+        toPubkey: kp.publicKey,
+        lamports: LAMPORTS_PER_SOL / 10,
       })
     );
   }
@@ -247,11 +247,10 @@ async function main() {
     endTs: number;
     amount?: number;
   }) {
-    const signer  = opts.signerKp  ?? creator;
-    const sAta    = opts.signerAta ?? creatorAta;
-    const rcpt    = opts.recipientPk ?? recipient.publicKey;
-    const amount  = opts.amount ?? TOKEN_AMOUNT;
-    const n       = new BN(nonceSeq++);
+    const signer = opts.signerKp ?? creator;
+    const sAta = opts.signerAta ?? creatorAta;
+    const rcpt = opts.recipientPk ?? recipient.publicKey;
+    const n = new BN(nonceSeq++);
 
     const [streamPda] = PublicKey.findProgramAddressSync(
       [
@@ -266,16 +265,28 @@ async function main() {
       mint,
       owner: streamPda,
     });
-
+    const BASE_NOW = 1_700_000_000;
+    const nonce = new BN(900000);
+    const startTs = BASE_NOW + 60;
+    const amount = new BN(TOKEN_AMOUNT);
+    const endTs = startTs + 100;
     const sig = await withRetry(() =>
       program.methods
-        .createStream(new BN(amount), new BN(opts.startTs), new BN(opts.endTs), n)
+        .createStream(
+          amount,
+          new BN(startTs),
+          new BN(startTs),
+          new BN(endTs),
+          0,
+          [],
+          nonce
+        )
         .accounts({
-          creator:             signer.publicKey,
-          recipient:           rcpt,
+          creator: signer.publicKey,
+          recipient: rcpt,
           mint,
           creatorTokenAccount: sAta,
-          tokenProgram:        TOKEN_PROGRAM_ID,
+          tokenProgram: TOKEN_PROGRAM_ID,
         })
         .signers([signer])
         .rpc({ skipPreflight: true })
@@ -286,14 +297,14 @@ async function main() {
   function doWithdraw(signerKp: Keypair, streamPda: PublicKey, ata: PublicKey) {
     return withRetry(() =>
       program.methods
-        .withdraw(new BN(nonceSeq++))
+        .withdraw()
         .accounts({
-          recipient:     signerKp.publicKey,
-          stream:        streamPda,
-          recipientAta:  ata,
-          feeReceiver:   config.feeAuthority,
+          recipient: signerKp.publicKey,
+          stream: streamPda,
+          recipientAta: ata,
+          feeReceiver: config.feeAuthority,
           chainlinkFeed: SOL_USD_FEED,
-          tokenProgram:  TOKEN_PROGRAM_ID,
+          tokenProgram: TOKEN_PROGRAM_ID,
         } as any)
         .signers([signerKp])
         .rpc()
@@ -307,14 +318,14 @@ async function main() {
   header("1/7", "create_stream — lock tokens into vault PDA");
 
   const mainStart = Math.floor(Date.now() / 1000) + 15; // buffer for devnet latency
-  const mainEnd   = mainStart + STREAM_DURATION;
+  const mainEnd = mainStart + STREAM_DURATION;
 
   const { streamPda: mainStream, vaultAta: mainVault, sig: s1 } =
     await createStream({ startTs: mainStart, endTs: mainEnd });
 
-  pass("tx",          txUrl(s1));
-  pass("stream PDA",  accUrl(mainStream));
-  pass("vault",       accUrl(mainVault));
+  pass("tx", txUrl(s1));
+  pass("stream PDA", accUrl(mainStream));
+  pass("vault", accUrl(mainVault));
 
   const vaultState = await getAccount(connection, mainVault);
   const vaultLocked = Number(vaultState.amount);
@@ -331,7 +342,7 @@ async function main() {
   const futureStart = Math.floor(Date.now() / 1000) + 3_600;
   const { streamPda: futureStream } = await createStream({
     startTs: futureStart,
-    endTs:   futureStart + STREAM_DURATION,
+    endTs: futureStart + STREAM_DURATION,
   });
 
   const ok4 = await expectError(
@@ -376,7 +387,7 @@ async function main() {
   // ══════════════════════════════════════════════════════════════════════════
 
   const elapsedA = Math.floor(Date.now() / 1000) - mainStart;
-  const waitA    = Math.max(1, Math.ceil(STREAM_DURATION / 2) - elapsedA + 2);
+  const waitA = Math.max(1, Math.ceil(STREAM_DURATION / 2) - elapsedA + 2);
 
   console.log();
   await sleep(waitA, `waiting ${waitA}s until ~50% vested`);
@@ -390,11 +401,11 @@ async function main() {
 
   const balBefore2 = (await getAccount(connection, recipientAta)).amount;
   const s2 = await doWithdraw(recipient, mainStream, recipientAta);
-  const balAfter2  = (await getAccount(connection, recipientAta)).amount;
-  const claimed2   = Number(balAfter2 - balBefore2);
+  const balAfter2 = (await getAccount(connection, recipientAta)).amount;
+  const claimed2 = Number(balAfter2 - balBefore2);
   const expected50 = TOKEN_AMOUNT / 2;
 
-  pass("tx",      txUrl(s2));
+  pass("tx", txUrl(s2));
   pass("claimed", `${claimed2} tokens`);
   info("expected ~50%", `${expected50} tokens`);
 
@@ -414,7 +425,7 @@ async function main() {
   // ══════════════════════════════════════════════════════════════════════════
 
   const elapsedB = Math.floor(Date.now() / 1000) - mainStart;
-  const waitB    = Math.max(1, STREAM_DURATION - elapsedB + 2);
+  const waitB = Math.max(1, STREAM_DURATION - elapsedB + 2);
 
   console.log();
   await sleep(waitB, `waiting ${waitB}s until 100% vested`);
@@ -428,11 +439,11 @@ async function main() {
 
   const balBefore3 = (await getAccount(connection, recipientAta)).amount;
   const s3 = await doWithdraw(recipient, mainStream, recipientAta);
-  const balAfter3  = (await getAccount(connection, recipientAta)).amount;
-  const claimed3   = Number(balAfter3 - balBefore3);
+  const balAfter3 = (await getAccount(connection, recipientAta)).amount;
+  const claimed3 = Number(balAfter3 - balBefore3);
 
-  pass("tx",           txUrl(s3));
-  pass("claimed now",  `${claimed3} tokens`);
+  pass("tx", txUrl(s3));
+  pass("claimed now", `${claimed3} tokens`);
   pass("total received", `${Number(balAfter3)} tokens`);
 
   const stream3 = await program.account.streamAccount.fetch(mainStream);

@@ -1,7 +1,7 @@
 "use client";
 
 import * as anchor from "@coral-xyz/anchor";
-import idl from "../../../../backend/src/idl/solana_program.json";
+import idl from "../../../../backend/src/idl/unified_flow.json";
 import { createWalletTransactionSigner, transactionToBase64 } from "@solana/client";
 import {
   AccountRole,

@@ -18,8 +18,8 @@ import {
 } from "@solana/spl-token";
 import { PublicKey, Keypair, SystemProgram, Transaction } from "@solana/web3.js";
 import { expect } from "chai";
-import { SolanaProgram } from "../target/types/solana_program";
-import IDL from "../target/idl/solana_program.json";
+import { UnifiedFlow } from "../target/types/unified_flow";
+import IDL from "../target/idl/unified_flow.json";
 
 const BASE_NOW = 1_700_000_000;
 const TOKEN_AMOUNT = 1_000_000;
@@ -152,7 +152,7 @@ function buildMilestoneRemainingAccounts(
 describe("create-stream", () => {
   let context: ProgramTestContext;
   let provider: BankrunProvider;
-  let program: Program<SolanaProgram>;
+  let program: Program<UnifiedFlow>;
 
   let admin: Keypair;
   let creator: Keypair;
@@ -179,7 +179,7 @@ describe("create-stream", () => {
 
     provider = new BankrunProvider(context);
     anchor.setProvider(provider);
-    program = new Program<SolanaProgram>(IDL as SolanaProgram, provider);
+    program = new Program<UnifiedFlow>(IDL as UnifiedFlow, provider);
 
     await setTime(context, BASE_NOW);
 

@@ -1,7 +1,7 @@
 "use client";
 
 import * as anchor from "@coral-xyz/anchor";
-import idl from "../../../../backend/src/idl/solana_program.json";
+import idl from "../../../../backend/src/idl/unified_flow.json";
 import { ASSOCIATED_TOKEN_PROGRAM_ADDRESS, TOKEN_PROGRAM_ADDRESS } from "@solana-program/token";
 import { Buffer } from "buffer";
 import { createWalletTransactionSigner, transactionToBase64 } from "@solana/client";
@@ -263,17 +263,17 @@ export async function editLinearOnChain({
 
   const mint = streamState.mint as PublicKey;
   const mintDecimals = await getMintDecimals(connection, mint, commitment);
-  
+
   const startTs = new anchor.BN(String(streamState.startTs || "0"));
   const currentEndTs = new anchor.BN(String(streamState.endTs));
-  
+
   const newEndDurationRaw = input.newEndDuration?.trim() ?? "";
   if (newEndDurationRaw !== "" && !/^\d+$/.test(newEndDurationRaw)) {
     throw new Error("New end duration must be a valid integer.");
   }
 
-  const parsedNewEndTs = newEndDurationRaw !== "" 
-    ? startTs.add(new anchor.BN(newEndDurationRaw)) 
+  const parsedNewEndTs = newEndDurationRaw !== ""
+    ? startTs.add(new anchor.BN(newEndDurationRaw))
     : currentEndTs;
 
   const parsedTopupAmount = input.topupAmount?.trim()
@@ -356,7 +356,7 @@ export async function editCliffOnChain({
 
   const startTs = new anchor.BN(String(streamState.startTs || "0"));
   const endTs = new anchor.BN(String(streamState.endTs || "0"));
-  
+
   const newCliffDurationBn = new anchor.BN(newCliffDurationRaw);
   const newCliffBn = startTs.add(newCliffDurationBn);
 

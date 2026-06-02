@@ -105,14 +105,14 @@ impl FuzzTest {
         let _ = self.trident.process_transaction(&[do_mint], Some("MintTo"));
 
         // Derive & init config PDA
-        let program_id = solana_program::program_id();
+        let program_id = unified_flow::program_id();
         let (config_pda, _) = Pubkey::find_program_address(&[b"config"], &program_id);
         self.fuzz_accounts.config.insert_with_address(config_pda);
 
-        let ix = solana_program::InitializeConfigInstruction::data(
-            solana_program::InitializeConfigInstructionData::new(),
+        let ix = unified_flow::InitializeConfigInstruction::data(
+            unified_flow::InitializeConfigInstructionData::new(),
         )
-        .accounts(solana_program::InitializeConfigInstructionAccounts::new(creator, config_pda))
+        .accounts(unified_flow::InitializeConfigInstructionAccounts::new(creator, config_pda))
         .instruction();
         let _ = self.trident.process_transaction(&[ix], Some("InitConfig"));
     }
@@ -130,7 +130,7 @@ impl FuzzTest {
         let vesting_type: u8 = self.trident.random_from_range(0..=2u8);
         let now = self.trident.get_current_timestamp();
 
-        let program_id = solana_program::program_id();
+        let program_id = unified_flow::program_id();
         let (stream_pda, _) = Pubkey::find_program_address(
             &[b"stream", creator.as_ref(), recipient.as_ref(), &nonce.to_le_bytes()],
             &program_id,
@@ -176,10 +176,10 @@ impl FuzzTest {
             }
         };
 
-        let ix = solana_program::CreateStreamInstruction::data(
-            solana_program::CreateStreamInstructionData::new(amount, start_ts, cliff_ts, end_ts, vesting_type, milestones, nonce),
+        let ix = unified_flow::CreateStreamInstruction::data(
+            unified_flow::CreateStreamInstructionData::new(amount, start_ts, cliff_ts, end_ts, vesting_type, milestones, nonce),
         )
-        .accounts(solana_program::CreateStreamInstructionAccounts::new(
+        .accounts(unified_flow::CreateStreamInstructionAccounts::new(
             creator, recipient, mint, config, stream_pda, vault, creator_token_account, TOKEN_PROGRAM_ID,
         ))
         .remaining_accounts(remaining)
