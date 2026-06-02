@@ -243,7 +243,7 @@ describe("unlock-milestone", () => {
 
     const amount = new BN(TOKEN_AMOUNT);
 
-    before(async () => {
+    beforeEach(async () => {
         admin = Keypair.generate();
         creator = Keypair.generate();
         recipient = Keypair.generate();
