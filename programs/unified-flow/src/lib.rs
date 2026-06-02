@@ -947,7 +947,39 @@ pub struct Withdraw<'info> {
     pub system_program: Program<'info, System>,
 }
 
+pub fn withdraw_fees(
+    ctx: Context<WithdrawFees>,
+    amount: u64,
+) -> Result<()> {
+    require_keys_eq!(
+        ctx.accounts.admin.key(),
+        ctx.accounts.config.fee_authority,
+        ErrorCode::Unauthorized
+    );
 
+    let bump = ctx.bumps.fee_vault;
+
+    let signer_seeds: &[&[&[u8]]] = &[&[
+        b"fee_vault",
+        &[bump],
+    ]];
+
+    invoke_signed(
+        &system_instruction::transfer(
+            ctx.accounts.fee_vault.key,
+            ctx.accounts.destination.key,
+            amount,
+        ),
+        &[
+            ctx.accounts.fee_vault.to_account_info(),
+            ctx.accounts.destination.to_account_info(),
+            ctx.accounts.system_program.to_account_info(),
+        ],
+        signer_seeds,
+    )?;
+
+    Ok(())
+}
 #[derive(Accounts)]
 pub struct Cancel<'info> {
     #[account(mut)]
@@ -1168,6 +1200,29 @@ pub struct UnlockMilestone<'info> {
         constraint = milestone.stream == stream.key() @ ErrorCode::InvalidMilestonePda
     )]
     pub milestone: Account<'info, MilestoneAccount>,
+
+    pub system_program: Program<'info, System>,
+}
+#[derive(Accounts)]
+pub struct WithdrawFees<'info> {
+    #[account(mut)]
+    pub admin: Signer<'info>,
+
+    #[account(
+        seeds = [b"config"],
+        bump = config.bump,
+    )]
+    pub config: Account<'info, ConfigAccount>,
+
+    #[account(
+        mut,
+        seeds = [b"fee_vault"],
+        bump,
+    )]
+    pub fee_vault: SystemAccount<'info>,
+
+    #[account(mut)]
+    pub destination: SystemAccount<'info>,
 
     pub system_program: Program<'info, System>,
 }
