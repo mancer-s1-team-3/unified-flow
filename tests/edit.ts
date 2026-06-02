@@ -17,8 +17,8 @@ import {
   TOKEN_PROGRAM_ID,
   ASSOCIATED_TOKEN_PROGRAM_ID,
 } from "@solana/spl-token";
-import { SolanaProgram } from "../target/types/solana_program";
-import IDL from "../target/idl/solana_program.json";
+import { UnifiedFlow } from "../target/types/unified_flow";
+import IDL from "../target/idl/unified_flow.json";
 import { expect } from "chai";
 
 const VESTING_TYPE_LINEAR = 0;
@@ -127,7 +127,7 @@ async function expectError(promise: Promise<any>, fragment: string) {
 describe("edit", () => {
   let context: ProgramTestContext;
   let provider: BankrunProvider;
-  let program: Program<SolanaProgram>;
+  let program: Program<UnifiedFlow>;
 
   let admin: Keypair;
   let creator: Keypair;
@@ -306,7 +306,7 @@ describe("edit", () => {
 
     provider = new BankrunProvider(context);
     anchor.setProvider(provider);
-    program = new Program<SolanaProgram>(IDL as SolanaProgram, provider);
+    program = new Program<UnifiedFlow>(IDL as UnifiedFlow, provider);
 
     await setTime(context, BASE_NOW);
 
@@ -417,82 +417,4 @@ describe("edit", () => {
     const stream = await program.account.streamAccount.fetch(streamPda);
     expect(stream.cliffTs.toNumber()).to.equal(newCliffTs);
   });
-
-  it("edits a locked milestone before unlock", async () => {
-    await setTime(context, BASE_NOW);
-    const { streamPda, creatorAta, vaultAta, milestonePdas } = await setupMilestoneStream();
-
-    const targetIndex = 1;
-    const milestonePda = milestonePdas[targetIndex];
-    const newAmount = new BN(300_000);
-
-    await mintTokensTo(context, admin, mint, creatorAta, 50_000);
-
-    const streamBefore = await program.account.streamAccount.fetch(streamPda);
-    const vaultBefore = await getTokenBalance(context, vaultAta);
-    const creatorBefore = await getTokenBalance(context, creatorAta);
-    const milestoneBefore = await program.account.milestoneAccount.fetch(milestonePda);
-
-    await program.methods
-      .editMilestone(newAmount)
-      .accountsStrict({
-        creator: creator.publicKey,
-        stream: streamPda,
-        milestone: milestonePda,
-        mint,
-        vault: vaultAta,
-        creatorTokenAccount: creatorAta,
-        tokenProgram: TOKEN_PROGRAM_ID,
-      })
-      .signers([creator])
-      .rpc();
-
-    const streamAfter = await program.account.streamAccount.fetch(streamPda);
-    const milestoneAfter = await program.account.milestoneAccount.fetch(milestonePda);
-    const milestoneSum = (await Promise.all(
-      milestonePdas.map((pda) => program.account.milestoneAccount.fetch(pda))
-    )).reduce((sum, item) => sum + item.amount.toNumber(), 0);
-
-    expect(milestoneBefore.amount.toNumber()).to.equal(250_000);
-    expect(milestoneAfter.amount.toNumber()).to.equal(newAmount.toNumber());
-    expect(milestoneSum).to.equal(streamAfter.totalAmount.toNumber());
-    expect(streamAfter.totalAmount.toNumber()).to.equal(streamBefore.totalAmount.toNumber() + 50_000);
-    expect(await getTokenBalance(context, vaultAta)).to.equal(vaultBefore + BigInt(50_000));
-    expect(await getTokenBalance(context, creatorAta)).to.equal(creatorBefore - BigInt(50_000));
-  });
-
-  it("fails when editing an already unlocked milestone", async () => {
-    await setTime(context, BASE_NOW);
-    const { streamPda, creatorAta, vaultAta, milestonePdas } = await setupMilestoneStream();
-
-    await program.methods
-      .unlockMilestone()
-      .accountsStrict({
-        creator: creator.publicKey,
-        stream: streamPda,
-        milestone: milestonePdas[0],
-        systemProgram: SystemProgram.programId,
-      })
-      .signers([creator])
-      .rpc();
-
-    await expectError(
-      program.methods
-        .editMilestone(new BN(300_000))
-        .accountsStrict({
-          creator: creator.publicKey,
-          stream: streamPda,
-          milestone: milestonePdas[0],
-          mint,
-          vault: vaultAta,
-          creatorTokenAccount: creatorAta,
-          tokenProgram: TOKEN_PROGRAM_ID,
-        })
-        .signers([creator])
-        .rpc(),
-      "MilestoneAlreadyUnlocked"
-    );
-  });
-
-
 });

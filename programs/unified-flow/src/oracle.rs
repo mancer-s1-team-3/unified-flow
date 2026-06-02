@@ -21,7 +21,10 @@ pub(crate) const CHAINLINK_PROGRAM_ID: Pubkey =
 const FEED_DECIMALS_OFFSET: usize = 0x8a;
 const FEED_TIMESTAMP_OFFSET: usize = 0xd0;
 const FEED_ANSWER_OFFSET: usize = 0xd8;
-const FEED_MIN_LEN: usize = FEED_ANSWER_OFFSET + 16;
+ const FEED_MIN_LEN: usize = match FEED_ANSWER_OFFSET.checked_add(16) {
+      Some(v) => v,
+      None => unreachable!(),
+  };
 const FEED_MAX_STALENESS: i64 = 3_600; // 1 hour
 
 pub(crate) struct ChainlinkRound {
@@ -36,7 +39,7 @@ pub(crate) fn read_chainlink_round(feed: &AccountInfo, now: i64) -> Result<Chain
     let decimals = data[FEED_DECIMALS_OFFSET];
 
     let updated_at = u32::from_le_bytes(
-        data[FEED_TIMESTAMP_OFFSET..FEED_TIMESTAMP_OFFSET + 4]
+        data[FEED_TIMESTAMP_OFFSET..FEED_TIMESTAMP_OFFSET.checked_add(4).ok_or(ErrorCode::MathOverflow)?]
             .try_into()
             .map_err(|_| error!(ErrorCode::InvalidOracleFeed))?,
     ) as i64;
@@ -47,7 +50,7 @@ pub(crate) fn read_chainlink_round(feed: &AccountInfo, now: i64) -> Result<Chain
     );
 
     let answer = i128::from_le_bytes(
-        data[FEED_ANSWER_OFFSET..FEED_ANSWER_OFFSET + 16]
+        data[FEED_ANSWER_OFFSET..FEED_ANSWER_OFFSET.checked_add(16).ok_or(ErrorCode::MathOverflow)?]
             .try_into()
             .map_err(|_| error!(ErrorCode::InvalidOracleFeed))?,
     );

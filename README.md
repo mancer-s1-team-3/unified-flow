@@ -122,7 +122,7 @@ Where `elapsed = now − start_ts` and `duration = end_ts − start_ts`. Before 
 
 | Component | Status | Path |
 | --- | --- | --- |
-| Anchor program | In development | [programs/solana-program/](programs/solana-program/) |
+| Anchor program | In development | [programs/unified-flow/](programs/unified-flow/) |
 | Backend API | Initialized | [backend/](backend/) |
 | Frontend web app | Initialized | [frontend/](frontend/) |
 | Integration tests | Initialized | [tests/](tests/) |
@@ -146,7 +146,7 @@ Where `elapsed = now − start_ts` and `duration = end_ts − start_ts`. Before 
 |-- rust-toolchain.toml         # Pinned Rust toolchain
 |-- package.json                # JS/TS tooling for the Anchor workspace
 |-- programs/
-|   `-- solana-program/         # Anchor on-chain program
+|   `-- unified-flow/         # Anchor on-chain program
 |-- tests/                      # TypeScript integration tests
 |-- migrations/                 # Anchor deploy scripts
 |-- backend/                    # Express + TypeScript backend API
@@ -208,9 +208,9 @@ anchor build
 
 Main build outputs:
 
-- `target/deploy/solana_program.so`
-- `target/idl/solana_program.json`
-- `target/types/solana_program.ts`
+- `target/deploy/unified_flow.so`
+- `target/idl/unified_flow.json`
+- `target/types/unified_flow.ts`
 
 Run tests with the local validator managed by Anchor:
 

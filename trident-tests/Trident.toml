@@ -1,0 +1,14 @@
+[fuzz.metrics]
+enabled = true
+
+[fuzz.coverage]
+enable = true               # default: false
+server_port = 58432         # default: 58432
+loopcount = 5               # default: 0
+format = "json"             # default: "json"
+attach_extension = true     # default: false
+
+[[fuzz.programs]]
+address = "8M5yieUh7pxwUi1YBByDF82nqoorZwaKi8dBoMVpurFa"
+program = "../target/deploy/unified_flow.so"
+ 

@@ -20,7 +20,7 @@ import dotenv from "dotenv";
 import path from "path";
 
 import { connection } from "../services/rpc";
-import idl from "../idl/solana_program.json";
+import idl from "../idl/unified_flow.json";
 
 dotenv.config();
 

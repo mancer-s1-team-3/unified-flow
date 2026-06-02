@@ -22,10 +22,10 @@ on:
       program:
         description: "Program to test"
         required: true
-        default: "solana-program"
+        default: "unified-flow"
 
 jobs:
   test:
     uses: solana-developers/github-workflows/.github/workflows/test.yaml@v0.3.4
     with:
-      program: ${{ 'solana-program' }}
+      program: ${{ 'unified-flow' }}

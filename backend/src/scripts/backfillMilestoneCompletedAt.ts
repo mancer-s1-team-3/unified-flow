@@ -9,7 +9,7 @@ dotenv.config({ path: envPath });
 
 import prisma from "../db/prisma";
 import { connection } from "../services/rpc";
-import idl from "../idl/solana_program.json";
+import idl from "../idl/unified_flow.json";
 
 const PROGRAM_ID = new PublicKey(
   process.env.PROGRAM_ID || "8M5yieUh7pxwUi1YBByDF82nqoorZwaKi8dBoMVpurFa"

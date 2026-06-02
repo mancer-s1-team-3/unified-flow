@@ -1,7 +1,7 @@
 {
   "address": "8M5yieUh7pxwUi1YBByDF82nqoorZwaKi8dBoMVpurFa",
   "metadata": {
-    "name": "solana_program",
+    "name": "unified_flow",
     "version": "0.1.0",
     "spec": "0.1.0",
     "description": "Created with Anchor"
@@ -23,10 +23,7 @@
         {
           "name": "creator",
           "writable": true,
-          "signer": true,
-          "relations": [
-            "stream"
-          ]
+          "signer": true
         },
         {
           "name": "mint",
@@ -916,11 +913,29 @@
           "writable": true
         },
         {
-          "name": "fee_receiver",
+          "name": "fee_vault",
           "docs": [
             "Recipient fee SOL"
           ],
-          "writable": true
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  102,
+                  101,
+                  101,
+                  95,
+                  118,
+                  97,
+                  117,
+                  108,
+                  116
+                ]
+              }
+            ]
+          }
         },
         {
           "name": "chainlink_feed"
@@ -933,12 +948,7 @@
           "address": "11111111111111111111111111111111"
         }
       ],
-      "args": [
-        {
-          "name": "_amount_to_withdraw",
-          "type": "u64"
-        }
-      ]
+      "args": []
     }
   ],
   "accounts": [
@@ -1036,6 +1046,19 @@
       ]
     },
     {
+      "name": "StreamCancelled",
+      "discriminator": [
+        91,
+        215,
+        29,
+        237,
+        194,
+        6,
+        184,
+        92
+      ]
+    },
+    {
       "name": "StreamCreated",
       "discriminator": [
         93,
@@ -1060,19 +1083,6 @@
         200,
         91
       ]
-    },
-    {
-      "name": "StreamCancelled",
-      "discriminator": [
-        91,
-        215,
-        29,
-        237,
-        194,
-        6,
-        184,
-        92
-      ]
     }
   ],
   "errors": [
@@ -1088,166 +1098,171 @@
     },
     {
       "code": 6002,
+      "name": "InvalidCliff",
+      "msg": "Cliff date must be between start and end dates"
+    },
+    {
+      "code": 6003,
       "name": "InvalidEndDate",
       "msg": "End date must be in the future"
     },
     {
-      "code": 6003,
+      "code": 6004,
       "name": "InvalidStartDate",
       "msg": "Start date must not be in the past"
     },
     {
-      "code": 6004,
+      "code": 6005,
       "name": "DurationTooShort",
       "msg": "Stream duration too short"
     },
     {
-      "code": 6005,
+      "code": 6006,
       "name": "MathOverflow",
       "msg": "Math overflow"
     },
     {
-      "code": 6006,
+      "code": 6007,
       "name": "InvalidRecipient",
       "msg": "Invalid recipient"
     },
     {
-      "code": 6007,
+      "code": 6008,
       "name": "InvalidMint",
       "msg": "Invalid mint"
     },
     {
-      "code": 6008,
+      "code": 6009,
       "name": "InvalidTokenOwner",
       "msg": "Invalid token owner"
     },
     {
-      "code": 6009,
+      "code": 6010,
       "name": "InsufficientBalance",
       "msg": "Insufficient balance"
     },
     {
-      "code": 6010,
+      "code": 6011,
       "name": "MintNotAllowed",
       "msg": "Mint not allowed"
     },
     {
-      "code": 6011,
+      "code": 6012,
       "name": "ProtocolPaused",
       "msg": "Protocol paused"
     },
     {
-      "code": 6012,
+      "code": 6013,
       "name": "AmountTooSmall",
       "msg": "Amount too small"
     },
     {
-      "code": 6013,
+      "code": 6014,
       "name": "InvalidMintDecimals",
       "msg": "Invalid mint decimals"
     },
     {
-      "code": 6014,
+      "code": 6015,
       "name": "TransferFeeMintUnsupported",
       "msg": "Transfer fee tokens unsupported"
     },
     {
-      "code": 6015,
+      "code": 6016,
       "name": "StreamNotActive",
       "msg": "Stream not active"
     },
     {
-      "code": 6016,
+      "code": 6017,
       "name": "StreamNotCancelable",
       "msg": "Stream not cancelable"
     },
     {
-      "code": 6017,
+      "code": 6018,
       "name": "NothingToWithdraw",
       "msg": "No tokens available to withdraw"
     },
     {
-      "code": 6018,
+      "code": 6019,
       "name": "Unauthorized",
       "msg": "Signer is not the stream recipient"
     },
     {
-      "code": 6019,
+      "code": 6020,
       "name": "InvalidOracleFeed",
       "msg": "Invalid oracle price feed"
     },
     {
-      "code": 6020,
+      "code": 6021,
       "name": "StaleOraclePrice",
       "msg": "Oracle price is stale (> 1 hour)"
     },
     {
-      "code": 6021,
+      "code": 6022,
       "name": "InvalidOraclePrice",
       "msg": "Oracle returned invalid price"
     },
     {
-      "code": 6022,
+      "code": 6023,
       "name": "InvalidFeeReceiver",
       "msg": "Invalid fee receiver account"
     },
     {
-      "code": 6023,
+      "code": 6024,
       "name": "AlreadyCancelled",
       "msg": "Already cancelled"
     },
     {
-      "code": 6024,
+      "code": 6025,
       "name": "FullyVested",
       "msg": "Fully vested"
     },
     {
-      "code": 6025,
+      "code": 6026,
       "name": "StreamExpired",
       "msg": "Stream expired"
     },
     {
-      "code": 6026,
+      "code": 6027,
       "name": "MilestoneAlreadyUnlocked",
       "msg": "Milestone already unlocked"
     },
     {
-      "code": 6027,
+      "code": 6028,
       "name": "InvalidVestingType",
       "msg": "Invalid vesting type"
     },
     {
-      "code": 6028,
+      "code": 6029,
       "name": "InvalidMilestoneCount",
       "msg": "Invalid milestone count"
     },
     {
-      "code": 6029,
+      "code": 6030,
       "name": "InvalidMilestonePda",
       "msg": "Invalid milestone PDA"
     },
     {
-      "code": 6030,
+      "code": 6031,
       "name": "InvalidMilestoneAmount",
       "msg": "Invalid milestone amount"
     },
     {
-      "code": 6031,
+      "code": 6032,
       "name": "PreviousMilestoneNotApproved",
       "msg": "Previous milestone not approved"
     },
     {
-      "code": 6032,
+      "code": 6033,
       "name": "InvalidMilestoneOrder",
       "msg": "Invalid milestone order"
     },
     {
-      "code": 6033,
+      "code": 6034,
       "name": "PreviousMilestoneMissing",
       "msg": "Previous milestone missing"
     },
     {
-      "code": 6034,
+      "code": 6035,
       "name": "StreamAlreadyStarted",
       "msg": "Stream already started and cannot be modified"
     }
@@ -1570,6 +1585,42 @@
       }
     },
     {
+      "name": "StreamCancelled",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "stream",
+            "type": "pubkey"
+          },
+          {
+            "name": "creator",
+            "type": "pubkey"
+          },
+          {
+            "name": "recipient",
+            "type": "pubkey"
+          },
+          {
+            "name": "vested_amount",
+            "type": "u64"
+          },
+          {
+            "name": "returned_to_creator",
+            "type": "u64"
+          },
+          {
+            "name": "claimable_for_recipient",
+            "type": "u64"
+          },
+          {
+            "name": "timestamp",
+            "type": "i64"
+          }
+        ]
+      }
+    },
+    {
       "name": "StreamCreated",
       "type": {
         "kind": "struct",
@@ -1660,42 +1711,6 @@
           },
           {
             "name": "withdrawn_total",
-            "type": "u64"
-          },
-          {
-            "name": "timestamp",
-            "type": "i64"
-          }
-        ]
-      }
-    },
-    {
-      "name": "StreamCancelled",
-      "type": {
-        "kind": "struct",
-        "fields": [
-          {
-            "name": "stream",
-            "type": "pubkey"
-          },
-          {
-            "name": "creator",
-            "type": "pubkey"
-          },
-          {
-            "name": "recipient",
-            "type": "pubkey"
-          },
-          {
-            "name": "vested_amount",
-            "type": "u64"
-          },
-          {
-            "name": "returned_to_creator",
-            "type": "u64"
-          },
-          {
-            "name": "claimable_for_recipient",
             "type": "u64"
           },
           {

@@ -27,7 +27,7 @@ const WITHDRAW_FEE_USD_CENTS: u128 = 99; // $0.99
 const LAMPORTS_PER_SOL: u128 = 1_000_000_000;
 
 #[program]
-pub mod solana_program {
+pub mod unified_flow {
     use super::*;
 
  
@@ -219,14 +219,16 @@ pub fn create_stream<'info>(
                 ErrorCode::InvalidMilestonePda
             );
 
-            let space = 8 + MilestoneAccount::INIT_SPACE;
+            let space = 8_usize
+                .checked_add(MilestoneAccount::INIT_SPACE)
+                .ok_or(ErrorCode::MathOverflow)?;
             let rent = Rent::get()?;
             let required_lamports = rent.minimum_balance(space);
             
             //Cek saldo saat ini, jika kurang baru top-up (Anti-DoS)
             let current_lamports = milestone_info.lamports();
             if current_lamports < required_lamports {
-                let diff = required_lamports.checked_sub(current_lamports).unwrap();
+                let diff = required_lamports.checked_sub(current_lamports).ok_or(ErrorCode::MathOverflow)?;
                 anchor_lang::system_program::transfer(
                     CpiContext::new(
                         ctx.accounts.system_program.to_account_info(),
@@ -854,6 +856,10 @@ pub struct CreateStream<'info> {
         associated_token::mint = mint,
         associated_token::authority = stream,
         associated_token::token_program = token_program,
+        constraint = vault.owner == stream.key()
+            @ ErrorCode::InvalidTokenOwner,
+        constraint = vault.mint == mint.key()
+            @ ErrorCode::InvalidMint,
     )]
     pub vault: InterfaceAccount<'info, TokenAccount>,
 
@@ -1023,6 +1029,10 @@ pub struct EditLinear<'info> {
         associated_token::mint = mint,
         associated_token::authority = stream,
         associated_token::token_program = token_program,
+        constraint = vault.owner == stream.key()
+           @ ErrorCode::InvalidTokenOwner,
+       constraint = vault.mint == mint.key()
+           @ ErrorCode::InvalidMint,
     )]
     pub vault: InterfaceAccount<'info, TokenAccount>,
 
@@ -1075,6 +1085,10 @@ pub struct EditMilestone<'info> {
         associated_token::mint = mint,
         associated_token::authority = stream,
         associated_token::token_program = token_program,
+        constraint = vault.owner == stream.key()
+           @ ErrorCode::InvalidTokenOwner,
+       constraint = vault.mint == mint.key()
+           @ ErrorCode::InvalidMint,
     )]
     pub vault: InterfaceAccount<'info, TokenAccount>,
 
