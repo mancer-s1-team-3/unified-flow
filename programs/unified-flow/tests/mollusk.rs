@@ -126,6 +126,10 @@ fn create_stream_matrix() {
     }
 
     harness.set_time(BASE_NOW - 1);
+    let dummy_stream = Pubkey::new_unique();
+    let dummy_vault = spl_associated_token_account::get_associated_token_address_with_program_id(&dummy_stream, &mint, &spl_token::ID);
+    harness.accounts.entry(dummy_stream).or_insert_with(|| Account { lamports: 0, data: vec![], owner: system_program::ID, executable: false, rent_epoch: 0 });
+    harness.accounts.entry(dummy_vault).or_insert_with(|| Account { lamports: 0, data: vec![], owner: system_program::ID, executable: false, rent_epoch: 0 });
     let past_result = harness.process_err(&Instruction {
         program_id: unified_flow::ID,
         accounts: vec![
@@ -133,8 +137,8 @@ fn create_stream_matrix() {
             AccountMeta::new_readonly(harness.recipient, false),
             AccountMeta::new_readonly(mint, false),
             AccountMeta::new_readonly(config, false),
-            AccountMeta::new(Pubkey::new_unique(), false),
-            AccountMeta::new(Pubkey::new_unique(), false),
+            AccountMeta::new(dummy_stream, false),
+            AccountMeta::new(dummy_vault, false),
             AccountMeta::new(creator_ata, false),
             AccountMeta::new_readonly(system_program::ID, false),
             AccountMeta::new_readonly(spl_token::ID, false),
@@ -252,6 +256,8 @@ fn create_stream_validation_matrix() {
     harness.mint_to(transfer_fee_mint, transfer_fee_ata, harness.admin, TOKEN_AMOUNT, spl_token_2022::ID);
     let stream = Pubkey::new_unique();
     let vault = spl_associated_token_account::get_associated_token_address_with_program_id(&stream, &transfer_fee_mint, &spl_token_2022::ID);
+    harness.accounts.entry(stream).or_insert_with(|| Account { lamports: 0, data: vec![], owner: system_program::ID, executable: false, rent_epoch: 0 });
+    harness.accounts.entry(vault).or_insert_with(|| Account { lamports: 0, data: vec![], owner: system_program::ID, executable: false, rent_epoch: 0 });
     let ix = Instruction {
         program_id: unified_flow::ID,
         accounts: vec![
@@ -308,12 +314,15 @@ fn withdraw_matrix() {
         vec![],
     );
 
+
     harness.set_time(BASE_NOW + 110);
-    harness.set_oracle(PRICE_RAW, PRICE_DECIMALS, BASE_NOW);
+    harness.set_oracle(PRICE_RAW, PRICE_DECIMALS, BASE_NOW + 110);
     harness.withdraw(stream, mint, recipient_ata, fee_vault, spl_token::ID);
     assert_eq!(harness.token_balance(&recipient_ata), TOKEN_AMOUNT / 2);
     assert_eq!(harness.account(&fee_vault).lamports, EXPECTED_WITHDRAW_FEE_LAMPORTS);
 
+    harness.set_time(BASE_NOW + 160);
+    harness.set_oracle(PRICE_RAW, PRICE_DECIMALS, BASE_NOW + 160);
     harness.withdraw(stream, mint, recipient_ata, fee_vault, spl_token::ID);
     assert_eq!(harness.token_balance(&recipient_ata), TOKEN_AMOUNT);
     let stream_state = harness.stream_account(&stream);
@@ -458,8 +467,8 @@ fn edit_flow_matrix() {
 
     let linear_stream = harness.create_stream(
         TOKEN_AMOUNT,
-        BASE_NOW + 60,
-        BASE_NOW + 60,
+        BASE_NOW + 61,
+        BASE_NOW + 61,
         BASE_NOW + 160,
         VESTING_TYPE_LINEAR,
         vec![],

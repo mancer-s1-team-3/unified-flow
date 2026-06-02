@@ -183,11 +183,20 @@ impl Harness {
         for pubkey in [admin, creator, recipient, stranger] {
             accounts.insert(pubkey, system_account(100_000_000_000));
         }
-        accounts.insert(system_program::ID, program_account());
-        accounts.insert(spl_token::ID, program_account());
-        accounts.insert(spl_token_2022::ID, program_account());
-        accounts.insert(spl_associated_token_account::ID, program_account());
+        let (sys_id, sys_account) = mollusk_svm::program::keyed_account_for_system_program();
+        accounts.insert(sys_id, sys_account);
+        accounts.insert(spl_token::ID, mollusk_svm::program::create_program_account_loader_v3(&spl_token::ID));
+        accounts.insert(spl_token_2022::ID, mollusk_svm::program::create_program_account_loader_v3(&spl_token_2022::ID));
+        accounts.insert(spl_associated_token_account::ID, mollusk_svm::program::create_program_account_loader_v3(&spl_associated_token_account::ID));
         accounts.insert(SOL_USD_FEED, feed_account(PRICE_RAW, PRICE_DECIMALS, BASE_NOW));
+
+        for (id, account) in [
+            mollusk.sysvars.keyed_account_for_rent_sysvar(),
+            mollusk.sysvars.keyed_account_for_epoch_schedule_sysvar(),
+            mollusk.sysvars.keyed_account_for_slot_hashes_sysvar(),
+        ] {
+            accounts.insert(id, account);
+        }
 
         let mut harness = Self { mollusk, accounts, admin, creator, recipient, stranger };
         harness.set_time(BASE_NOW);
