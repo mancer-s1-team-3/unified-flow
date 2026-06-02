@@ -957,6 +957,11 @@ pub fn withdraw_fees(
         ErrorCode::Unauthorized
     );
 
+    require!(
+        ctx.accounts.fee_vault.lamports() >= amount,
+        ErrorCode::InsufficientBalance
+    );
+
     let bump = ctx.bumps.fee_vault;
 
     let signer_seeds: &[&[&[u8]]] = &[&[
@@ -977,6 +982,13 @@ pub fn withdraw_fees(
         ],
         signer_seeds,
     )?;
+
+    emit!(FeesWithdrawn {
+        admin: ctx.accounts.admin.key(),
+        destination: ctx.accounts.destination.key(),
+        amount,
+        timestamp: Clock::get()?.unix_timestamp,
+    });
 
     Ok(())
 }
@@ -1540,5 +1552,13 @@ pub struct StreamCancelled {
     pub vested_amount: u64,
     pub returned_to_creator: u64,
     pub claimable_for_recipient: u64,
+    pub timestamp: i64,
+}
+
+#[event]
+pub struct FeesWithdrawn {
+    pub admin: Pubkey,
+    pub destination: Pubkey,
+    pub amount: u64,
     pub timestamp: i64,
 }
