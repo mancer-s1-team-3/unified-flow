@@ -1,0 +1,38 @@
+# Isolated crate for native (in-process) coverage of the unified-flow program.
+#
+# It deliberately lives OUTSIDE the main workspace (see root Cargo.toml
+# `exclude`) and keeps its own Cargo.lock. This is required because
+# `solana-program-test` drags in blake3 1.8 / digest 0.11 / cmov (edition2024),
+# which the Solana SBF toolchain's pinned cargo (1.79) cannot parse. Isolating
+# it here keeps `cargo build-sbf` on the program workspace working while still
+# letting `cargo llvm-cov` execute the program's handlers natively.
+#
+# Run coverage from this directory:
+#   cd coverage-tests && cargo llvm-cov --test program_test
+[package]
+name = "unified-flow-coverage-tests"
+version = "0.0.0"
+edition = "2021"
+publish = false
+
+[dependencies]
+unified-flow = { path = "../programs/unified-flow" }
+anchor-lang = "0.32.1"
+
+[dev-dependencies]
+solana-program-test = "2.2"
+solana-sdk = "2.2"
+tokio = { version = "1", features = ["macros", "rt-multi-thread"] }
+spl-token = "8.0.0"
+spl-token-2022 = "8.0.1"
+spl-associated-token-account = "7.0.0"
+
+[[test]]
+name = "program_test"
+path = "tests/program_test.rs"
+
+# Same test-only CPI shim as documented in vendor/solana-invoke: route native
+# Anchor CPIs through solana-program-test's runtime stub. On-chain builds never
+# use this crate, so the deployed program is unaffected.
+[patch.crates-io]
+solana-invoke = { path = "../vendor/solana-invoke" }
