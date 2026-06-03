@@ -612,6 +612,37 @@ impl Harness {
         let signer = signer.insecure_clone();
         self.send(&[ix], &[&signer]).await
     }
+
+    /// Admin withdraws accrued SOL fees from the fee vault to `destination`.
+    async fn withdraw_fees(
+        &mut self,
+        destination: Pubkey,
+        amount: u64,
+    ) -> Result<(), BanksClientError> {
+        self.withdraw_fees_as(&self.admin.insecure_clone(), destination, amount).await
+    }
+
+    /// Same as `withdraw_fees` but signed by an arbitrary keypair (for the
+    /// unauthorized-admin negative test).
+    async fn withdraw_fees_as(
+        &mut self,
+        signer: &Keypair,
+        destination: Pubkey,
+        amount: u64,
+    ) -> Result<(), BanksClientError> {
+        let data = unified_flow::instruction::WithdrawFees { amount }.data();
+        let metas = unified_flow::accounts::WithdrawFees {
+            admin: signer.pubkey(),
+            config: Self::config_pda(),
+            fee_vault: Self::fee_vault_pda(),
+            destination,
+            system_program: system_program::id(),
+        }
+        .to_account_metas(None);
+        let ix = Instruction { program_id: unified_flow::ID, accounts: metas, data };
+        let signer = signer.insecure_clone();
+        self.send(&[ix], &[&signer]).await
+    }
 }
 
 fn set_clock(ctx: &mut ProgramTestContext, unix_ts: i64) {
@@ -1307,4 +1338,94 @@ async fn withdraw_by_non_recipient_fails() {
         .withdraw_as(&stranger, stream, mint, stranger_ata)
         .await
         .is_err());
+}
+
+// ─── Additional branch coverage (false-side of conditionals) ──────────────────
+
+/// Cancelling before the stream starts: nothing is vested, so the
+/// `claimable_for_recipient > 0` branch takes its FALSE path and the full
+/// amount is returned to the creator.
+#[tokio::test]
+async fn cancel_before_start_returns_all_to_creator() {
+    let mut h = Harness::new().await;
+    h.initialize_config().await.unwrap();
+    let mint = Keypair::new();
+    let (mint, creator_ata, recipient_ata) = h.setup_token(&mint).await;
+    let stream = h
+        .create_stream(TOKEN_AMOUNT, BASE_NOW + 60, BASE_NOW + 60, BASE_NOW + 160, VESTING_LINEAR, vec![], 220, mint, creator_ata, &[])
+        .await
+        .unwrap();
+
+    // still at BASE_NOW < start (+60): vested == 0
+    let before = h.token_balance(&creator_ata).await;
+    h.cancel(stream, mint, creator_ata, recipient_ata).await.unwrap();
+    assert_eq!(h.stream_account(&stream).await.status, 3);
+    // recipient got nothing; creator got the full stream amount back
+    assert_eq!(h.token_balance(&recipient_ata).await, 0);
+    assert_eq!(h.token_balance(&creator_ata).await, before + TOKEN_AMOUNT);
+}
+
+/// edit_linear with a top-up but WITHOUT extending the end date exercises the
+/// FALSE path of the `new_end_ts > end_ts` branch (extend skipped, top-up runs).
+#[tokio::test]
+async fn edit_linear_topup_only() {
+    let mut h = Harness::new().await;
+    h.initialize_config().await.unwrap();
+    let mint = Keypair::new();
+    let (mint, creator_ata, _) = h.setup_token(&mint).await;
+    let linear = h
+        .create_stream(TOKEN_AMOUNT, BASE_NOW + 60, BASE_NOW + 60, BASE_NOW + 160, VESTING_LINEAR, vec![], 221, mint, creator_ata, &[])
+        .await
+        .unwrap();
+
+    // new_end_ts == current end (NOT greater) but topup > 0 -> only top-up applies
+    h.edit_linear(linear, mint, creator_ata, BASE_NOW + 160, TOKEN_AMOUNT / 2).await.unwrap();
+    let s = h.stream_account(&linear).await;
+    assert_eq!(s.end_ts, BASE_NOW + 160); // unchanged
+    assert_eq!(s.total_amount, TOKEN_AMOUNT + TOKEN_AMOUNT / 2);
+}
+
+// ─── withdraw_fees (admin fee withdrawal) ─────────────────────────────────────
+
+/// Full fee lifecycle: a withdraw accrues SOL into the fee vault, then the
+/// admin (fee_authority) withdraws it to a destination. Also covers the two
+/// guards: unauthorized admin and over-withdrawal.
+#[tokio::test]
+async fn withdraw_fees_full_flow() {
+    let mut h = Harness::new().await;
+    h.initialize_config().await.unwrap();
+    let mint = Keypair::new();
+    let (mint, creator_ata, recipient_ata) = h.setup_token(&mint).await;
+    let stream = h
+        .create_stream(TOKEN_AMOUNT, BASE_NOW + 60, BASE_NOW + 60, BASE_NOW + 160, VESTING_LINEAR, vec![], 230, mint, creator_ata, &[])
+        .await
+        .unwrap();
+
+    // Accrue fees into the vault.
+    h.set_time(BASE_NOW + 110);
+    h.withdraw(stream, mint, recipient_ata).await.unwrap();
+    let collected = h.lamports(&Harness::fee_vault_pda()).await;
+    assert!(collected > 0);
+
+    let destination = Keypair::new().pubkey();
+    h.fund(&destination).await;
+    let dest_before = h.lamports(&destination).await;
+
+    // Unauthorized: a stranger acting as admin is rejected.
+    let stranger = Keypair::new();
+    h.fund(&stranger.pubkey()).await;
+    assert!(h
+        .withdraw_fees_as(&stranger, destination, 1)
+        .await
+        .is_err());
+
+    // Over-withdrawal: more than the vault balance is rejected.
+    assert!(h
+        .withdraw_fees(destination, collected + 1_000_000_000)
+        .await
+        .is_err());
+
+    // Authorized withdrawal of the full collected amount succeeds.
+    h.withdraw_fees(destination, collected).await.unwrap();
+    assert_eq!(h.lamports(&destination).await, dest_before + collected);
 }
