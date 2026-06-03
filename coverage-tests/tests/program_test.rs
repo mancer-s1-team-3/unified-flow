@@ -1308,3 +1308,48 @@ async fn withdraw_by_non_recipient_fails() {
         .await
         .is_err());
 }
+
+// ─── Additional branch coverage (false-side of conditionals) ──────────────────
+
+/// Cancelling before the stream starts: nothing is vested, so the
+/// `claimable_for_recipient > 0` branch takes its FALSE path and the full
+/// amount is returned to the creator.
+#[tokio::test]
+async fn cancel_before_start_returns_all_to_creator() {
+    let mut h = Harness::new().await;
+    h.initialize_config().await.unwrap();
+    let mint = Keypair::new();
+    let (mint, creator_ata, recipient_ata) = h.setup_token(&mint).await;
+    let stream = h
+        .create_stream(TOKEN_AMOUNT, BASE_NOW + 60, BASE_NOW + 60, BASE_NOW + 160, VESTING_LINEAR, vec![], 220, mint, creator_ata, &[])
+        .await
+        .unwrap();
+
+    // still at BASE_NOW < start (+60): vested == 0
+    let before = h.token_balance(&creator_ata).await;
+    h.cancel(stream, mint, creator_ata, recipient_ata).await.unwrap();
+    assert_eq!(h.stream_account(&stream).await.status, 3);
+    // recipient got nothing; creator got the full stream amount back
+    assert_eq!(h.token_balance(&recipient_ata).await, 0);
+    assert_eq!(h.token_balance(&creator_ata).await, before + TOKEN_AMOUNT);
+}
+
+/// edit_linear with a top-up but WITHOUT extending the end date exercises the
+/// FALSE path of the `new_end_ts > end_ts` branch (extend skipped, top-up runs).
+#[tokio::test]
+async fn edit_linear_topup_only() {
+    let mut h = Harness::new().await;
+    h.initialize_config().await.unwrap();
+    let mint = Keypair::new();
+    let (mint, creator_ata, _) = h.setup_token(&mint).await;
+    let linear = h
+        .create_stream(TOKEN_AMOUNT, BASE_NOW + 60, BASE_NOW + 60, BASE_NOW + 160, VESTING_LINEAR, vec![], 221, mint, creator_ata, &[])
+        .await
+        .unwrap();
+
+    // new_end_ts == current end (NOT greater) but topup > 0 -> only top-up applies
+    h.edit_linear(linear, mint, creator_ata, BASE_NOW + 160, TOKEN_AMOUNT / 2).await.unwrap();
+    let s = h.stream_account(&linear).await;
+    assert_eq!(s.end_ts, BASE_NOW + 160); // unchanged
+    assert_eq!(s.total_amount, TOKEN_AMOUNT + TOKEN_AMOUNT / 2);
+}
