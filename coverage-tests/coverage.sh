@@ -24,7 +24,12 @@ LLVM_PROFILE_FILE="$(pwd)/covdata/cov-%p-%m.profraw" \
 
 "$LLVMBIN/llvm-profdata" merge -sparse covdata/*.profraw -o covdata/merged.profdata
 
-BIN="$(find target-cov/debug/deps -name 'program_test-*' -type f ! -name '*.d' | head -1)"
+BIN="$(find target-cov/debug/deps \
+  -maxdepth 1 \
+  -name 'program_test-*' \
+  -type f \
+  -perm -111 \
+  | head -1)"
 # Report ONLY the program's own source. The global `-C instrument-coverage`
 # also instruments the Rust std/core and the test harness that get linked in;
 # exclude the toolchain (`.rustup`), the cargo registry, this crate's tests,
