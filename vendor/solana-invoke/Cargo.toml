@@ -1,0 +1,38 @@
+# Vendored fork of solana-invoke 0.4.0.
+#
+# Upstream's non-`target_os = "solana"` CPI stub is a hard `unimplemented!()`,
+# which makes Anchor programs panic on any CPI when executed natively (e.g. under
+# `solana-program-test`'s `processor!`). That blocks native code-coverage runs.
+#
+# This fork changes ONLY the non-solana path so it delegates to
+# `solana_sysvar::program_stubs::sol_invoke_signed`, which `solana-program-test`
+# populates. The `target_os = "solana"` (BPF / on-chain) path is byte-for-byte
+# identical to upstream, so the deployed `.so` is unaffected.
+#
+# Wired in via `[patch.crates-io]` in the workspace root Cargo.toml.
+[package]
+name = "solana-invoke"
+version = "0.4.0"
+edition = "2021"
+license = "MIT OR Apache-2.0"
+description = "Vendored solana-invoke 0.4.0 with a test-only native CPI stub for coverage."
+repository = "https://github.com/solana-foundation/solana-invoke"
+
+[lib]
+name = "solana_invoke"
+path = "src/lib.rs"
+
+[dependencies]
+solana-account-info = "2"
+solana-define-syscall = "2"
+solana-instruction = "2"
+solana-program-entrypoint = "2"
+solana-stable-layout = "2"
+
+# Added only for the native stub delegation below.
+solana-sysvar = "2"
+
+[dev-dependencies]
+solana-cpi = "2"
+solana-system-interface = { version = "1", features = ["bincode"] }
+solana-pubkey = "2"
