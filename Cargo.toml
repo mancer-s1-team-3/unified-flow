@@ -2,6 +2,15 @@
 members = [
     "programs/*"
 ]
+# `coverage-tests` and the vendored solana-invoke fork pull in the
+# solana-program-test stack (blake3 1.8 / edition2024 deps) which the SBF
+# toolchain's cargo cannot parse. Keeping them out of this workspace's
+# lockfile lets `cargo build-sbf` resolve the lean on-chain graph, while the
+# excluded crate carries its own lockfile + [patch] for native coverage runs.
+exclude = [
+    "coverage-tests",
+    "vendor/solana-invoke",
+]
 resolver = "2"
 
 [profile.release]
