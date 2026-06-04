@@ -78,7 +78,21 @@ impl Harness {
     async fn new() -> Self {
         Self::new_with_feed(feed_data(PRICE_DECIMALS, BASE_NOW, PRICE_RAW)).await
     }
+async fn store_stream(&mut self, key: Pubkey, stream: StreamAccount) {
+    let mut acc = self.get_account(&key).await.unwrap();
+    let mut new_data = Vec::new();
+    { use anchor_lang::AccountSerialize; stream.try_serialize(&mut new_data).unwrap(); }
+    acc.data = new_data;
+    self.ctx.set_account(&key, &acc.into());
+}
 
+async fn store_milestone(&mut self, key: Pubkey, milestone: MilestoneAccount) {
+    let mut acc = self.get_account(&key).await.unwrap();
+    let mut new_data = Vec::new();
+    { use anchor_lang::AccountSerialize; milestone.try_serialize(&mut new_data).unwrap(); }
+    acc.data = new_data;
+    self.ctx.set_account(&key, &acc.into());
+}
     async fn new_with_feed(feed: Vec<u8>) -> Self {
         // Only our program runs as a native builtin (for coverage). The SPL
         // token / token-2022 / associated-token programs are provided by
@@ -2219,4 +2233,264 @@ async fn milestone_withdraw_after_unlock() {
     h.unlock_milestone(stream, ms[1]).await.unwrap();
     h.withdraw(stream, mint, recipient_ata).await.unwrap();
     assert_eq!(h.token_balance(&recipient_ata).await, TOKEN_AMOUNT);
+}
+
+#[tokio::test]
+async fn create_milestone_stream_skips_allocate_when_account_already_initialized() {
+    let mut h = Harness::new().await;
+    h.initialize_config().await.unwrap();
+    let mint = Keypair::new();
+    let (mint, creator_ata, _) = h.setup_token(&mint).await;
+ 
+    let stream_pda = h.stream_pda(400);
+    let ms: Vec<Pubkey> = (0..2u8).map(|i| h.milestone_pda(&stream_pda, i)).collect();
+ 
+    // Pre-inject milestone accounts dengan:
+    //   - owner = program_id (bukan system_program)
+    //   - data non-empty (tidak kosong → data_is_empty() = false)
+    //   - lamports >= rent-exempt (agar skip top-up juga)
+    // Ini mensimulasikan milestone yang sudah pernah di-allocate+assign
+    // 8 (discriminator) + MilestoneAccount::INIT_SPACE
+    // stream(32) + index(1) + unlock_ts(8) + amount(8) + approved(1) + unlocked(1) + bump(1) = 52
+    // total = 8 + 52 = 60
+    let space = 8 + 52_usize; // == 8 + MilestoneAccount::INIT_SPACE
+    let rent_lamports = 1_000_000u64; // cukup untuk rent-exempt milestone account kecil
+ 
+    for milestone_key in &ms {
+        // Data non-empty: isi dengan zeros tapi panjang > 0
+        // Owner = program id unified_flow sehingga data_is_empty() check = false
+        h.ctx.set_account(
+            milestone_key,
+            &solana_sdk::account::Account {
+                lamports: rent_lamports,
+                data: vec![0u8; space],
+                owner: unified_flow::ID,   // owner = our program → data_is_empty() = false
+                executable: false,
+                rent_epoch: 0,
+            }
+            .into(),
+        );
+    }
+ 
+    // create_stream harus berhasil:
+    //   - lamports >= required → skip top-up
+    //   - data_is_empty() = false → skip allocate+assign
+    //   - langsung try_serialize milestone data
+    let stream = h
+        .create_stream(
+            TOKEN_AMOUNT,
+            BASE_NOW + 60,
+            BASE_NOW + 60,
+            BASE_NOW + 1000,
+            VESTING_MILESTONE,
+            milestones(&[500_000, 500_000]),
+            400,
+            mint,
+            creator_ata,
+            &ms,
+        )
+        .await
+        .unwrap();
+ 
+    let s = h.stream_account(&stream).await;
+    assert_eq!(s.milestone_count, 2);
+ 
+    // Verify milestone data ter-serialize dengan benar
+    let m0 = h.milestone_account(&ms[0]).await;
+    assert_eq!(m0.amount, 500_000);
+    assert_eq!(m0.index, 0);
+    assert!(!m0.approved);
+}
+ 
+// ══════════════════════════════════════════════════════════════════════════════
+// [3a] MathOverflow: edit_milestone total_amount.checked_add overflow
+//
+// Trigger: set stream.total_amount = u64::MAX via store_stream,
+// lalu edit_milestone dengan new_amount > old_amount → diff = 1
+// → total_amount.checked_add(1) = None → MathOverflow
+// ══════════════════════════════════════════════════════════════════════════════
+#[tokio::test]
+async fn edit_milestone_increase_overflows_total_amount() {
+    let mut h = Harness::new().await;
+    h.initialize_config().await.unwrap();
+    let mint = Keypair::new();
+    let (mint, creator_ata, _) = h.setup_token(&mint).await;
+ 
+    let stream_pda = h.stream_pda(401);
+    let ms: Vec<Pubkey> = (0..2u8).map(|i| h.milestone_pda(&stream_pda, i)).collect();
+    let stream = h
+        .create_stream(
+            TOKEN_AMOUNT,
+            BASE_NOW + 60,
+            BASE_NOW + 60,
+            BASE_NOW + 1000,
+            VESTING_MILESTONE,
+            milestones(&[500_000, 500_000]),
+            401,
+            mint,
+            creator_ata,
+            &ms,
+        )
+        .await
+        .unwrap();
+ 
+    // Corrupt stream.total_amount = u64::MAX via direct account manipulation
+    let mut s = h.stream_account(&stream).await;
+    s.total_amount = u64::MAX;
+    h.store_stream(stream, s).await;
+ 
+    // edit_milestone naik 1 → diff=1 → u64::MAX + 1 = overflow → MathOverflow
+    let err = h
+        .edit_milestone(stream, ms[0], mint, creator_ata, 500_001)
+        .await;
+    assert!(err.is_err());
+    // Verifikasi error adalah MathOverflow
+    let raw = format!("{:?}", err.unwrap_err());
+    assert!(raw.contains("MathOverflow") || raw.contains("6006"),
+        "expected MathOverflow, got: {raw}");
+}
+ 
+// ══════════════════════════════════════════════════════════════════════════════
+// [3b] MathOverflow: unlock_milestone unlocked_milestone_amount.checked_add overflow
+//
+// Trigger: set stream.unlocked_milestone_amount = u64::MAX,
+// lalu unlock_milestone → checked_add(milestone.amount) overflow
+// ══════════════════════════════════════════════════════════════════════════════
+#[tokio::test]
+async fn unlock_milestone_overflows_unlocked_amount() {
+    let mut h = Harness::new().await;
+    h.initialize_config().await.unwrap();
+    let mint = Keypair::new();
+    let (mint, creator_ata, _) = h.setup_token(&mint).await;
+ 
+    let stream_pda = h.stream_pda(402);
+    let ms: Vec<Pubkey> = (0..2u8).map(|i| h.milestone_pda(&stream_pda, i)).collect();
+    let stream = h
+        .create_stream(
+            TOKEN_AMOUNT,
+            BASE_NOW + 60,
+            BASE_NOW + 60,
+            BASE_NOW + 1000,
+            VESTING_MILESTONE,
+            milestones(&[500_000, 500_000]),
+            402,
+            mint,
+            creator_ata,
+            &ms,
+        )
+        .await
+        .unwrap();
+ 
+    // Corrupt stream.unlocked_milestone_amount = u64::MAX
+    let mut s = h.stream_account(&stream).await;
+    s.unlocked_milestone_amount = u64::MAX;
+    h.store_stream(stream, s).await;
+ 
+    // unlock_milestone 0 → u64::MAX + 500_000 = overflow → MathOverflow
+    let err = h.unlock_milestone(stream, ms[0]).await;
+    assert!(err.is_err());
+    let raw = format!("{:?}", err.unwrap_err());
+    assert!(raw.contains("MathOverflow") || raw.contains("6006"),
+        "expected MathOverflow, got: {raw}");
+}
+ 
+// ══════════════════════════════════════════════════════════════════════════════
+// [3c] MathOverflow: edit_linear total_amount.checked_add overflow
+//
+// Trigger: set stream.total_amount = u64::MAX, lalu edit_linear topup > 0
+// ══════════════════════════════════════════════════════════════════════════════
+#[tokio::test]
+async fn edit_linear_topup_overflows_total_amount() {
+    let mut h = Harness::new().await;
+    h.initialize_config().await.unwrap();
+    let mint = Keypair::new();
+    let (mint, creator_ata, _) = h.setup_token(&mint).await;
+ 
+    let stream = h
+        .create_stream(
+            TOKEN_AMOUNT,
+            BASE_NOW + 60,
+            BASE_NOW + 60,
+            BASE_NOW + 160,
+            VESTING_LINEAR,
+            vec![],
+            403,
+            mint,
+            creator_ata,
+            &[],
+        )
+        .await
+        .unwrap();
+ 
+    // Corrupt total_amount = u64::MAX
+    let mut s = h.stream_account(&stream).await;
+    s.total_amount = u64::MAX;
+    h.store_stream(stream, s).await;
+ 
+    // Mint extra token ke creator agar balance check lolos
+    h.mint_to(&mint, &creator_ata, 1).await;
+ 
+    // edit_linear topup=1 → u64::MAX + 1 = overflow → MathOverflow
+    let err = h
+        .edit_linear(stream, mint, creator_ata, BASE_NOW + 160, 1)
+        .await;
+    assert!(err.is_err());
+    let raw = format!("{:?}", err.unwrap_err());
+    assert!(raw.contains("MathOverflow") || raw.contains("6006"),
+        "expected MathOverflow, got: {raw}");
+}
+ 
+// ══════════════════════════════════════════════════════════════════════════════
+// [3d] MathOverflow: withdraw claimable.checked_sub overflow
+//
+// Trigger: set stream.withdrawn > stream.unlocked_milestone_amount
+// (untuk MILESTONE type) → vested < withdrawn → checked_sub underflow
+// ══════════════════════════════════════════════════════════════════════════════
+#[tokio::test]
+async fn withdraw_claimable_underflow_math_overflow() {
+    let mut h = Harness::new().await;
+    h.initialize_config().await.unwrap();
+    let mint = Keypair::new();
+    let (mint, creator_ata, recipient_ata) = h.setup_token(&mint).await;
+ 
+    let stream_pda = h.stream_pda(404);
+    let ms: Vec<Pubkey> = (0..2u8).map(|i| h.milestone_pda(&stream_pda, i)).collect();
+    let stream = h
+        .create_stream(
+            TOKEN_AMOUNT,
+            BASE_NOW + 60,
+            BASE_NOW + 60,
+            BASE_NOW + 1000,
+            VESTING_MILESTONE,
+            milestones(&[500_000, 500_000]),
+            404,
+            mint,
+            creator_ata,
+            &ms,
+        )
+        .await
+        .unwrap();
+ 
+    // Unlock milestone 0 (500_000 unlocked)
+    h.unlock_milestone(stream, ms[0]).await.unwrap();
+ 
+    // Corrupt: set withdrawn > unlocked_milestone_amount
+    // vested = unlocked_milestone_amount = 500_000
+    // withdrawn = 600_000 → claimable = 500_000 - 600_000 = underflow → MathOverflow
+    let mut s = h.stream_account(&stream).await;
+    s.withdrawn = 600_000;
+    h.store_stream(stream, s).await;
+ 
+    h.set_time(BASE_NOW + 100);
+    let err = h.withdraw(stream, mint, recipient_ata).await;
+    assert!(err.is_err());
+    // Bisa MathOverflow atau NothingToWithdraw tergantung apakah checked_sub
+    // dipanggil sebelum require!(claimable > 0)
+    // Di kode: claimable = vested.checked_sub(withdrawn).ok_or(MathOverflow)?
+    // → 500_000 - 600_000 = None → MathOverflow
+    let raw = format!("{:?}", err.unwrap_err());
+    assert!(
+        raw.contains("MathOverflow") || raw.contains("6006"),
+        "expected MathOverflow, got: {raw}"
+    );
 }
