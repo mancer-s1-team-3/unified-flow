@@ -462,6 +462,7 @@ async function sendVersionedTransactionMessage({
       throw new Error(
         [
           "Create stream simulation failed.",
+          `Reason: ${typeof simulation.value.err === "string" ? simulation.value.err : JSON.stringify(simulation.value.err)}`,
           ...simulationLogs.slice(-6),
         ].filter(Boolean).join("\n")
       );
@@ -735,6 +736,7 @@ export async function createStreamOnChain({
       throw new Error(
         [
           "Create stream simulation failed.",
+          `Reason: ${typeof simulation.value.err === "string" ? simulation.value.err : JSON.stringify(simulation.value.err)}`,
           ...simulationLogs.slice(-6),
         ].filter(Boolean).join("\n")
       );
