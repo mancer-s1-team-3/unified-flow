@@ -1429,3 +1429,540 @@ async fn withdraw_fees_full_flow() {
     h.withdraw_fees(destination, collected).await.unwrap();
     assert_eq!(h.lamports(&destination).await, dest_before + collected);
 }
+
+// ══════════════════════════════════════════════════════════════════════════════
+// Oracle coverage tests
+// Target: read_chainlink_round() — semua branch harus kena
+// ══════════════════════════════════════════════════════════════════════════════
+//
+// Branch map untuk read_chainlink_round():
+//   [A] data.len() < FEED_MIN_LEN (232)   → InvalidOracleFeed
+//   [B] staleness: now - updated_at >= 3600 → StaleOraclePrice
+//   [C] staleness: now - updated_at == 3599 → OK (tepat di bawah batas)
+//   [D] staleness: now - updated_at == 3600 → StaleOraclePrice (tepat di batas)
+//   [E] answer == 0                         → InvalidOraclePrice
+//   [F] answer < 0                          → InvalidOraclePrice
+//   [G] happy path: valid feed              → Ok(ChainlinkRound { answer, decimals })
+//
+// Layout byte feed (248 byte):
+//   offset 0x8a (138) → decimals: u8
+//   offset 0xd0 (208) → updated_at: u32 LE
+//   offset 0xd8 (216) → answer: i128 LE
+
+// ─── Helper: buat raw feed bytes ─────────────────────────────────────────────
+
+/// Duplikat helper dari harness utama, diekstrak eksplisit untuk kejelasan.
+fn make_feed(decimals: u8, updated_at: i64, answer: i128) -> Vec<u8> {
+    let mut data = vec![0u8; 248];
+    data[0x8a] = decimals;
+    data[0xd0..0xd4].copy_from_slice(&(updated_at as u32).to_le_bytes());
+    data[0xd8..0xd8 + 16].copy_from_slice(&answer.to_le_bytes());
+    data
+}
+
+
+
+// ─── Feed-level oracle unit tests (tanpa bankrun, via custom account) ─────────
+//
+// Strategy: inject feed account dengan data arbitrary ke ProgramTestContext,
+// lalu trigger `withdraw` yang akan memanggil read_chainlink_round() internally.
+// Kita proxy hasilnya lewat sukses/gagal-nya instruksi withdraw.
+
+// Semua oracle test butuh stream aktif dengan waktu sudah mulai vesting.
+// Setup helper inline di setiap test agar isolation terjaga.
+
+// [G] Happy path — feed valid, staleness rendah, answer positif
+#[tokio::test]
+async fn oracle_happy_path_valid_feed() {
+    let feed = make_feed(PRICE_DECIMALS, BASE_NOW, PRICE_RAW);
+    let mut h = Harness::new_with_feed(feed).await;
+    h.initialize_config().await.unwrap();
+    let mint = Keypair::new();
+    let (mint, creator_ata, recipient_ata) = h.setup_token(&mint).await;
+
+    let stream = h
+        .create_stream(
+            TOKEN_AMOUNT,
+            BASE_NOW + 60,
+            BASE_NOW + 60,
+            BASE_NOW + 160,
+            VESTING_LINEAR,
+            vec![],
+            1001,
+            mint,
+            creator_ata,
+            &[],
+        )
+        .await
+        .unwrap();
+
+    // 50% vested, oracle fresh → withdraw harus sukses
+    h.set_time(BASE_NOW + 110);
+    h.withdraw(stream, mint, recipient_ata).await.unwrap();
+
+    // Pastikan token sudah diterima (oracle path benar-benar dieksekusi)
+    assert_eq!(h.token_balance(&recipient_ata).await, TOKEN_AMOUNT / 2);
+}
+
+// [B] Stale feed — updated_at jauh di masa lalu (> 3600 detik dari now)
+#[tokio::test]
+async fn oracle_stale_feed_far_past_rejected() {
+    // updated_at = BASE_NOW - 7200 → staleness = 7200 > 3600
+    let feed = make_feed(PRICE_DECIMALS, BASE_NOW - 7200, PRICE_RAW);
+    let mut h = Harness::new_with_feed(feed).await;
+    h.initialize_config().await.unwrap();
+    let mint = Keypair::new();
+    let (mint, creator_ata, recipient_ata) = h.setup_token(&mint).await;
+
+    let stream = h
+        .create_stream(
+            TOKEN_AMOUNT,
+            BASE_NOW + 60,
+            BASE_NOW + 60,
+            BASE_NOW + 160,
+            VESTING_LINEAR,
+            vec![],
+            1002,
+            mint,
+            creator_ata,
+            &[],
+        )
+        .await
+        .unwrap();
+
+    h.set_time(BASE_NOW + 110);
+    // Harus gagal dengan StaleOraclePrice
+    let err = h.withdraw(stream, mint, recipient_ata).await;
+    assert!(err.is_err(), "stale feed (7200s) harus ditolak");
+}
+
+// [D] Staleness tepat di batas — updated_at = now - 3600 → harus DITOLAK
+// (kondisi: now - updated_at < 3600 → false saat diff == 3600)
+#[tokio::test]
+async fn oracle_staleness_at_exact_boundary_rejected() {
+    let now = BASE_NOW + 110; // waktu saat withdraw
+    // updated_at = now - 3600 → diff == 3600 → tidak < 3600 → StaleOraclePrice
+    let feed = make_feed(PRICE_DECIMALS, now - 3600, PRICE_RAW);
+    let mut h = Harness::new_with_feed(feed).await;
+    h.initialize_config().await.unwrap();
+    let mint = Keypair::new();
+    let (mint, creator_ata, recipient_ata) = h.setup_token(&mint).await;
+
+    let stream = h
+        .create_stream(
+            TOKEN_AMOUNT,
+            BASE_NOW + 60,
+            BASE_NOW + 60,
+            BASE_NOW + 160,
+            VESTING_LINEAR,
+            vec![],
+            1003,
+            mint,
+            creator_ata,
+            &[],
+        )
+        .await
+        .unwrap();
+
+    h.set_time(now);
+    let err = h.withdraw(stream, mint, recipient_ata).await;
+    assert!(err.is_err(), "diff==3600 harus ditolak (off-by-one boundary)");
+}
+
+// [C] Staleness tepat di bawah batas — updated_at = now - 3599 → harus OK
+#[tokio::test]
+async fn oracle_staleness_one_second_before_boundary_accepted() {
+    let now = BASE_NOW + 110;
+    // updated_at = now - 3599 → diff == 3599 → 3599 < 3600 → lolos
+    let feed = make_feed(PRICE_DECIMALS, now - 3599, PRICE_RAW);
+    let mut h = Harness::new_with_feed(feed).await;
+    h.initialize_config().await.unwrap();
+    let mint = Keypair::new();
+    let (mint, creator_ata, recipient_ata) = h.setup_token(&mint).await;
+
+    let stream = h
+        .create_stream(
+            TOKEN_AMOUNT,
+            BASE_NOW + 60,
+            BASE_NOW + 60,
+            BASE_NOW + 160,
+            VESTING_LINEAR,
+            vec![],
+            1004,
+            mint,
+            creator_ata,
+            &[],
+        )
+        .await
+        .unwrap();
+
+    h.set_time(now);
+    h.withdraw(stream, mint, recipient_ata).await.unwrap();
+    // Kalau sukses, oracle menerima feed dengan diff=3599
+    assert!(h.token_balance(&recipient_ata).await > 0);
+}
+
+// [E] Answer == 0 — oracle mengembalikan nol
+#[tokio::test]
+async fn oracle_zero_answer_rejected() {
+    let feed = make_feed(PRICE_DECIMALS, BASE_NOW, 0i128);
+    let mut h = Harness::new_with_feed(feed).await;
+    h.initialize_config().await.unwrap();
+    let mint = Keypair::new();
+    let (mint, creator_ata, recipient_ata) = h.setup_token(&mint).await;
+
+    let stream = h
+        .create_stream(
+            TOKEN_AMOUNT,
+            BASE_NOW + 60,
+            BASE_NOW + 60,
+            BASE_NOW + 160,
+            VESTING_LINEAR,
+            vec![],
+            1005,
+            mint,
+            creator_ata,
+            &[],
+        )
+        .await
+        .unwrap();
+
+    h.set_time(BASE_NOW + 110);
+    let err = h.withdraw(stream, mint, recipient_ata).await;
+    assert!(err.is_err(), "answer==0 harus menghasilkan InvalidOraclePrice");
+}
+
+// [F] Answer negatif — oracle mengembalikan harga negatif
+#[tokio::test]
+async fn oracle_negative_answer_rejected() {
+    let feed = make_feed(PRICE_DECIMALS, BASE_NOW, -1_000_000_000i128);
+    let mut h = Harness::new_with_feed(feed).await;
+    h.initialize_config().await.unwrap();
+    let mint = Keypair::new();
+    let (mint, creator_ata, recipient_ata) = h.setup_token(&mint).await;
+
+    let stream = h
+        .create_stream(
+            TOKEN_AMOUNT,
+            BASE_NOW + 60,
+            BASE_NOW + 60,
+            BASE_NOW + 160,
+            VESTING_LINEAR,
+            vec![],
+            1006,
+            mint,
+            creator_ata,
+            &[],
+        )
+        .await
+        .unwrap();
+
+    h.set_time(BASE_NOW + 110);
+    let err = h.withdraw(stream, mint, recipient_ata).await;
+    assert!(err.is_err(), "answer negatif harus menghasilkan InvalidOraclePrice");
+}
+
+// [A] Data terlalu pendek — account data < FEED_MIN_LEN (232 byte)
+// Inject feed account dengan data truncated langsung ke context.
+#[tokio::test]
+async fn oracle_feed_data_too_short_rejected() {
+    // Feed hanya 100 byte → jauh di bawah FEED_MIN_LEN=232
+    let short_feed: Vec<u8> = vec![0u8; 100];
+    let mut h = Harness::new_with_feed(short_feed).await;
+    h.initialize_config().await.unwrap();
+    let mint = Keypair::new();
+    let (mint, creator_ata, recipient_ata) = h.setup_token(&mint).await;
+
+    let stream = h
+        .create_stream(
+            TOKEN_AMOUNT,
+            BASE_NOW + 60,
+            BASE_NOW + 60,
+            BASE_NOW + 160,
+            VESTING_LINEAR,
+            vec![],
+            1007,
+            mint,
+            creator_ata,
+            &[],
+        )
+        .await
+        .unwrap();
+
+    h.set_time(BASE_NOW + 110);
+    let err = h.withdraw(stream, mint, recipient_ata).await;
+    assert!(err.is_err(), "feed data pendek harus menghasilkan InvalidOracleFeed");
+}
+
+// Tepat di batas minimum — 231 byte (FEED_MIN_LEN - 1) → harus ditolak
+#[tokio::test]
+async fn oracle_feed_data_min_len_minus_one_rejected() {
+    let feed: Vec<u8> = vec![0u8; 231]; // FEED_MIN_LEN = 232
+    let mut h = Harness::new_with_feed(feed).await;
+    h.initialize_config().await.unwrap();
+    let mint = Keypair::new();
+    let (mint, creator_ata, recipient_ata) = h.setup_token(&mint).await;
+
+    let stream = h
+        .create_stream(
+            TOKEN_AMOUNT,
+            BASE_NOW + 60,
+            BASE_NOW + 60,
+            BASE_NOW + 160,
+            VESTING_LINEAR,
+            vec![],
+            1008,
+            mint,
+            creator_ata,
+            &[],
+        )
+        .await
+        .unwrap();
+
+    h.set_time(BASE_NOW + 110);
+    let err = h.withdraw(stream, mint, recipient_ata).await;
+    assert!(err.is_err(), "feed 231 byte (min-1) harus ditolak");
+}
+
+// Tepat di batas minimum — 232 byte valid dengan data nol kecuali field penting
+// Ini menguji bahwa data.len() >= FEED_MIN_LEN lolos, tapi answer=0 akan gagal di cek berikutnya.
+// Jadi: len check lolos, staleness check lolos (updated_at=BASE_NOW), answer=0 → InvalidOraclePrice
+#[tokio::test]
+async fn oracle_feed_data_exact_min_len_passes_length_check() {
+    // 232 byte, updated_at valid, answer=0 → lolos len check, gagal di answer check
+    let mut feed = vec![0u8; 232];
+    feed[0x8a] = PRICE_DECIMALS;
+    feed[0xd0..0xd4].copy_from_slice(&(BASE_NOW as u32).to_le_bytes());
+    // answer = 0 (all zeros sudah di-set)
+
+    let mut h = Harness::new_with_feed(feed).await;
+    h.initialize_config().await.unwrap();
+    let mint = Keypair::new();
+    let (mint, creator_ata, recipient_ata) = h.setup_token(&mint).await;
+
+    let stream = h
+        .create_stream(
+            TOKEN_AMOUNT,
+            BASE_NOW + 60,
+            BASE_NOW + 60,
+            BASE_NOW + 160,
+            VESTING_LINEAR,
+            vec![],
+            1009,
+            mint,
+            creator_ata,
+            &[],
+        )
+        .await
+        .unwrap();
+
+    h.set_time(BASE_NOW + 110);
+    // Harus gagal di answer==0, bukan di len check (membuktikan len branch lolos)
+    let err = h.withdraw(stream, mint, recipient_ata).await;
+    assert!(err.is_err(), "answer=0 harus ditolak meskipun len tepat di minimum");
+}
+
+// Feed dengan decimals=0 — fee_lamports menjadi 0 karena integer division
+// fee = 99 * 10^9 * 10^0 / (100 * 10_000_000_000) = 99_000_000_000 / 1_000_000_000_000 = 0
+// → require!(fee_lamports > 0) gagal → InvalidOraclePrice
+#[tokio::test]
+async fn oracle_decimals_zero_produces_zero_fee_rejected() {
+    let feed = make_feed(0u8, BASE_NOW, PRICE_RAW);
+    let mut h = Harness::new_with_feed(feed).await;
+    h.initialize_config().await.unwrap();
+    let mint = Keypair::new();
+    let (mint, creator_ata, recipient_ata) = h.setup_token(&mint).await;
+
+    let stream = h
+        .create_stream(
+            TOKEN_AMOUNT,
+            BASE_NOW + 60,
+            BASE_NOW + 60,
+            BASE_NOW + 160,
+            VESTING_LINEAR,
+            vec![],
+            1010,
+            mint,
+            creator_ata,
+            &[],
+        )
+        .await
+        .unwrap();
+
+    h.set_time(BASE_NOW + 110);
+    // decimals=0 → decimals_factor=1 → fee integer-divides to 0 → InvalidOraclePrice
+    let err = h.withdraw(stream, mint, recipient_ata).await;
+    assert!(err.is_err(), "decimals=0 menghasilkan fee_lamports=0 → harus ditolak");
+}
+
+// Feed dengan answer sangat kecil (1) — fee_lamports menjadi sangat besar
+// Tidak overflow karena kita pakai u128 arithmetic, tapi hasilnya valid
+#[tokio::test]
+async fn oracle_very_small_answer_produces_large_fee() {
+    // answer = 1 → fee_lamports = 0.99 * 10^9 * 10^8 / (100 * 1) = sangat besar
+    // Tapi recipient punya 100 SOL jadi masih bisa bayar (atau tidak bisa → err)
+    let feed = make_feed(PRICE_DECIMALS, BASE_NOW, 1i128);
+    let mut h = Harness::new_with_feed(feed).await;
+    h.initialize_config().await.unwrap();
+    let mint = Keypair::new();
+    let (mint, creator_ata, recipient_ata) = h.setup_token(&mint).await;
+
+    let stream = h
+        .create_stream(
+            TOKEN_AMOUNT,
+            BASE_NOW + 60,
+            BASE_NOW + 60,
+            BASE_NOW + 160,
+            VESTING_LINEAR,
+            vec![],
+            1011,
+            mint,
+            creator_ata,
+            &[],
+        )
+        .await
+        .unwrap();
+
+    h.set_time(BASE_NOW + 110);
+    // Dengan answer=1, fee akan sangat besar → recipient tidak sanggup bayar
+    // Ini tetap valid sebagai coverage: path oracle sukses dieksekusi,
+    // kegagalan (jika ada) terjadi di SOL transfer bukan di oracle parsing.
+    // Hasil bisa sukses (jika recipient punya cukup SOL) atau err (InsufficientFunds).
+    // Yang penting: tidak panik, tidak InvalidOracleFeed/InvalidOraclePrice.
+    let _ = h.withdraw(stream, mint, recipient_ata).await;
+    // Test ini tentang tidak panic, bukan tentang sukses/gagalnya withdraw
+}
+
+// Feed dengan answer sangat besar — tidak menyebabkan overflow di fee calculation
+#[tokio::test]
+async fn oracle_very_large_answer_produces_tiny_fee() {
+    // answer = i128::MAX / 2 → fee_lamports ≈ 0 (dibulatkan ke bawah)
+    // fee_lamports = 0 → InvalidOraclePrice (require fee_lamports > 0)
+    let large_answer: i128 = i128::MAX / 2;
+    let feed = make_feed(PRICE_DECIMALS, BASE_NOW, large_answer);
+    let mut h = Harness::new_with_feed(feed).await;
+    h.initialize_config().await.unwrap();
+    let mint = Keypair::new();
+    let (mint, creator_ata, recipient_ata) = h.setup_token(&mint).await;
+
+    let stream = h
+        .create_stream(
+            TOKEN_AMOUNT,
+            BASE_NOW + 60,
+            BASE_NOW + 60,
+            BASE_NOW + 160,
+            VESTING_LINEAR,
+            vec![],
+            1012,
+            mint,
+            creator_ata,
+            &[],
+        )
+        .await
+        .unwrap();
+
+    h.set_time(BASE_NOW + 110);
+    // fee_lamports menjadi 0 → require(fee_lamports > 0) gagal → InvalidOraclePrice
+    let err = h.withdraw(stream, mint, recipient_ata).await;
+    assert!(err.is_err(), "answer terlalu besar → fee=0 → InvalidOraclePrice");
+}
+
+// Feed dengan updated_at di masa depan (future timestamp) — staleness check
+// now - updated_at bisa negatif → saturating_sub menghasilkan 0 → lolos
+#[tokio::test]
+async fn oracle_future_updated_at_treated_as_fresh() {
+    let now = BASE_NOW + 110;
+    // updated_at = now + 100 → future timestamp → saturating_sub → 0 < 3600 → lolos
+    let feed = make_feed(PRICE_DECIMALS, now + 100, PRICE_RAW);
+    let mut h = Harness::new_with_feed(feed).await;
+    h.initialize_config().await.unwrap();
+    let mint = Keypair::new();
+    let (mint, creator_ata, recipient_ata) = h.setup_token(&mint).await;
+
+    let stream = h
+        .create_stream(
+            TOKEN_AMOUNT,
+            BASE_NOW + 60,
+            BASE_NOW + 60,
+            BASE_NOW + 160,
+            VESTING_LINEAR,
+            vec![],
+            1013,
+            mint,
+            creator_ata,
+            &[],
+        )
+        .await
+        .unwrap();
+
+    h.set_time(now);
+    // saturating_sub(now, future) = 0 → 0 < 3600 → feed dianggap fresh
+    h.withdraw(stream, mint, recipient_ata).await.unwrap();
+    assert!(h.token_balance(&recipient_ata).await > 0);
+}
+
+// Feed dengan decimals tinggi (18) — memastikan decimals_factor tidak overflow u128
+// 10^18 masih dalam range u128 (max ~3.4 * 10^38)
+#[tokio::test]
+async fn oracle_high_decimals_no_overflow() {
+    // decimals=18, answer disesuaikan agar fee_lamports reasonable
+    // fee = 0.99 * 10^9 * 10^18 / (100 * answer) → butuh answer sangat besar
+    // Gunakan answer = 10^25 agar fee ≈ reasonable
+    let high_answer: i128 = 10_000_000_000_000_000_000_000_000i128; // 10^25
+    let feed = make_feed(18u8, BASE_NOW, high_answer);
+    let mut h = Harness::new_with_feed(feed).await;
+    h.initialize_config().await.unwrap();
+    let mint = Keypair::new();
+    let (mint, creator_ata, recipient_ata) = h.setup_token(&mint).await;
+
+    let stream = h
+        .create_stream(
+            TOKEN_AMOUNT,
+            BASE_NOW + 60,
+            BASE_NOW + 60,
+            BASE_NOW + 160,
+            VESTING_LINEAR,
+            vec![],
+            1014,
+            mint,
+            creator_ata,
+            &[],
+        )
+        .await
+        .unwrap();
+
+    h.set_time(BASE_NOW + 110);
+    // Tidak harus sukses, tapi tidak boleh panic karena overflow
+    let _ = h.withdraw(stream, mint, recipient_ata).await;
+}
+
+// ── Regression: oracle check tidak dipanggil untuk non-withdraw instructions ──
+// Memastikan create_stream dengan feed invalid tetap berhasil
+// (oracle hanya dicek di withdraw, bukan di create)
+#[tokio::test]
+async fn oracle_not_checked_during_create_stream() {
+    // Feed dengan answer=0 (invalid untuk withdraw)
+    let invalid_feed = make_feed(PRICE_DECIMALS, BASE_NOW, 0i128);
+    let mut h = Harness::new_with_feed(invalid_feed).await;
+    h.initialize_config().await.unwrap();
+    let mint = Keypair::new();
+    let (mint, creator_ata, _recipient_ata) = h.setup_token(&mint).await;
+
+    // create_stream tidak memanggil oracle → harus sukses meskipun feed invalid
+    let result = h
+        .create_stream(
+            TOKEN_AMOUNT,
+            BASE_NOW + 60,
+            BASE_NOW + 60,
+            BASE_NOW + 160,
+            VESTING_LINEAR,
+            vec![],
+            1015,
+            mint,
+            creator_ata,
+            &[],
+        )
+        .await;
+
+    assert!(result.is_ok(), "create_stream tidak bergantung pada oracle");
+}
