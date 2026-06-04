@@ -30,26 +30,66 @@ const ANCHOR_ERROR_MAP: Record<number, { title: string; detail: string }> = {
   6004: { title: "Invalid Start Date", detail: "Start date must not be in the past." },
   6005: { title: "Duration Too Short", detail: "Stream duration is too short. Increase the duration and try again." },
   6006: { title: "Arithmetic Overflow", detail: "A numeric overflow occurred. Check your amounts and try again." },
-  6007: { title: "Invalid Recipient", detail: "The recipient address is invalid." },
-  6008: { title: "Invalid Mint", detail: "The token mint is invalid for this stream." },
+  6007: { title: "Invalid Recipient", detail: "Recipient is invalid — it cannot be the same as the creator wallet." },
+  6008: { title: "Invalid Mint", detail: "The token mint does not match your token account for this stream." },
   6009: { title: "Invalid Token Owner", detail: "The token account owner does not match the expected wallet." },
-  6010: { title: "Insufficient Balance", detail: "Creator token balance is not enough for this operation." },
-  6011: { title: "Mint Not Allowed", detail: "This token mint is not allowed by the protocol." },
-  6012: { title: "Protocol Paused", detail: "The protocol is currently paused. Try again later." },
+  6010: { title: "Insufficient Token Balance", detail: "Your token balance for this mint is not enough to fund the stream amount. Top up the token and try again." },
+  6011: { title: "Mint Not Allowed", detail: "This token mint is not on the protocol's allowed list. Pick an allowed token." },
+  6012: { title: "Protocol Paused", detail: "The protocol is currently paused. Please try again later." },
   6013: { title: "Amount Too Small", detail: "Amount is below the minimum allowed by the protocol." },
-  6014: { title: "Invalid Mint Decimals", detail: "Token mint decimals are not supported." },
+  6014: { title: "Invalid Mint Decimals", detail: "This token mint's decimals are not supported." },
   6015: { title: "Token Type Unsupported", detail: "Tokens with transfer fees are not supported." },
+  6016: { title: "Stream Not Active", detail: "This stream is no longer active." },
+  6017: { title: "Stream Not Cancelable", detail: "This stream cannot be cancelled." },
+  6018: { title: "Nothing to Withdraw", detail: "No tokens are currently available to withdraw." },
+  6019: { title: "Unauthorized", detail: "Only the stream recipient can perform this action." },
+  6020: { title: "Invalid Oracle Feed", detail: "The oracle price feed is invalid." },
+  6021: { title: "Stale Oracle Price", detail: "The oracle price is stale (older than 1 hour). Try again shortly." },
+  6022: { title: "Invalid Oracle Price", detail: "The oracle returned an invalid price." },
+  6023: { title: "Invalid Fee Receiver", detail: "The fee receiver account is invalid." },
   6024: { title: "Already Cancelled", detail: "This stream has already been cancelled." },
+  6025: { title: "Stream Fully Vested", detail: "This stream is already fully vested/ended and can no longer be cancelled." },
+  6026: { title: "Stream Expired", detail: "This stream has expired and can no longer be edited." },
+  6027: { title: "Milestone Already Unlocked", detail: "This milestone has already been unlocked." },
+  6028: { title: "Invalid Vesting Type", detail: "This action is not valid for the stream's vesting type." },
+  6029: { title: "Invalid Milestone Count", detail: "The number of milestones is invalid for this stream." },
+  6030: { title: "Invalid Milestone PDA", detail: "A milestone account address is invalid." },
+  6031: { title: "Invalid Milestone Amount", detail: "Milestone amounts must add up exactly to the total stream amount." },
+  6032: { title: "Previous Milestone Not Approved", detail: "The previous milestone must be approved first." },
+  6033: { title: "Invalid Milestone Order", detail: "Milestones must be unlocked in order." },
+  6034: { title: "Previous Milestone Missing", detail: "A previous milestone account is missing." },
+  6035: { title: "Stream Already Started", detail: "This stream has already started and can no longer be modified." },
 };
 
 const ANCHOR_ERROR_NAME_MAP: Record<string, { title: string; detail: string }> = {
-  FullyVested: { title: "Stream Fully Vested", detail: "This stream is already fully vested/ended and can no longer be cancelled." },
-  InvalidAmount: { title: "Invalid Amount", detail: "Amount must be greater than zero or valid for this edit operation." },
-  InvalidEndDate: { title: "Invalid End Date", detail: "End date must be in the future and extend the stream." },
-  StreamExpired: { title: "Stream Expired", detail: "This stream has expired and can no longer be edited." },
-  InsufficientBalance: { title: "Insufficient Balance", detail: "Creator token balance is not enough for the requested top-up." },
-  InvalidVestingType: { title: "Invalid Vesting Type", detail: "This edit action is not valid for the stream vesting type." },
-  StreamNotActive: { title: "Stream Not Active", detail: "This stream is no longer active, so it cannot be edited." },
+  InvalidAmount: ANCHOR_ERROR_MAP[6000],
+  InvalidSchedule: ANCHOR_ERROR_MAP[6001],
+  InvalidCliff: ANCHOR_ERROR_MAP[6002],
+  InvalidEndDate: ANCHOR_ERROR_MAP[6003],
+  InvalidStartDate: ANCHOR_ERROR_MAP[6004],
+  DurationTooShort: ANCHOR_ERROR_MAP[6005],
+  MathOverflow: ANCHOR_ERROR_MAP[6006],
+  InvalidRecipient: ANCHOR_ERROR_MAP[6007],
+  InvalidMint: ANCHOR_ERROR_MAP[6008],
+  InvalidTokenOwner: ANCHOR_ERROR_MAP[6009],
+  InsufficientBalance: ANCHOR_ERROR_MAP[6010],
+  MintNotAllowed: ANCHOR_ERROR_MAP[6011],
+  ProtocolPaused: ANCHOR_ERROR_MAP[6012],
+  AmountTooSmall: ANCHOR_ERROR_MAP[6013],
+  InvalidMintDecimals: ANCHOR_ERROR_MAP[6014],
+  TransferFeeMintUnsupported: ANCHOR_ERROR_MAP[6015],
+  StreamNotActive: ANCHOR_ERROR_MAP[6016],
+  StreamNotCancelable: ANCHOR_ERROR_MAP[6017],
+  NothingToWithdraw: ANCHOR_ERROR_MAP[6018],
+  Unauthorized: ANCHOR_ERROR_MAP[6019],
+  AlreadyCancelled: ANCHOR_ERROR_MAP[6024],
+  FullyVested: ANCHOR_ERROR_MAP[6025],
+  StreamExpired: ANCHOR_ERROR_MAP[6026],
+  MilestoneAlreadyUnlocked: ANCHOR_ERROR_MAP[6027],
+  InvalidVestingType: ANCHOR_ERROR_MAP[6028],
+  InvalidMilestoneCount: ANCHOR_ERROR_MAP[6029],
+  InvalidMilestoneAmount: ANCHOR_ERROR_MAP[6031],
+  StreamAlreadyStarted: ANCHOR_ERROR_MAP[6035],
 };
 
 // ─── Known raw message fragments → friendly messages ─────────────────────
@@ -74,6 +114,21 @@ const FRAGMENT_MAP: { pattern: RegExp; title: string; detail: string }[] = [
     pattern: /insufficient funds/i,
     title: "Insufficient SOL Balance",
     detail: "Your wallet doesn't have enough SOL for this transaction. Top up your wallet and try again.",
+  },
+  {
+    pattern: /insufficientfundsforrent|insufficient funds for rent/i,
+    title: "Insufficient SOL for Rent",
+    detail: "You don't have enough SOL to pay the rent for the new stream and vault accounts. Top up SOL (e.g. from the Devnet faucet) and try again.",
+  },
+  {
+    pattern: /insufficientfundsforfee|insufficient funds for fee|prior credit/i,
+    title: "Insufficient SOL for Fees",
+    detail: "Your wallet doesn't have enough SOL to cover the network fee. Top up SOL and try again.",
+  },
+  {
+    pattern: /accountnotinitialized|account not initialized|could not find account.*token|uninitialized account/i,
+    title: "Token Account Missing",
+    detail: "Your token account for this mint doesn't exist yet or is empty. Receive/hold the token first, then create the stream.",
   },
 
   // Wallet / signing errors
@@ -168,6 +223,12 @@ function parseAnchorErrorCode(message: string): { title: string; detail: string 
   const customProgramHexMatch = message.match(/custom program error:\s*0x([0-9a-f]+)/i);
   if (customProgramHexMatch) {
     const code = parseInt(customProgramHexMatch[1], 16);
+    if (ANCHOR_ERROR_MAP[code]) return ANCHOR_ERROR_MAP[code];
+  }
+
+  const customDecimalMatch = message.match(/"?Custom"?\s*:\s*(\d{4,5})/i);
+  if (customDecimalMatch) {
+    const code = parseInt(customDecimalMatch[1], 10);
     if (ANCHOR_ERROR_MAP[code]) return ANCHOR_ERROR_MAP[code];
   }
 
