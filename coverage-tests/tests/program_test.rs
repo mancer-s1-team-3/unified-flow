@@ -1966,3 +1966,257 @@ async fn oracle_not_checked_during_create_stream() {
 
     assert!(result.is_ok(), "create_stream tidak bergantung pada oracle");
 }
+
+#[tokio::test]
+async fn cliff_stream_withdraw_after_cliff_date_linear_vesting_applies() {
+    let mut h = Harness::new().await;
+    h.initialize_config().await.unwrap();
+    let mint = Keypair::new();
+    let (mint, creator_ata, recipient_ata) = h.setup_token(&mint).await;
+ 
+    // cliff stream: start=+60, cliff=+80, end=+160
+    // Setelah cliff (now >= cliff_ts), vested = total * (now - start) / (end - start)
+    let stream = h
+        .create_stream(
+            TOKEN_AMOUNT,
+            BASE_NOW + 60,
+            BASE_NOW + 80,
+            BASE_NOW + 160,
+            VESTING_CLIFF,
+            vec![],
+            300,
+            mint,
+            creator_ata,
+            &[],
+        )
+        .await
+        .unwrap();
+ 
+    // now = cliff + 20 → elapsed = 40, duration = 100 → vested = 40%
+    // Ini meng-cover branch: vesting_type == CLIFF && now >= cliff_ts → SKIP cliff block
+    // kemudian jatuh ke linear calculation
+    h.set_time(BASE_NOW + 100);
+    h.withdraw(stream, mint, recipient_ata).await.unwrap();
+ 
+    let balance = h.token_balance(&recipient_ata).await;
+    // vested = 1_000_000 * (100-60) / (160-60) = 1_000_000 * 40/100 = 400_000
+    assert_eq!(balance, TOKEN_AMOUNT * 40 / 100);
+}
+ 
+// ─── [2b] vested_amount: CLIFF setelah end_ts → full amount ──────────────────
+#[tokio::test]
+async fn cliff_stream_withdraw_after_end_ts_returns_full_amount() {
+    let mut h = Harness::new().await;
+    h.initialize_config().await.unwrap();
+    let mint = Keypair::new();
+    let (mint, creator_ata, recipient_ata) = h.setup_token(&mint).await;
+ 
+    let stream = h
+        .create_stream(
+            TOKEN_AMOUNT,
+            BASE_NOW + 60,
+            BASE_NOW + 80,
+            BASE_NOW + 160,
+            VESTING_CLIFF,
+            vec![],
+            301,
+            mint,
+            creator_ata,
+            &[],
+        )
+        .await
+        .unwrap();
+ 
+    // now > end_ts → vested = total_amount (cover: now >= end_ts branch untuk CLIFF)
+    h.set_time(BASE_NOW + 200);
+    h.withdraw(stream, mint, recipient_ata).await.unwrap();
+ 
+    assert_eq!(h.token_balance(&recipient_ata).await, TOKEN_AMOUNT);
+    assert_eq!(h.stream_account(&stream).await.status, 2); // COMPLETED
+}
+ 
+// ─── [3] edit_milestone: new_amount == old_amount (no-op) ────────────────────
+// Covers: if new_amount > old: FALSE, else if new_amount < old: FALSE
+// → kedua branch di-skip, tidak ada transfer, hanya emit event
+#[tokio::test]
+async fn edit_milestone_same_amount_is_noop() {
+    let mut h = Harness::new().await;
+    h.initialize_config().await.unwrap();
+    let mint = Keypair::new();
+    let (mint, creator_ata, _) = h.setup_token(&mint).await;
+ 
+    let stream_pda = h.stream_pda(302);
+    let ms: Vec<Pubkey> = (0..2u8).map(|i| h.milestone_pda(&stream_pda, i)).collect();
+    let stream = h
+        .create_stream(
+            TOKEN_AMOUNT,
+            BASE_NOW + 60,
+            BASE_NOW + 60,
+            BASE_NOW + 1000,
+            VESTING_MILESTONE,
+            milestones(&[500_000, 500_000]),
+            302,
+            mint,
+            creator_ata,
+            &ms,
+        )
+        .await
+        .unwrap();
+ 
+    // Edit milestone 0 dengan amount yang sama → no transfer, hanya event
+    let vault_before = h
+        .token_balance(&Harness::ata(&stream, &mint, &spl_token::id()))
+        .await;
+ 
+    h.edit_milestone(stream, ms[0], mint, creator_ata, 500_000)
+        .await
+        .unwrap();
+ 
+    // Vault tidak berubah karena tidak ada transfer
+    let vault_after = h
+        .token_balance(&Harness::ata(&stream, &mint, &spl_token::id()))
+        .await;
+    assert_eq!(vault_before, vault_after);
+ 
+    // Amount milestone tetap 500_000
+    assert_eq!(h.milestone_account(&ms[0]).await.amount, 500_000);
+ 
+    // Total amount stream tidak berubah
+    assert_eq!(h.stream_account(&stream).await.total_amount, TOKEN_AMOUNT);
+}
+ 
+// ─── [4] create_stream: milestone account sudah pre-funded ───────────────────
+// Covers: if current_lamports < required_lamports → FALSE path (skip transfer)
+// Caranya: buat milestone PDA dulu dan fund manual sebelum create_stream
+#[tokio::test]
+async fn create_milestone_stream_with_prefunded_milestone_accounts() {
+    let mut h = Harness::new().await;
+    h.initialize_config().await.unwrap();
+    let mint = Keypair::new();
+    let (mint, creator_ata, _) = h.setup_token(&mint).await;
+ 
+    let stream_pda = h.stream_pda(303);
+    let ms: Vec<Pubkey> = (0..2u8).map(|i| h.milestone_pda(&stream_pda, i)).collect();
+ 
+    // Pre-fund milestone accounts dengan lebih dari cukup lamports
+    // sehingga branch `current_lamports < required_lamports` = FALSE
+    let large_lamports = 10_000_000_000u64; // 10 SOL — jauh melebihi rent
+    for milestone_key in &ms {
+        h.ctx.set_account(
+            milestone_key,
+            &solana_sdk::account::Account {
+                lamports: large_lamports,
+                data: vec![],
+                owner: solana_sdk::system_program::id(),
+                executable: false,
+                rent_epoch: 0,
+            }
+            .into(),
+        );
+    }
+ 
+    // create_stream harus berhasil — lamports sudah cukup, skip transfer, lanjut allocate+assign
+    let stream = h
+        .create_stream(
+            TOKEN_AMOUNT,
+            BASE_NOW + 60,
+            BASE_NOW + 60,
+            BASE_NOW + 1000,
+            VESTING_MILESTONE,
+            milestones(&[500_000, 500_000]),
+            303,
+            mint,
+            creator_ata,
+            &ms,
+        )
+        .await
+        .unwrap();
+ 
+    let s = h.stream_account(&stream).await;
+    assert_eq!(s.milestone_count, 2);
+}
+ 
+// ─── [5] edit_cliff: withdrawn > 0 → StreamAlreadyStarted ────────────────────
+// Covers branch: require!(stream.withdrawn == 0, StreamAlreadyStarted) FALSE
+#[tokio::test]
+async fn edit_cliff_after_partial_withdraw_fails() {
+    let mut h = Harness::new().await;
+    h.initialize_config().await.unwrap();
+    let mint = Keypair::new();
+    let (mint, creator_ata, recipient_ata) = h.setup_token(&mint).await;
+ 
+    // cliff stream: start=+60, cliff=+80, end=+160
+    let cliff = h
+        .create_stream(
+            TOKEN_AMOUNT,
+            BASE_NOW + 60,
+            BASE_NOW + 80,
+            BASE_NOW + 160,
+            VESTING_CLIFF,
+            vec![],
+            304,
+            mint,
+            creator_ata,
+            &[],
+        )
+        .await
+        .unwrap();
+ 
+    // Advance ke setelah cliff dan withdraw
+    h.set_time(BASE_NOW + 100);
+    h.withdraw(cliff, mint, recipient_ata).await.unwrap();
+ 
+    // Pastikan sudah ada withdrawn
+    assert!(h.stream_account(&cliff).await.withdrawn > 0);
+ 
+    // edit_cliff sekarang harus gagal: withdrawn > 0
+    let err = h.edit_cliff(cliff, BASE_NOW + 90).await;
+    assert!(err.is_err(), "edit_cliff setelah withdraw harus gagal dengan StreamAlreadyStarted");
+}
+ 
+// ─── [6] vested_amount: MILESTONE type dengan unlocked_milestone_amount > 0 ──
+// Sudah dicovered via unlock_milestone tests yang ada, tapi tambahkan
+// withdraw setelah unlock untuk cover path milestone → claimable > 0 → withdraw sukses
+#[tokio::test]
+async fn milestone_withdraw_after_unlock() {
+    let mut h = Harness::new().await;
+    h.initialize_config().await.unwrap();
+    let mint = Keypair::new();
+    let (mint, creator_ata, recipient_ata) = h.setup_token(&mint).await;
+ 
+    let stream_pda = h.stream_pda(305);
+    let ms: Vec<Pubkey> = (0..2u8).map(|i| h.milestone_pda(&stream_pda, i)).collect();
+    let stream = h
+        .create_stream(
+            TOKEN_AMOUNT,
+            BASE_NOW + 60,
+            BASE_NOW + 60,
+            BASE_NOW + 1000,
+            VESTING_MILESTONE,
+            milestones(&[500_000, 500_000]),
+            305,
+            mint,
+            creator_ata,
+            &ms,
+        )
+        .await
+        .unwrap();
+ 
+    // Unlock milestone 0
+    h.unlock_milestone(stream, ms[0]).await.unwrap();
+ 
+    // Withdraw: vested = unlocked_milestone_amount = 500_000
+    h.set_time(BASE_NOW + 100);
+    h.withdraw(stream, mint, recipient_ata).await.unwrap();
+ 
+    assert_eq!(h.token_balance(&recipient_ata).await, 500_000);
+ 
+    // Double withdraw setelah milestone: NothingToWithdraw
+    let err = h.withdraw(stream, mint, recipient_ata).await;
+    assert!(err.is_err());
+ 
+    // Unlock milestone 1 → status COMPLETED → withdraw lagi
+    h.unlock_milestone(stream, ms[1]).await.unwrap();
+    h.withdraw(stream, mint, recipient_ata).await.unwrap();
+    assert_eq!(h.token_balance(&recipient_ata).await, TOKEN_AMOUNT);
+}
