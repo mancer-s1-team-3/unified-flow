@@ -470,6 +470,8 @@ pub fn withdraw_fees(
 pub fn cancel(ctx: Context<Cancel>) -> Result<()> {
     let now = Clock::get()?.unix_timestamp;
 
+    require!(!ctx.accounts.config.paused, ErrorCode::ProtocolPaused);
+
     require_keys_eq!(
         ctx.accounts.stream.creator,
         ctx.accounts.creator.key(),
@@ -720,6 +722,7 @@ pub fn edit_milestone(
     Ok(())
 }
 pub fn edit_cliff(ctx: Context<EditCliff>, new_cliff_ts: i64) -> Result<()> {
+        require!(!ctx.accounts.config.paused, ErrorCode::ProtocolPaused);
         let stream = &mut ctx.accounts.stream;
         let now = Clock::get()?.unix_timestamp;
         require!(
@@ -766,6 +769,7 @@ pub fn edit_linear(
     new_end_ts: i64,
     topup_amount: u64,
 ) -> Result<()> {
+    require!(!ctx.accounts.config.paused, ErrorCode::ProtocolPaused);
     let stream = &mut ctx.accounts.stream;
     let now = Clock::get()?.unix_timestamp;
 
@@ -1000,6 +1004,12 @@ pub struct Cancel<'info> {
     pub mint: InterfaceAccount<'info, Mint>,
 
     #[account(
+        seeds = [b"config"],
+        bump = config.bump,
+    )]
+    pub config: Account<'info, ConfigAccount>,
+
+    #[account(
         mut,
         seeds = [
             b"stream",
@@ -1053,6 +1063,12 @@ pub struct EditLinear<'info> {
     pub creator: Signer<'info>,
 
     pub mint: InterfaceAccount<'info, Mint>,
+
+    #[account(
+        seeds = [b"config"],
+        bump = config.bump,
+    )]
+    pub config: Account<'info, ConfigAccount>,
 
     #[account(
         mut,
@@ -1151,6 +1167,12 @@ pub struct EditMilestone<'info> {
 pub struct EditCliff<'info> {
     #[account(mut)]
     pub creator: Signer<'info>,
+
+    #[account(
+        seeds = [b"config"],
+        bump = config.bump,
+    )]
+    pub config: Account<'info, ConfigAccount>,
 
     #[account(
         mut,

@@ -328,7 +328,7 @@ describe("edit", () => {
     await expectError(
       program.methods
         .editLinear(new BN(endTs + 100), new BN(0))
-        .accountsStrict({
+        .accounts({
           creator: creator.publicKey,
           mint,
           stream: streamPda,
@@ -351,7 +351,7 @@ describe("edit", () => {
     await expectError(
       program.methods
         .editCliff(new BN(endTs + 100))
-        .accountsStrict({
+        .accounts({
           creator: creator.publicKey,
           stream: streamPda,
         })
@@ -378,7 +378,7 @@ describe("edit", () => {
 
     await program.methods
       .editLinear(new BN(newEndTs), topupAmount)
-      .accountsStrict({
+      .accounts({
         creator: creator.publicKey,
         mint,
         stream: streamPda,
@@ -407,7 +407,7 @@ describe("edit", () => {
 
     await program.methods
       .editCliff(new BN(newCliffTs))
-      .accountsStrict({
+      .accounts({
         creator: creator.publicKey,
         stream: streamPda,
       })

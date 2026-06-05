@@ -312,7 +312,7 @@ describe("cancel", () => {
     const signer = opts.signer ?? creator;
     return program.methods
       .cancel()
-      .accountsStrict({
+      .accounts({
         creator: signer.publicKey,
         mint,
         stream: streamPda,
@@ -652,7 +652,7 @@ describe("cancel", () => {
     await expectError(
       program.methods
         .cancel()
-        .accountsStrict({
+        .accounts({
           creator: recipient.publicKey, // wrong signer
           mint,
           stream: streamPda,
@@ -676,7 +676,7 @@ describe("cancel", () => {
     await expectError(
       program.methods
         .cancel()
-        .accountsStrict({
+        .accounts({
           creator: stranger.publicKey,
           mint,
           stream: streamPda,

@@ -483,6 +483,7 @@ impl Harness {
             accounts: vec![
                 AccountMeta::new(self.creator, true),
                 AccountMeta::new_readonly(mint, false),
+                AccountMeta::new_readonly(Self::config_pda(), false),
                 AccountMeta::new(stream, false),
                 AccountMeta::new(
                     spl_associated_token_account::get_associated_token_address_with_program_id(
@@ -550,6 +551,7 @@ impl Harness {
             program_id: unified_flow::ID,
             accounts: vec![
                 AccountMeta::new(self.creator, true),
+                AccountMeta::new_readonly(Self::config_pda(), false),
                 AccountMeta::new(stream, false),
             ],
             data: ix_data("edit_cliff", &EditCliffArgs { new_cliff_ts }),
@@ -572,6 +574,7 @@ impl Harness {
             accounts: vec![
                 AccountMeta::new(self.creator, true),
                 AccountMeta::new_readonly(mint, false),
+                AccountMeta::new_readonly(Self::config_pda(), false),
                 AccountMeta::new(stream, false),
                 AccountMeta::new(vault, false),
                 AccountMeta::new(creator_token_account, false),

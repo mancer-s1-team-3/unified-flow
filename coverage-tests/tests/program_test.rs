@@ -427,6 +427,7 @@ async fn store_milestone(&mut self, key: Pubkey, milestone: MilestoneAccount) {
         let metas = unified_flow::accounts::Cancel {
             creator: self.creator.pubkey(),
             mint,
+            config: Self::config_pda(),
             stream,
             vault,
             creator_token_account: creator_ata,
@@ -491,6 +492,7 @@ async fn store_milestone(&mut self, key: Pubkey, milestone: MilestoneAccount) {
         let data = unified_flow::instruction::EditCliff { new_cliff_ts }.data();
         let metas = unified_flow::accounts::EditCliff {
             creator: self.creator.pubkey(),
+            config: Self::config_pda(),
             stream,
         }
         .to_account_metas(None);
@@ -513,6 +515,7 @@ async fn store_milestone(&mut self, key: Pubkey, milestone: MilestoneAccount) {
         let metas = unified_flow::accounts::EditLinear {
             creator: self.creator.pubkey(),
             mint,
+            config: Self::config_pda(),
             stream,
             vault,
             creator_token_account: creator_ata,
@@ -615,6 +618,7 @@ async fn store_milestone(&mut self, key: Pubkey, milestone: MilestoneAccount) {
         let metas = unified_flow::accounts::Cancel {
             creator: signer.pubkey(),
             mint,
+            config: Self::config_pda(),
             stream,
             vault,
             creator_token_account: creator_ata,
