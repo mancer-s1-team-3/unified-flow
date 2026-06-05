@@ -288,12 +288,14 @@ export async function editLinearOnChain({
     [creator.toBuffer(), TOKEN_PROGRAM_ID.toBuffer(), mint.toBuffer()],
     ASSOCIATED_TOKEN_PROGRAM_ID
   )[0];
+  const [configPda] = PublicKey.findProgramAddressSync([Buffer.from("config")], PROGRAM_ID);
 
   const anchorInstruction = await program.methods
     .editLinear(parsedNewEndTs, parsedTopupAmount)
     .accounts({
       creator,
       mint,
+      config: configPda,
       stream: streamAddress,
       vault: streamState.vault,
       creatorTokenAccount,
@@ -310,6 +312,7 @@ export async function editLinearOnChain({
     accounts: [
       { address: creator.toBase58(), role: AccountRole.WRITABLE_SIGNER, signer: walletSigner as any },
       { address: mint.toBase58(), role: AccountRole.READONLY },
+      { address: configPda.toBase58(), role: AccountRole.READONLY },
       { address: streamAddress.toBase58(), role: AccountRole.WRITABLE },
       { address: streamState.vault.toBase58(), role: AccountRole.WRITABLE },
       { address: creatorTokenAccount.toBase58(), role: AccountRole.WRITABLE },
@@ -364,10 +367,13 @@ export async function editCliffOnChain({
     throw new Error(`Cliff timestamp must be between stream start time (${startTs.toString()}) and end time (${endTs.toString()}).`);
   }
 
+  const [configPda] = PublicKey.findProgramAddressSync([Buffer.from("config")], PROGRAM_ID);
+
   const anchorInstruction = await program.methods
     .editCliff(newCliffBn)
     .accounts({
       creator,
+      config: configPda,
       stream: streamAddress,
     })
     .instruction();
@@ -380,6 +386,7 @@ export async function editCliffOnChain({
     anchorInstructionData: anchorInstruction.data,
     accounts: [
       { address: creator.toBase58(), role: AccountRole.WRITABLE_SIGNER, signer: walletSigner as any },
+      { address: configPda.toBase58(), role: AccountRole.READONLY },
       { address: streamAddress.toBase58(), role: AccountRole.WRITABLE },
     ],
     programId: PROGRAM_ID,

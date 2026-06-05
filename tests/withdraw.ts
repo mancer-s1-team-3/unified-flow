@@ -479,7 +479,7 @@ describe("withdraw", () => {
 
     return program.methods
       .cancel()
-      .accountsStrict({
+      .accounts({
         creator: creator.publicKey,
         mint,
         stream: streamPda,

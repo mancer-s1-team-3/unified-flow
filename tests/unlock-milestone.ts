@@ -432,7 +432,7 @@ describe("unlock-milestone", () => {
 
         await program.methods
             .cancel()
-            .accountsStrict({
+            .accounts({
                 creator: creator.publicKey,
                 mint,
                 stream: streamPDA,

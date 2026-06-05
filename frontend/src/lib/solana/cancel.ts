@@ -117,6 +117,7 @@ export async function cancelStreamOnChain({
     [streamState.recipient.toBuffer(), TOKEN_PROGRAM_ID.toBuffer(), mint.toBuffer()],
     ASSOCIATED_TOKEN_PROGRAM_ID
   )[0];
+  const [configPda] = PublicKey.findProgramAddressSync([Buffer.from("config")], PROGRAM_ID);
 
   const { blockhash, lastValidBlockHeight } = await connection.getLatestBlockhash(commitment);
   const createCreatorAtaInstruction = await getCreateAssociatedTokenIdempotentInstruction({
@@ -141,6 +142,7 @@ export async function cancelStreamOnChain({
     .accounts({
       creator,
       mint,
+      config: configPda,
       stream: streamAddress,
       vault: streamState.vault,
       creatorTokenAccount,
@@ -155,6 +157,7 @@ export async function cancelStreamOnChain({
     accounts: [
       { address: creator.toBase58(), role: AccountRole.WRITABLE_SIGNER, signer: kitSigner },
       { address: mint.toBase58(), role: AccountRole.READONLY },
+      { address: configPda.toBase58(), role: AccountRole.READONLY },
       { address: streamAddress.toBase58(), role: AccountRole.WRITABLE },
       { address: streamState.vault.toBase58(), role: AccountRole.WRITABLE },
       { address: creatorTokenAccount.toBase58(), role: AccountRole.WRITABLE },

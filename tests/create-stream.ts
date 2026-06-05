@@ -2846,7 +2846,7 @@ describe("create-stream", () => {
     // Cancel stream
     await program.methods
       .cancel()
-      .accountsStrict({
+      .accounts({
         creator: creator.publicKey, mint, stream: streamPDA, vault,
         creatorTokenAccount, recipientTokenAccount: recipientAta, tokenProgram: TOKEN_PROGRAM_ID,
       })

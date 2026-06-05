@@ -619,7 +619,7 @@ describe("edit-milestone", () => {
 
         await program.methods
             .cancel()
-            .accountsStrict({
+            .accounts({
                 creator: creator.publicKey,
                 mint,
                 stream: streamPda,

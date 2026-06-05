@@ -301,6 +301,19 @@ describe("integration-and-edge-cases", () => {
             .rpc();
     }
 
+    const PAUSED_BYTE_OFFSET = 72;
+    async function setPaused(paused: boolean) {
+        const configRaw = await context.banksClient.getAccount(configPda);
+        const configData = Buffer.from(configRaw!.data);
+        configData.writeUInt8(paused ? 1 : 0, PAUSED_BYTE_OFFSET);
+        context.setAccount(configPda, {
+            lamports: Number(configRaw!.lamports),
+            data: configData,
+            owner: program.programId,
+            executable: false,
+        });
+    }
+
     // ══════════════════════════════════════════════════════════════════════════
     // 1. Full flow: create_stream → wait → withdraw → verify balance
     // ══════════════════════════════════════════════════════════════════════════
@@ -415,6 +428,7 @@ describe("integration-and-edge-cases", () => {
                 .accountsStrict({
                     creator: creator.publicKey,
                     mint,
+                    config: configPda,
                     stream: streamPda,
                     vault: getAssociatedTokenAddressSync(mint, streamPda, true, TOKEN_PROGRAM_ID),
                     creatorTokenAccount: creatorAta,
@@ -479,8 +493,123 @@ describe("integration-and-edge-cases", () => {
         );
     });
 
+    it("withdraw is rejected when protocol is paused", async () => {
+        await setTime(context, BASE_NOW);
+        const { streamPda, recipientAta, startTs, endTs } = await setupStream();
+
+        const midTs = startTs + Math.floor((endTs - startTs) / 2);
+        await setTime(context, midTs);
+        context.setAccount(SOL_USD_FEED, {
+            lamports: 1e9,
+            data: buildFeedData(PRICE_RAW, PRICE_DECIMALS, midTs),
+            owner: CHAINLINK_PROGRAM_ID,
+            executable: false,
+        });
+
+        await setPaused(true);
+
+        await expectError(doWithdraw(streamPda, recipientAta), "ProtocolPaused");
+    });
+
+    it("edit_cliff is rejected when protocol is paused", async () => {
+        await setTime(context, BASE_NOW);
+        const startTs = BASE_NOW;
+        const cliffTs = BASE_NOW + Math.floor(STREAM_DURATION / 2);
+        const endTs = BASE_NOW + STREAM_DURATION;
+
+        const { streamPda } = await setupStream({
+            startTs,
+            cliffTs,
+            endTs,
+            vestingType: 1,
+        });
+
+        await setPaused(true);
+
+        const newCliffTs = cliffTs + 100;
+        await expectError(
+            program.methods
+                .editCliff(new BN(newCliffTs))
+                .accountsStrict({ creator: creator.publicKey, config: configPda, stream: streamPda })
+                .signers([creator])
+                .rpc(),
+            "ProtocolPaused"
+        );
+    });
+
+    it("edit_linear is rejected when protocol is paused", async () => {
+        await setTime(context, BASE_NOW);
+        const { streamPda } = await setupStream({
+            startTs: BASE_NOW,
+            endTs: BASE_NOW + STREAM_DURATION,
+            vestingType: 0,
+        });
+
+        const creatorAta = getAssociatedTokenAddressSync(
+            mint, creator.publicKey, false, TOKEN_PROGRAM_ID
+        );
+        const vaultAta = getAssociatedTokenAddressSync(
+            mint, streamPda, true, TOKEN_PROGRAM_ID
+        );
+
+        await setPaused(true);
+
+        const newEndTs = BASE_NOW + STREAM_DURATION * 2;
+        await expectError(
+            program.methods
+                .editLinear(new BN(newEndTs), new BN(0))
+                .accountsStrict({
+                    creator: creator.publicKey,
+                    mint,
+                    config: configPda,
+                    stream: streamPda,
+                    vault: vaultAta,
+                    creatorTokenAccount: creatorAta,
+                    tokenProgram: TOKEN_PROGRAM_ID,
+                })
+                .signers([creator])
+                .rpc(),
+            "ProtocolPaused"
+        );
+    });
+
+    it("cancel is rejected when protocol is paused", async () => {
+        await setTime(context, BASE_NOW);
+        const { streamPda, recipientAta, startTs, endTs } = await setupStream();
+
+        const midTs = startTs + Math.floor((endTs - startTs) / 2);
+        await setTime(context, midTs);
+
+        const creatorAta = getAssociatedTokenAddressSync(
+            mint, creator.publicKey, false, TOKEN_PROGRAM_ID
+        );
+        const vaultAta = getAssociatedTokenAddressSync(
+            mint, streamPda, true, TOKEN_PROGRAM_ID
+        );
+
+        await setPaused(true);
+
+        await expectError(
+            program.methods
+                .cancel()
+                .accountsStrict({
+                    creator: creator.publicKey,
+                    mint,
+                    config: configPda,
+                    stream: streamPda,
+                    vault: vaultAta,
+                    creatorTokenAccount: creatorAta,
+                    recipientTokenAccount: recipientAta,
+                    tokenProgram: TOKEN_PROGRAM_ID,
+                })
+                .signers([creator])
+                .rpc(),
+            "ProtocolPaused"
+        );
+    });
+
     // // ══════════════════════════════════════════════════════════════════════════
-    // // 7. Full flow pakai LiteSVM pure (tanpa anchor-bankrun)
+    // // 8. Full flow pakai LiteSVM pure (tanpa anchor-bankrun)
     // // ══════════════════════════════════════════════════════════════════════════
     // it("full flow: create_stream -> wait 50% -> withdraw -> verify balance (LiteSVM)", async () => {
     //     // ── Setup SVM ──────────────────────────────────────────────────────────
