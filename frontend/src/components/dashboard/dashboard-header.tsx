@@ -183,12 +183,15 @@ export function DashboardHeader() {
 
           {/* Dropdown menu */}
           {menuOpen && (
-            <div className="absolute top-full right-0 mt-2 w-64 bg-zinc-950/95 border border-zinc-800 rounded-2xl shadow-2xl backdrop-blur-xl animate-in fade-in slide-in-from-top-2 duration-200">
+            <div
+              className="absolute top-full right-0 mt-2 w-64 bg-zinc-950/95 border border-zinc-800 rounded-2xl shadow-2xl backdrop-blur-xl animate-in fade-in slide-in-from-top-2 duration-200"
+              style={{ willChange: "transform" }}
+            >
               <div className="p-3 space-y-1">
-                <div className="text-[9px] font-black uppercase tracking-widest text-zinc-500 px-2 pb-1">Network</div>
+                <div className="text-[9px] font-black uppercase tracking-widest text-zinc-400 px-2 pb-1">Network</div>
                 <NetworkSwitcher dropdownAlign="left" />
 
-                <div className="text-[9px] font-black uppercase tracking-widest text-zinc-500 px-2 pt-2 pb-1">Wallet</div>
+                <div className="text-[9px] font-black uppercase tracking-widest text-zinc-400 px-2 pt-2 pb-1">Wallet</div>
                 <DashboardHeaderWallet />
 
                 <div className="border-t border-zinc-800/60 pt-2 mt-1 space-y-1">

@@ -565,7 +565,7 @@ export function DashboardActionPanels(props: Props) {
             </div>
             <div>
               <h4 className="text-xs font-bold text-zinc-200">Squads Multisig Execution</h4>
-              <p className="text-[10px] text-zinc-500">Enable this option to bundle your action as a Squads multisig proposal instead of executing directly.</p>
+              <p className="text-[10px] text-zinc-400">Enable this option to bundle your action as a Squads multisig proposal instead of executing directly.</p>
             </div>
           </div>
 

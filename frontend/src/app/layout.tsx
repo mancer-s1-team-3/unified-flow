@@ -32,7 +32,6 @@ export default function RootLayout({
         <title>{siteName}</title>
         <meta name="description" content={siteDescription} />
         <meta name="keywords" content="solana vesting, token distribution, cliff vesting, milestone vesting, linear vesting, anchor, mcp, cli" />
-        <link rel="canonical" href={siteUrl} />
         <meta property="og:type" content="website" />
         <meta property="og:site_name" content={siteName} />
         <meta property="og:title" content={siteName} />
