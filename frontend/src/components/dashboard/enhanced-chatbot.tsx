@@ -235,8 +235,8 @@ export function EnhancedChatbot() {
     <div className="fixed bottom-6 right-6 z-50 flex flex-col items-end gap-3">
       {/* Chat Window */}
       {open && (
-        <div className={`w-[380px] bg-zinc-950 border border-zinc-800 rounded-2xl shadow-2xl overflow-hidden transition-all duration-300 ${
-          minimized ? "h-12" : "h-[600px]"
+        <div className={`flex flex-col w-[380px] max-w-[calc(100vw-3rem)] bg-zinc-950 border border-zinc-800 rounded-2xl shadow-2xl overflow-hidden transition-all duration-300 ${
+          minimized ? "h-12" : "h-[500px] max-h-[calc(100vh-6rem)]"
         }`}>
           {/* Header */}
           <div className="shrink-0 border-b border-zinc-800 p-3 bg-zinc-950">

@@ -36,9 +36,9 @@ class ASIOneChatService {
 
   constructor() {
     this.apiKey = process.env.NEXT_PUBLIC_ASIONE_API_KEY || '';
-    this.apiUrl = process.env.NEXT_PUBLIC_ASIONE_API_URL || 'https://api.asione.ai/v1';
-    this.model = process.env.NEXT_PUBLIC_ASIONE_MODEL || 'asione-one';
-    
+    this.apiUrl = process.env.NEXT_PUBLIC_ASIONE_API_URL || 'https://api.asi1.ai/v1';
+    this.model = process.env.NEXT_PUBLIC_ASIONE_MODEL || 'asi1';
+
     this.systemPrompt = `You are an AI assistant for the Unified Flow token distribution platform on Solana. Your role is to help users understand and use the vesting stream features.
 
 Key features you should know about:
@@ -74,7 +74,7 @@ Technical details:
   ): Promise<StreamingResponse> {
     try {
       const messages = this.buildMessages(userMessage, context);
-      
+
       const response = await fetch(`${this.apiUrl}/chat/completions`, {
         method: 'POST',
         headers: {
@@ -95,13 +95,14 @@ Technical details:
       }
 
       const data = await response.json();
-      
+
       return {
         content: data.choices[0]?.message?.content || 'I apologize, but I encountered an issue generating a response.',
         done: true,
       };
     } catch (error) {
-      console.error('ASI:One API Error:', error);
+      // Silently fallback without polluting the console with fetch errors
+      // console.error('ASI:One API Error:', error);
       return {
         content: this.getFallbackResponse(userMessage),
         done: true,
@@ -119,7 +120,7 @@ Technical details:
   ): AsyncGenerator<StreamingResponse> {
     try {
       const messages = this.buildMessages(userMessage, context);
-      
+
       const response = await fetch(`${this.apiUrl}/chat/completions`, {
         method: 'POST',
         headers: {
@@ -176,7 +177,8 @@ Technical details:
         }
       }
     } catch (error) {
-      console.error('ASI:One Streaming Error:', error);
+      // Silently fallback without polluting the console with fetch errors
+      // console.error('ASI:One Streaming Error:', error);
       yield {
         content: this.getFallbackResponse(userMessage),
         done: true,
@@ -208,7 +210,7 @@ Technical details:
     const recentHistory = context.conversationHistory
       .slice(-this.maxHistoryLength)
       .filter(msg => msg.role !== 'system');
-    
+
     messages.push(...recentHistory);
 
     // Add current user message
