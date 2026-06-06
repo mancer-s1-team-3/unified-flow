@@ -324,12 +324,16 @@ describe("edit", () => {
     const { streamPda, creatorAta, vaultAta, endTs } = await setupLinearStream();
 
     await setTime(context, endTs + 1);
-
+    const [configPda] = PublicKey.findProgramAddressSync(
+      [Buffer.from("config")],
+      program.programId
+    );
     await expectError(
       program.methods
         .editLinear(new BN(endTs + 100), new BN(0))
-        .accounts({
+        .accountsStrict({
           creator: creator.publicKey,
+          config: configPda,
           mint,
           stream: streamPda,
           vault: vaultAta,
@@ -375,11 +379,15 @@ describe("edit", () => {
     const creatorAfterMint = await getTokenBalance(context, creatorAta);
 
     await setTime(context, BASE_NOW + 10);
-
+    const [configPda] = PublicKey.findProgramAddressSync(
+      [Buffer.from("config")],
+      program.programId
+    );
     await program.methods
       .editLinear(new BN(newEndTs), topupAmount)
-      .accounts({
+      .accountsStrict({
         creator: creator.publicKey,
+        config: configPda,
         mint,
         stream: streamPda,
         vault: vaultAta,

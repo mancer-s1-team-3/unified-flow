@@ -324,9 +324,10 @@ describe("auth", () => {
   ) {
     return program.methods
       .editLinear(new BN(newEndTs), new BN(topup))
-      .accounts({
+      .accountsStrict({
         creator: signer.publicKey,
         mint,
+        config: configPda,
         stream: streamPda,
         vault: vaultAta,
         creatorTokenAccount,

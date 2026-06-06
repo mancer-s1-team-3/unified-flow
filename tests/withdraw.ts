@@ -479,8 +479,9 @@ describe("withdraw", () => {
 
     return program.methods
       .cancel()
-      .accounts({
+      .accountsStrict({
         creator: creator.publicKey,
+        config: configPda,
         mint,
         stream: streamPda,
         vault: getAssociatedTokenAddressSync(mint, streamPda, true, TOKEN_PROGRAM_ID),

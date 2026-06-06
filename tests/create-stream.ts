@@ -2842,12 +2842,15 @@ describe("create-stream", () => {
       .accounts({ creator: creator.publicKey, recipient: recipient.publicKey, mint, creatorTokenAccount, tokenProgram: TOKEN_PROGRAM_ID })
       .signers([creator])
       .rpc();
-
+    const [configPda] = PublicKey.findProgramAddressSync(
+      [Buffer.from("config")],
+      program.programId
+    );
     // Cancel stream
     await program.methods
       .cancel()
-      .accounts({
-        creator: creator.publicKey, mint, stream: streamPDA, vault,
+      .accountsStrict({
+        creator: creator.publicKey, mint, config: configPda, stream: streamPDA, vault,
         creatorTokenAccount, recipientTokenAccount: recipientAta, tokenProgram: TOKEN_PROGRAM_ID,
       })
       .signers([creator])

@@ -291,8 +291,8 @@ const StreamDetailsDrawer = dynamic(
   { ssr: false, loading: () => null }
 );
 
-const ChatbotWidget = dynamic(
-  () => import("@/components/dashboard/chatbot-widget").then((mod) => mod.ChatbotWidget),
+const EnhancedChatbot = dynamic(
+  () => import("@/components/dashboard/enhanced-chatbot").then((mod) => mod.EnhancedChatbot),
   { ssr: false, loading: () => null }
 );
 
@@ -1255,7 +1255,7 @@ export default function Home({ initialStreams = [] }: Props) {
       </div>
 
       {/* Chatbot Assistant */}
-      <ChatbotWidget />
+      <EnhancedChatbot />
 
     </main>
   );
