@@ -134,32 +134,29 @@ export function EnhancedChatbot() {
       const parsedArgs = JSON.parse(args);
       console.log(`Executing tool: ${toolName}`, parsedArgs);
       
-      // TODO: Integrate with wallet adapter and @mancer/unified-flow-sdk
-      // Example integration:
-    
-      // const client = new UnifiedFlowClient(program as Program<UnifiedFlow>);
+      // TODO: Integrate with wallet adapter and @unifiedflow/unified-flow-sdk
+      // For now, this is a placeholder that simulates tool execution
+      
+      // Simulate tool execution with timeout
+      await new Promise(resolve => setTimeout(resolve, 1000));
       
       switch (toolName) {
         case "create_stream":
-          // await client.createStream(parsedArgs.recipient, parsedArgs.amount, parsedArgs.vesting_type);
           console.log("Create stream with:", parsedArgs);
-          break;
+          return { success: true, message: `Stream creation initiated for ${parsedArgs.recipient}` };
         case "withdraw_stream":
-          // await client.withdrawStream(parsedArgs.stream_pda);
           console.log("Withdraw from stream:", parsedArgs.stream_pda);
-          break;
+          return { success: true, message: "Withdrawal initiated successfully" };
         case "cancel_stream":
-          // await client.cancelStream(parsedArgs.stream_pda);
           console.log("Cancel stream:", parsedArgs.stream_pda);
-          break;
+          return { success: true, message: "Stream cancellation initiated" };
         default:
           console.log("Unknown tool:", toolName);
+          return { success: false, message: `Unknown tool: ${toolName}` };
       }
-      
-      return { success: true, message: "Tool executed successfully" };
     } catch (error) {
       console.error("Tool execution error:", error);
-      return { success: false, message: "Tool execution failed" };
+      return { success: false, message: "Tool execution failed: " + (error instanceof Error ? error.message : "Unknown error") };
     }
   };
 
@@ -194,6 +191,7 @@ export function EnhancedChatbot() {
       const context = buildChatContext();
       let fullResponse = "";
       let toolCallData: { name: string; arguments: string } | undefined;
+      let hasToolCall = false;
 
       // Stream the response
       for await (const chunk of chatService.generateStreamingResponse(text, context)) {
@@ -210,14 +208,16 @@ export function EnhancedChatbot() {
 
         fullResponse = chunk.content;
         
+        // Track tool calls but only update when complete
         if (chunk.toolCall) {
           toolCallData = chunk.toolCall;
+          hasToolCall = true;
         }
 
         setMessages(prev => 
           prev.map(msg => 
             msg.id === assistantMessageId 
-              ? { ...msg, text: fullResponse, isStreaming: !chunk.done, toolCall: chunk.toolCall }
+              ? { ...msg, text: fullResponse, isStreaming: !chunk.done, toolCall: chunk.done ? chunk.toolCall : undefined }
               : msg
           )
         );

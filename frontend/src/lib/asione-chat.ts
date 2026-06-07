@@ -251,6 +251,7 @@ Technical details:
               }
             }
 
+            // Only yield tool call when it's complete (finish_reason is 'tool_calls')
             if (data.choices?.[0]?.finish_reason === 'tool_calls' && accumulatedToolCall) {
               yield {
                 content: accumulatedContent,
@@ -258,6 +259,15 @@ Technical details:
                 toolCall: accumulatedToolCall,
               };
               return;
+            }
+            
+            // Yield intermediate tool call state for UI updates (but don't mark as done)
+            if (accumulatedToolCall && !data.choices?.[0]?.finish_reason) {
+              yield {
+                content: accumulatedContent,
+                done: false,
+                toolCall: accumulatedToolCall,
+              };
             }
           } catch (e) {
             // Skip invalid JSON lines
