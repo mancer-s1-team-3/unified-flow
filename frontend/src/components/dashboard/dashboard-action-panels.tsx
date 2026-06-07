@@ -7,6 +7,7 @@ import Image from "next/image";
 import { AlertTriangle, Check, ChevronDown, Shield, Download, Layers, Lock, RefreshCw, Terminal, Upload, XCircle } from "lucide-react";
 import { CsvDiffPanel } from "@/components/dashboard/csv-diff-panel";
 import type { MintPreset } from "@/components/dashboard/token-mints";
+import { PreflightChecklist } from "./preflight-checklist";
 const QUICK_DURATIONS = [
   { label: "1M", value: 60 * 60 * 24 * 30 },
   { label: "3M", value: 60 * 60 * 24 * 90 },
@@ -309,6 +310,7 @@ type Props = {
   activeTxAction: string | null;
   activeTxPhase: "wallet_approval" | "sending" | "confirming" | null;
   connected: boolean;
+  endpoint: string;
 };
 
 export function DashboardActionPanels(props: Props) {
@@ -358,6 +360,7 @@ export function DashboardActionPanels(props: Props) {
     activeTxAction,
     activeTxPhase,
     connected,
+    endpoint,
   } = props;
 
   const mintPickerRef = useRef<HTMLDivElement | null>(null);
@@ -589,6 +592,7 @@ const createCsvDisabled = !csvCreateText?.trim()
 
       {activeTab === "create_streams" && (
         <div className="animate-in fade-in-30 duration-200 overflow-x-hidden max-w-full">
+          <PreflightChecklist endpoint={endpoint} />  
           <div className="flex flex-col gap-4 border-b border-zinc-900 pb-4 mb-6 sm:flex-row sm:items-center sm:justify-between max-w-full min-w-0">
             <div className="min-w-0 max-w-full">
               <h2 className="text-2xl font-extrabold tracking-tight">Create Stream</h2>

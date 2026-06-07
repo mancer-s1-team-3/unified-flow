@@ -1187,6 +1187,7 @@ export default function Home({ initialStreams = [] }: Props) {
 
             {activeTab !== "streams" && (
               <DashboardActionPanels
+               endpoint={endpoint} 
                 activeTab={activeTab}
                 useMultisig={useMultisig}
                 setUseMultisig={setUseMultisig}
