@@ -25,6 +25,10 @@ interface StreamingResponse {
   content: string;
   done: boolean;
   error?: string;
+  toolCall?: {
+    name: string;
+    arguments: string;
+  };
 }
 
 class ASIOneChatService {
@@ -121,6 +125,53 @@ Technical details:
     try {
       const messages = this.buildMessages(userMessage, context);
 
+      const tools = [
+        {
+          type: "function",
+          function: {
+            name: "create_stream",
+            description: "Create a new vesting stream (linear, cliff, or milestone)",
+            parameters: {
+              type: "object",
+              properties: {
+                recipient: { type: "string", description: "The public key of the recipient" },
+                amount: { type: "number", description: "Total token amount" },
+                vesting_type: { type: "number", description: "0 for linear, 1 for cliff, 2 for milestone" }
+              },
+              required: ["recipient", "amount"]
+            }
+          }
+        },
+        {
+          type: "function",
+          function: {
+            name: "withdraw_stream",
+            description: "Withdraw/claim tokens from a stream",
+            parameters: {
+              type: "object",
+              properties: {
+                stream_pda: { type: "string", description: "The stream PDA public key" }
+              },
+              required: ["stream_pda"]
+            }
+          }
+        },
+        {
+          type: "function",
+          function: {
+            name: "cancel_stream",
+            description: "Cancel an active vesting stream",
+            parameters: {
+              type: "object",
+              properties: {
+                stream_pda: { type: "string", description: "The stream PDA public key" }
+              },
+              required: ["stream_pda"]
+            }
+          }
+        }
+      ];
+
       const response = await fetch(`${this.apiUrl}/chat/completions`, {
         method: 'POST',
         headers: {
@@ -133,6 +184,7 @@ Technical details:
           max_tokens: 500,
           temperature: 0.7,
           stream: true,
+          tools: tools,
         }),
       });
 
@@ -142,11 +194,15 @@ Technical details:
 
       const reader = response.body?.getReader();
       if (!reader) {
-        throw new Error('No response body');
+        throw new Error('Response body is not readable');
       }
 
       const decoder = new TextDecoder();
       let buffer = '';
+      let accumulatedContent = '';
+      let accumulatedToolCall: { name: string; arguments: string } | null = null;
+      let currentToolIndex = -1;
+      let toolArgsBuffer: string[] = [];
 
       while (true) {
         const { done, value } = await reader.read();
@@ -157,28 +213,67 @@ Technical details:
         buffer = lines.pop() || '';
 
         for (const line of lines) {
-          if (line.startsWith('data: ')) {
-            const data = line.slice(6);
-            if (data === '[DONE]') {
-              yield { content: '', done: true };
-              return;
+          const trimmed = line.trim();
+          if (!trimmed || trimmed === 'data: [DONE]') continue;
+          if (!trimmed.startsWith('data: ')) continue;
+
+          try {
+            const data = JSON.parse(trimmed.slice(6));
+            const delta = data.choices?.[0]?.delta;
+
+            if (delta?.content) {
+              accumulatedContent += delta.content;
+              yield {
+                content: accumulatedContent,
+                done: false,
+              };
             }
 
-            try {
-              const parsed = JSON.parse(data);
-              const content = parsed.choices[0]?.delta?.content || '';
-              if (content) {
-                yield { content, done: false };
+            if (delta?.tool_calls) {
+              for (const toolCall of delta.tool_calls) {
+                const index = toolCall.index ?? 0;
+                
+                if (toolCall.function?.name) {
+                  accumulatedToolCall = {
+                    name: toolCall.function.name,
+                    arguments: ''
+                  };
+                  currentToolIndex = index;
+                  toolArgsBuffer = [];
+                }
+                
+                if (toolCall.function?.arguments) {
+                  toolArgsBuffer.push(toolCall.function.arguments);
+                  if (accumulatedToolCall) {
+                    accumulatedToolCall.arguments = toolArgsBuffer.join('');
+                  }
+                }
               }
-            } catch (e) {
-              // Skip invalid JSON
             }
+
+            if (data.choices?.[0]?.finish_reason === 'tool_calls' && accumulatedToolCall) {
+              yield {
+                content: accumulatedContent,
+                done: true,
+                toolCall: accumulatedToolCall,
+              };
+              return;
+            }
+          } catch (e) {
+            // Skip invalid JSON lines
+            continue;
           }
         }
       }
+
+      // Final yield if no tool calls
+      yield {
+        content: accumulatedContent,
+        done: true,
+      };
     } catch (error) {
       // Silently fallback without polluting the console with fetch errors
-      // console.error('ASI:One Streaming Error:', error);
+      // console.error('ASI:One API Error:', error);
       yield {
         content: this.getFallbackResponse(userMessage),
         done: true,

@@ -14,8 +14,12 @@ import {
   Zap,
   AlertCircle,
   CheckCircle,
+  Rocket,
 } from "lucide-react";
-import { getASIOneChatService, type ChatContext, type ChatMessage } from "@/lib/asione-chat";
+import {UnifiedFlowClient} from "@unifiedflow/unified-flow-sdk";
+import { getASIOneChatService, type ChatContext, type ChatMessage, type StreamingResponse } from "@/lib/asione-chat";
+import { PublicKey } from "@solana/web3.js";
+import { Program } from "@coral-xyz/anchor";
 
 // ─── Enhanced Suggestions ───────────────────────────────────────────────────
 const DEFAULT_SUGGESTIONS = [
@@ -32,6 +36,10 @@ interface Message {
   text: string;
   timestamp: number;
   isStreaming?: boolean;
+  toolCall?: {
+    name: string;
+    arguments: string;
+  };
 }
 
 // ─── Markdown Renderer (Simple) ─────────────────────────────────────────────
@@ -120,6 +128,41 @@ export function EnhancedChatbot() {
     };
   };
 
+  // Execute tool call (placeholder for Web3 integration)
+  const executeTool = async (toolName: string, args: string) => {
+    try {
+      const parsedArgs = JSON.parse(args);
+      console.log(`Executing tool: ${toolName}`, parsedArgs);
+      
+      // TODO: Integrate with wallet adapter and @mancer/unified-flow-sdk
+      // Example integration:
+    
+      // const client = new UnifiedFlowClient(program as Program<UnifiedFlow>);
+      
+      switch (toolName) {
+        case "create_stream":
+          // await client.createStream(parsedArgs.recipient, parsedArgs.amount, parsedArgs.vesting_type);
+          console.log("Create stream with:", parsedArgs);
+          break;
+        case "withdraw_stream":
+          // await client.withdrawStream(parsedArgs.stream_pda);
+          console.log("Withdraw from stream:", parsedArgs.stream_pda);
+          break;
+        case "cancel_stream":
+          // await client.cancelStream(parsedArgs.stream_pda);
+          console.log("Cancel stream:", parsedArgs.stream_pda);
+          break;
+        default:
+          console.log("Unknown tool:", toolName);
+      }
+      
+      return { success: true, message: "Tool executed successfully" };
+    } catch (error) {
+      console.error("Tool execution error:", error);
+      return { success: false, message: "Tool execution failed" };
+    }
+  };
+
   // Send message
   const sendMessage = async (text: string) => {
     if (!text.trim() || loading) return;
@@ -138,66 +181,65 @@ export function EnhancedChatbot() {
 
     // Create placeholder for streaming response
     const assistantMessageId = `assistant-${Date.now()}`;
-    setMessages(prev => [...prev, {
+    const assistantMessage: Message = {
       id: assistantMessageId,
       role: "assistant",
       text: "",
       timestamp: Date.now(),
       isStreaming: true,
-    }]);
+    };
+    setMessages(prev => [...prev, assistantMessage]);
 
     try {
       const context = buildChatContext();
+      let fullResponse = "";
+      let toolCallData: { name: string; arguments: string } | undefined;
 
-      if (usingASI) {
-        // Use ASI:One streaming
-        let fullResponse = "";
-        for await (const chunk of chatService.generateStreamingResponse(text, context)) {
-          if (chunk.content) {
-            fullResponse += chunk.content;
-            setMessages(prev => prev.map(msg => 
+      // Stream the response
+      for await (const chunk of chatService.generateStreamingResponse(text, context)) {
+        if (chunk.error) {
+          setMessages(prev => 
+            prev.map(msg => 
               msg.id === assistantMessageId 
-                ? { ...msg, text: fullResponse }
+                ? { ...msg, text: chunk.content, isStreaming: false }
                 : msg
-            ));
-          }
-          if (chunk.done) break;
+            )
+          );
+          break;
         }
 
-        // Finalize message
-        setMessages(prev => prev.map(msg => 
-          msg.id === assistantMessageId 
-            ? { ...msg, text: fullResponse, isStreaming: false }
-            : msg
-        ));
-      } else {
-        // Use fallback
-        const response = await chatService.generateResponse(text, context);
-        setMessages(prev => prev.map(msg => 
-          msg.id === assistantMessageId 
-            ? { ...msg, text: response.content, isStreaming: false }
-            : msg
-        ));
+        fullResponse = chunk.content;
+        
+        if (chunk.toolCall) {
+          toolCallData = chunk.toolCall;
+        }
+
+        setMessages(prev => 
+          prev.map(msg => 
+            msg.id === assistantMessageId 
+              ? { ...msg, text: fullResponse, isStreaming: !chunk.done, toolCall: chunk.toolCall }
+              : msg
+          )
+        );
       }
-
-      // Update suggestions based on context
-      const newSuggestions = chatService.getSuggestedQuestions(context);
-      setSuggestions(newSuggestions.slice(0, 4));
-
     } catch (error) {
       console.error("Chat error:", error);
-      setMessages(prev => prev.map(msg => 
-        msg.id === assistantMessageId 
-          ? { 
-              ...msg, 
-              text: "I apologize, but I encountered an error. Please try again.",
-              isStreaming: false 
-            }
-          : msg
-      ));
+      setMessages(prev => 
+        prev.map(msg => 
+          msg.id === assistantMessageId 
+            ? { ...msg, text: "I apologize, but I encountered an error. Please try again.", isStreaming: false }
+            : msg
+        )
+      );
     } finally {
       setLoading(false);
     }
+  };
+
+  // Clear chat
+  const clearChat = () => {
+    setMessages([]);
+    setShowSuggestions(true);
   };
 
   // Handle keyboard input
@@ -208,131 +250,135 @@ export function EnhancedChatbot() {
     }
   };
 
-  // Clear chat
-  const clearChat = () => {
-    setMessages([]);
-    setShowSuggestions(true);
+  // Get tool call display info
+  const getToolCallInfo = (toolCall?: { name: string; arguments: string }) => {
+    if (!toolCall) return null;
+    
+    const toolLabels: Record<string, { label: string; icon: string; color: string }> = {
+      create_stream: { label: "Create Stream", icon: "🚀", color: "bg-indigo-600" },
+      withdraw_stream: { label: "Withdraw Tokens", icon: "💰", color: "bg-emerald-600" },
+      cancel_stream: { label: "Cancel Stream", icon: "⚠️", color: "bg-red-600" },
+    };
+
+    const info = toolLabels[toolCall.name] || { label: toolCall.name, icon: "⚡", color: "bg-zinc-600" };
+    return { ...info, args: toolCall.arguments };
   };
 
-  // Connection status indicator
-  const ConnectionStatus = () => (
-    <div className="flex items-center gap-1.5 px-2 py-1 rounded-full bg-zinc-900 border border-zinc-800">
-      {connectionStatus === "checking" ? (
-        <Loader2 className="w-3 h-3 text-zinc-500 animate-spin" />
-      ) : connectionStatus === "connected" ? (
-        <CheckCircle className="w-3 h-3 text-emerald-400" />
-      ) : (
-        <AlertCircle className="w-3 h-3 text-amber-400" />
-      )}
-      <span className="text-[9px] font-medium text-zinc-400">
-        {connectionStatus === "connected" ? "Unified Flow Active" : "Basic Mode"}
-      </span>
-    </div>
-  );
-
-  // Widget content
+  // Render widget
   const widget = (
     <div className="fixed bottom-6 right-6 z-50 flex flex-col items-end gap-3">
       {/* Chat Window */}
       {open && (
-        <div className={`flex flex-col w-[380px] max-w-[calc(100vw-3rem)] bg-zinc-950 border border-zinc-800 rounded-2xl shadow-2xl overflow-hidden transition-all duration-300 ${
-          minimized ? "h-12" : "h-[500px] max-h-[calc(100vh-6rem)]"
+        <div className={`w-[380px] bg-zinc-950 border border-zinc-800 rounded-2xl shadow-2xl overflow-hidden transition-all duration-300 ${
+          minimized ? "h-14" : "h-[600px]"
         }`}>
-          {/* Header */}
-          <div className="shrink-0 border-b border-zinc-800 p-3 bg-zinc-950">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <div className="w-8 h-8 rounded-xl bg-gradient-to-br from-indigo-600 to-purple-600 flex items-center justify-center">
-                  {usingASI ? (
-                    <Sparkles className="w-4 h-4 text-white" />
-                  ) : (
-                    <Bot className="w-4 h-4 text-white" />
-                  )}
-                </div>
-                <div>
-                  <h3 className="text-sm font-semibold text-white">
-                    {usingASI ? "AI Assistant" : "Help Assistant"}
-                  </h3>
-                  <ConnectionStatus />
-                </div>
-              </div>
-              <div className="flex items-center gap-1">
-                <button
-                  onClick={() => setMinimized(!minimized)}
-                  className="p-1.5 rounded-lg hover:bg-zinc-800 text-zinc-400 hover:text-zinc-200 transition-colors"
-                >
-                  <ChevronDown className={`w-4 h-4 transition-transform ${minimized ? "rotate-180" : ""}`} />
-                </button>
-                <button
-                  onClick={() => setOpen(false)}
-                  className="p-1.5 rounded-lg hover:bg-zinc-800 text-zinc-400 hover:text-zinc-200 transition-colors"
-                >
-                  <X className="w-4 h-4" />
-                </button>
-              </div>
-            </div>
-          </div>
-
-          {/* Messages Area */}
           {!minimized && (
             <>
+              {/* Header */}
+              <div className="shrink-0 border-b border-zinc-800 p-4 bg-zinc-950">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-indigo-600 to-purple-600 flex items-center justify-center">
+                      <Bot className="w-5 h-5 text-white" />
+                    </div>
+                    <div>
+                      <h3 className="text-sm font-semibold text-white">Unified Flow Assistant</h3>
+                      <div className="flex items-center gap-1.5">
+                        <div className={`w-1.5 h-1.5 rounded-full ${
+                          connectionStatus === "connected" ? "bg-emerald-400" : 
+                          connectionStatus === "checking" ? "bg-yellow-400" : "bg-red-400"
+                        }`} />
+                        <span className="text-[10px] text-zinc-500">
+                          {connectionStatus === "connected" ? "AI Connected" : 
+                           connectionStatus === "checking" ? "Connecting..." : "Offline Mode"}
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <button
+                      onClick={() => setMinimized(true)}
+                      className="p-1.5 rounded-lg hover:bg-zinc-800 text-zinc-400 hover:text-white transition-colors"
+                    >
+                      <ChevronDown className="w-4 h-4" />
+                    </button>
+                    <button
+                      onClick={() => setOpen(false)}
+                      className="p-1.5 rounded-lg hover:bg-zinc-800 text-zinc-400 hover:text-white transition-colors"
+                    >
+                      <X className="w-4 h-4" />
+                    </button>
+                  </div>
+                </div>
+              </div>
+
+              {/* Messages */}
               <div className="flex-1 overflow-y-auto p-4 space-y-4">
-                {messages.map((msg) => (
+                {messages.map((message) => (
                   <div
-                    key={msg.id}
-                    className={`flex gap-2.5 ${msg.role === "user" ? "justify-end" : "justify-start"}`}
+                    key={message.id}
+                    className={`flex gap-3 ${message.role === "user" ? "justify-end" : "justify-start"}`}
                   >
-                    {msg.role === "assistant" && (
-                      <div className="w-7 h-7 rounded-full bg-gradient-to-br from-indigo-600/20 to-purple-600/20 border border-indigo-500/30 flex items-center justify-center shrink-0 mt-0.5">
-                        {usingASI ? (
-                          <Sparkles className="w-3.5 h-3.5 text-indigo-400" />
-                        ) : (
-                          <Bot className="w-3.5 h-3.5 text-indigo-400" />
-                        )}
+                    {message.role === "assistant" && (
+                      <div className="shrink-0 w-8 h-8 rounded-lg bg-gradient-to-br from-indigo-600 to-purple-600 flex items-center justify-center">
+                        <Bot className="w-4 h-4 text-white" />
                       </div>
                     )}
-                    
-                    <div
-                      className={`max-w-[280px] px-3.5 py-2.5 ${
-                        msg.role === "user"
-                          ? "bg-indigo-600 text-white rounded-2xl rounded-br-sm"
-                          : "bg-zinc-900 border border-zinc-800 rounded-2xl rounded-bl-sm"
-                      }`}
-                    >
-                      {msg.role === "user" ? (
-                        <p className="text-[12px] leading-relaxed">{msg.text}</p>
-                      ) : (
-                        <div className="space-y-1">
-                          {renderMarkdown(msg.text)}
-                          {msg.isStreaming && (
-                            <span className="inline-block w-1.5 h-1.5 bg-indigo-400 rounded-full animate-pulse ml-1" />
-                          )}
+                    <div className={`max-w-[280px] ${message.role === "user" ? "order-1" : ""}`}>
+                      <div
+                        className={`px-3 py-2.5 rounded-2xl text-[12px] leading-relaxed ${
+                          message.role === "user"
+                            ? "bg-indigo-600 text-white rounded-br-md"
+                            : "bg-zinc-900 border border-zinc-800 text-zinc-100 rounded-bl-md"
+                        }`}
+                      >
+                        {message.role === "assistant" ? renderMarkdown(message.text) : message.text}
+                      </div>
+                      
+                      {/* Tool Call Action Button */}
+                      {message.role === "assistant" && message.toolCall && !message.isStreaming && (
+                        <div className="mt-2">
+                          {(() => {
+                            const toolInfo = getToolCallInfo(message.toolCall);
+                            if (!toolInfo) return null;
+                            
+                            return (
+                              <button
+                                onClick={() => executeTool(message.toolCall!.name, message.toolCall!.arguments)}
+                                className={`w-full flex items-center gap-2 px-3 py-2.5 rounded-xl ${toolInfo.color} hover:opacity-90 transition-all text-white text-[11px] font-medium`}
+                              >
+                                <span className="text-lg">{toolInfo.icon}</span>
+                                <span className="flex-1 text-left">{toolInfo.label}</span>
+                                <Rocket className="w-3.5 h-3.5" />
+                              </button>
+                            );
+                          })()}
                         </div>
                       )}
+                      
+                      <div className="mt-1 text-[9px] text-zinc-600">
+                        {new Date(message.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                      </div>
                     </div>
-
-                    {msg.role === "user" && (
-                      <div className="w-7 h-7 rounded-full bg-zinc-800 border border-zinc-700 flex items-center justify-center shrink-0 mt-0.5">
-                        <User className="w-3.5 h-3.5 text-zinc-400" />
+                    {message.role === "user" && (
+                      <div className="shrink-0 w-8 h-8 rounded-lg bg-zinc-800 flex items-center justify-center">
+                        <User className="w-4 h-4 text-zinc-400" />
                       </div>
                     )}
                   </div>
                 ))}
 
-                {/* Typing indicator */}
                 {loading && (
-                  <div className="flex gap-2 items-end">
-                    <div className="w-7 h-7 rounded-full bg-gradient-to-br from-indigo-600/20 to-purple-600/20 border border-indigo-500/30 flex items-center justify-center shrink-0 mt-0.5">
-                      {usingASI ? (
-                        <Sparkles className="w-3.5 h-3.5 text-indigo-400" />
-                      ) : (
-                        <Bot className="w-3.5 h-3.5 text-indigo-400" />
-                      )}
+                  <div className="flex gap-3 justify-start">
+                    <div className="shrink-0 w-8 h-8 rounded-lg bg-gradient-to-br from-indigo-600 to-purple-600 flex items-center justify-center">
+                      <Bot className="w-4 h-4 text-white" />
                     </div>
-                    <div className="bg-zinc-900 border border-zinc-800 rounded-2xl rounded-bl-sm px-4 py-3 flex items-center gap-1.5">
-                      <span className="w-1.5 h-1.5 rounded-full bg-indigo-400 animate-bounce" style={{ animationDelay: "0ms" }} />
-                      <span className="w-1.5 h-1.5 rounded-full bg-indigo-400 animate-bounce" style={{ animationDelay: "120ms" }} />
-                      <span className="w-1.5 h-1.5 rounded-full bg-indigo-400 animate-bounce" style={{ animationDelay: "240ms" }} />
+                    <div className="px-3 py-2.5 rounded-2xl rounded-bl-md bg-zinc-900 border border-zinc-800">
+                      <div className="flex gap-1">
+                        <span className="w-1.5 h-1.5 rounded-full bg-indigo-400 animate-bounce" />
+                        <span className="w-1.5 h-1.5 rounded-full bg-indigo-400 animate-bounce" style={{ animationDelay: "120ms" }} />
+                        <span className="w-1.5 h-1.5 rounded-full bg-indigo-400 animate-bounce" style={{ animationDelay: "240ms" }} />
+                      </div>
                     </div>
                   </div>
                 )}
