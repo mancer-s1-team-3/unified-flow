@@ -369,6 +369,7 @@ export function DashboardActionPanels(props: Props) {
   const [durationInputMode, setDurationInputMode] = useState<"duration" | "date">("duration");
   const feeEstimate = useFeeEstimate();
   const csvMilestoneValidation = useCsvMilestoneValidation(csvCreateText);
+  const csvEditMilestoneValidation = useCsvMilestoneValidation(csvEditText);
   const withdrawFeeUsd =
   feeEstimate.solCost && feeEstimate.solPrice
     ? feeEstimate.solCost * feeEstimate.solPrice
@@ -524,7 +525,9 @@ export function DashboardActionPanels(props: Props) {
 const createCsvDisabled = !csvCreateText?.trim() 
   || activeTxAction === "create_stream_csv"
   || csvMilestoneValidation.hasErrors;  // ← tambah ini
-  const editCsvDisabled = !csvEditText?.trim() || activeTxAction === "edit_stream_csv";
+const editCsvDisabled = !csvEditText?.trim() 
+  || activeTxAction === "edit_stream_csv"
+  || csvEditMilestoneValidation.hasErrors;  // ← tambah ini
   const editMilestoneDisabled =
     isStreamCsvCreated(editMilestoneForm.streamId) ||
     !editMilestoneForm.streamId?.trim() ||
@@ -1306,7 +1309,8 @@ const createCsvDisabled = !csvCreateText?.trim()
                 className="w-full bg-zinc-950 border border-zinc-800 rounded-xl px-4 py-3 text-xs focus:outline-none focus:border-emerald-500 font-mono"
               />
             </div>
-
+            {/* ─── Milestone Validation ─── */}
+            <CsvMilestoneValidationPanel csvText={csvEditText} />
             <CsvDiffPanel
               csvDiffResult={csvDiffResult}
               compareVersionSelected={compareVersionSelected}

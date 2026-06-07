@@ -325,19 +325,32 @@ export const StreamDetailsDrawer = memo(function StreamDetailsDrawer({
               {isCreatorWallet && selectedStream.isCsvCreated ? (
                 <button
                   onClick={() => {
+                    const decimals =
+  typeof selectedStream.mintDecimals === "number"
+    ? selectedStream.mintDecimals
+    : 0;
+
+const humanAmount =
+  Number(selectedStream.totalAmount || 0) /
+  Math.pow(10, decimals);
+
                     const vestingType = Number(selectedStream.vestingType || 0);
                     const duration = Math.max(Number(selectedStream.endTs || 0) - Number(selectedStream.startTs || 0), 0);
                     const cliffDuration = Math.max(Number(selectedStream.cliffTs || 0) - Number(selectedStream.startTs || 0), 0);
-                    const milestones = String(selectedStream.milestones || "");
+                    const milestones =
+  String(selectedStream.milestones || "")
+    .split(";")
+    .map(v => Number(v) / Math.pow(10, decimals))
+    .join(";");
                     const header = "id,type,amount,duration,cliff_duration,milestones";
                     let row = `${selectedStream.id},${vestingType},${selectedStream.totalAmount},,,`;
 
                     if (vestingType === 0) {
-                      row = `${selectedStream.id},0,${selectedStream.totalAmount},${duration},,`;
+                      row = `${selectedStream.id},0,${humanAmount},${duration},,`;
                     } else if (vestingType === 1) {
-                      row = `${selectedStream.id},1,${selectedStream.totalAmount},,${cliffDuration},`;
+                      row = `${selectedStream.id},1,${humanAmount},,${cliffDuration},`;
                     } else if (vestingType === 2) {
-                      row = `${selectedStream.id},2,${selectedStream.totalAmount},,,${milestones}`;
+                      row = `${selectedStream.id},2,${humanAmount},,,${milestones}`;
                     }
 
                     setActiveTab("edit_csv");

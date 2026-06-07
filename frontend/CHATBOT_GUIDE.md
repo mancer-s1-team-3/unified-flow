@@ -32,7 +32,7 @@ Add the following to your `.env.local` file:
 
 ```bash
 # ASI:One API Configuration
-NEXT_PUBLIC_ASIONE_API_KEY=your_actual_api_key_here
+ASIONE_API_KEY=your_actual_api_key_here
 NEXT_PUBLIC_ASIONE_API_URL=https://api.asione.ai/v1
 NEXT_PUBLIC_ASIONE_MODEL=asione-one
 ```
@@ -192,7 +192,7 @@ Modify the component in `components/dashboard/enhanced-chatbot.tsx` to customize
 
 **Solution**: 
 1. Check your `.env.local` file
-2. Ensure `NEXT_PUBLIC_ASIONE_API_KEY` is set correctly
+2. Ensure `ASIONE_API_KEY` is set correctly
 3. Restart the development server
 
 ### Responses Are Slow

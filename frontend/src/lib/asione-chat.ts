@@ -39,7 +39,7 @@ class ASIOneChatService {
   private systemPrompt: string;
 
   constructor() {
-    this.apiKey = process.env.NEXT_PUBLIC_ASIONE_API_KEY || '';
+    this.apiKey = process.env.ASIONE_API_KEY || '';
     this.apiUrl = process.env.NEXT_PUBLIC_ASIONE_API_URL || 'https://api.asi1.ai/v1';
     this.model = process.env.NEXT_PUBLIC_ASIONE_MODEL || 'asi1';
 
@@ -232,7 +232,7 @@ Technical details:
             if (delta?.tool_calls) {
               for (const toolCall of delta.tool_calls) {
                 const index = toolCall.index ?? 0;
-                
+
                 if (toolCall.function?.name) {
                   accumulatedToolCall = {
                     name: toolCall.function.name,
@@ -241,7 +241,7 @@ Technical details:
                   currentToolIndex = index;
                   toolArgsBuffer = [];
                 }
-                
+
                 if (toolCall.function?.arguments) {
                   toolArgsBuffer.push(toolCall.function.arguments);
                   if (accumulatedToolCall) {
@@ -260,7 +260,7 @@ Technical details:
               };
               return;
             }
-            
+
             // Yield intermediate tool call state for UI updates (but don't mark as done)
             if (accumulatedToolCall && !data.choices?.[0]?.finish_reason) {
               yield {
