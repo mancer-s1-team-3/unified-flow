@@ -1182,7 +1182,7 @@ const editCsvDisabled = !csvEditText?.trim()
                         onClick={handleDeleteCsvVersion}
                         className="rounded-xl border border-rose-900/60 bg-rose-950/20 px-3 py-2 text-[10px] font-black uppercase tracking-wider text-rose-300 hover:bg-rose-950/40 transition-all"
                       >
-                        Hapus Version
+                        Delete Version
                       </button>
                     )}
                   </div>
@@ -1277,7 +1277,7 @@ const editCsvDisabled = !csvEditText?.trim()
                       onClick={handleDeleteCsvVersion}
                       className="rounded-xl border border-rose-900/60 bg-rose-950/20 px-3 py-2 text-[10px] font-black uppercase tracking-wider text-rose-300 hover:bg-rose-950/40 transition-all"
                     >
-                      Hapus Version
+                      Delete Version
                     </button>
                   )}
                 </div>

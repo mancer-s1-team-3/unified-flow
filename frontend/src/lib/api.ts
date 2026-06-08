@@ -12,3 +12,7 @@ export function setApiBaseUrl(baseUrl: string) {
 export async function upsertUser(walletAddress: string): Promise<void> {
     await api.post("/users/upsert", { walletAddress });
 }
+export async function getStream(streamPDA: string) {
+    const res = await api.get(`/streams/${streamPDA}`);
+    return res.data;
+}
