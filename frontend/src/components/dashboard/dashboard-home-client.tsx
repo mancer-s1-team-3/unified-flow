@@ -1,6 +1,8 @@
 "use client";
 
 import dynamic from "next/dynamic";
+import { RotateCcw, AlertTriangle } from "lucide-react";
+import { classifyConnector } from "@/components/wallet/wallet-picker-button";
 import { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import { CheckCircle2, Copy, Check, X, ExternalLink } from "lucide-react";
@@ -28,27 +30,21 @@ import {
 } from "@/components/dashboard/token-mints";
 import { useOnboarding, OnboardingCompletedBanner } from "@/components/onboarding";
 
+// ---------------------------------------------------------------------------
+// Pure helpers (unchanged)
+// ---------------------------------------------------------------------------
+
 function parseTokenAmountToBaseUnits(value: string, decimals: number) {
   const trimmed = String(value ?? "").trim().replace(/,/g, ".");
-
-  if (trimmed === "" || !/^\d+(\.\d+)?$/.test(trimmed)) {
-    return BigInt(0);
-  }
-
+  if (trimmed === "" || !/^\d+(\.\d+)?$/.test(trimmed)) return BigInt(0);
   const [wholePart, fractionPart = ""] = trimmed.split(".");
   const normalizedFraction = fractionPart.slice(0, decimals).padEnd(decimals, "0");
   const raw = `${wholePart}${normalizedFraction}`.replace(/^0+(?=\d)/, "");
-
-  try {
-    return BigInt(raw || "0");
-  } catch {
-    return BigInt(0);
-  }
+  try { return BigInt(raw || "0"); } catch { return BigInt(0); }
 }
 
 function formatBaseUnitsToTokenAmount(amount: bigint, decimals: number) {
   if (decimals <= 0) return amount.toString();
-
   const negative = amount < BigInt(0);
   const unsigned = negative ? (amount * BigInt(-1)).toString() : amount.toString();
   const padded = unsigned.padStart(decimals + 1, "0");
@@ -62,86 +58,61 @@ function parseBaseUnits(value: unknown) {
     if (typeof value === "bigint") return value;
     if (typeof value === "number") return BigInt(Math.trunc(value));
     if (typeof value === "string" && value.trim() !== "") return BigInt(value.trim());
-  } catch {
-    // Fall back to zero for values we cannot interpret as base units.
-  }
-
+  } catch { /* fall through */ }
   return BigInt(0);
 }
 
 function buildEvenMilestoneAmounts(amount: string, count: number, decimals: number) {
   if (!Number.isFinite(count) || count <= 0) return [];
-
   const normalizedCount = Math.floor(count);
   if (normalizedCount <= 0) return [];
-
   const total = parseTokenAmountToBaseUnits(amount, decimals);
   const divisor = BigInt(normalizedCount);
-
-  if (total < divisor) {
-    return Array.from({ length: normalizedCount }, () => "0");
-  }
-
+  if (total < divisor) return Array.from({ length: normalizedCount }, () => "0");
   const base = total / divisor;
   const remainder = total % divisor;
-
-  return Array.from({ length: normalizedCount }, (_, index) =>
-    formatBaseUnitsToTokenAmount(base + (BigInt(index) < remainder ? BigInt(1) : BigInt(0)), decimals)
+  return Array.from({ length: normalizedCount }, (_, i) =>
+    formatBaseUnitsToTokenAmount(base + (BigInt(i) < remainder ? BigInt(1) : BigInt(0)), decimals)
   );
 }
 
 function buildEvenMilestoneAmountsFromBaseUnits(totalBaseUnits: bigint, count: number, decimals: number) {
   if (!Number.isFinite(count) || count <= 0) return [];
-
   const normalizedCount = Math.floor(count);
   if (normalizedCount <= 0) return [];
-
   const divisor = BigInt(normalizedCount);
-
-  if (totalBaseUnits < divisor) {
+  if (totalBaseUnits < divisor)
     return Array.from({ length: normalizedCount }, () => formatBaseUnitsToTokenAmount(BigInt(0), decimals));
-  }
-
   const base = totalBaseUnits / divisor;
   const remainder = totalBaseUnits % divisor;
-
-  return Array.from({ length: normalizedCount }, (_, index) =>
-    formatBaseUnitsToTokenAmount(base + (BigInt(index) < remainder ? BigInt(1) : BigInt(0)), decimals)
+  return Array.from({ length: normalizedCount }, (_, i) =>
+    formatBaseUnitsToTokenAmount(base + (BigInt(i) < remainder ? BigInt(1) : BigInt(0)), decimals)
   );
 }
 
 function buildMilestoneAmountsFromStream(stream: any) {
   const count = Number(stream?.milestoneCount || 0);
-  if (!Number.isFinite(count) || count <= 0) {
-    return [] as string[];
-  }
-
+  if (!Number.isFinite(count) || count <= 0) return [] as string[];
   const decimals = typeof stream?.mintDecimals === "number" ? stream.mintDecimals : 0;
   const totalBaseUnits = parseBaseUnits(stream?.totalAmount);
-
   const rawMilestones = String(stream?.milestones || "").trim();
   if (rawMilestones !== "") {
-    const parsed = rawMilestones
-      .split(";")
-      .map((value: string) => value.trim())
-      .filter(Boolean);
-
+    const parsed = rawMilestones.split(";").map((v: string) => v.trim()).filter(Boolean);
     if (parsed.length > 0) {
-      while (parsed.length < count) {
-        parsed.push("0");
-      }
-
+      while (parsed.length < count) parsed.push("0");
       const trimmed = parsed.slice(0, count);
-      const parsedSum = trimmed.reduce((sum, amount) => sum + parseTokenAmountToBaseUnits(amount, decimals), BigInt(0));
-
-      if (parsedSum === totalBaseUnits) {
-        return trimmed;
-      }
+      const parsedSum = trimmed.reduce(
+        (sum, amt) => sum + parseTokenAmountToBaseUnits(amt, decimals), BigInt(0)
+      );
+      if (parsedSum === totalBaseUnits) return trimmed;
     }
   }
-
   return buildEvenMilestoneAmountsFromBaseUnits(totalBaseUnits, count, decimals);
 }
+
+// ---------------------------------------------------------------------------
+// Types
+// ---------------------------------------------------------------------------
 
 type CreateStreamSuccessData = {
   streamAddress: string;
@@ -153,21 +124,19 @@ type CreateStreamSuccessData = {
   mint: string;
 };
 
+type TxPhase = "wallet_approval" | "sending" | "confirming";
+
+// ---------------------------------------------------------------------------
+// CreateStreamSuccessModal (unchanged)
+// ---------------------------------------------------------------------------
+
 function CreateStreamSuccessModal({
-  data,
-  onClose,
-  onOk,
-}: {
-  data: CreateStreamSuccessData;
-  onClose: () => void;
-  onOk: () => void;
-}) {
+  data, onClose, onOk,
+}: { data: CreateStreamSuccessData; onClose: () => void; onOk: () => void }) {
   const [copied, setCopied] = useState(false);
 
   useEffect(() => {
-    const handleKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") onClose();
-    };
+    const handleKey = (e: KeyboardEvent) => { if (e.key === "Escape") onClose(); };
     document.addEventListener("keydown", handleKey);
     return () => document.removeEventListener("keydown", handleKey);
   }, [onClose]);
@@ -191,15 +160,9 @@ function CreateStreamSuccessModal({
     >
       <div className="relative w-full max-w-md bg-zinc-950 border border-zinc-800 rounded-3xl shadow-2xl shadow-black/60 overflow-hidden animate-in zoom-in-95 slide-in-from-bottom-4 duration-300">
         <div className="h-1 w-full bg-gradient-to-r from-emerald-600 via-green-500 to-teal-500" />
-
-        <button
-          onClick={onClose}
-          className="absolute top-4 right-4 p-1.5 rounded-lg text-zinc-500 hover:text-zinc-200 hover:bg-zinc-800/60 transition-all"
-          aria-label="Close"
-        >
+        <button onClick={onClose} className="absolute top-4 right-4 p-1.5 rounded-lg text-zinc-500 hover:text-zinc-200 hover:bg-zinc-800/60 transition-all" aria-label="Close">
           <X className="w-4 h-4" />
         </button>
-
         <div className="p-6 pt-7">
           <div className="flex items-center justify-center mb-5">
             <div className="relative">
@@ -209,28 +172,18 @@ function CreateStreamSuccessModal({
               <div className="absolute -inset-2 rounded-3xl bg-emerald-500/5 blur-xl -z-10" />
             </div>
           </div>
-
           <div className="text-center mb-5">
             <h3 className="text-lg font-extrabold text-zinc-50 mb-1.5">Stream Created!</h3>
-            <p className="text-xs text-zinc-400 leading-relaxed">
-              Stream has been successfully deployed on-chain.
-            </p>
+            <p className="text-xs text-zinc-400 leading-relaxed">Stream has been successfully deployed on-chain.</p>
           </div>
-
           <div className="space-y-2.5 mb-6">
             <div className="bg-zinc-900/60 border border-zinc-800 rounded-xl px-3 py-2.5">
               <div className="text-[9px] font-black uppercase tracking-widest text-zinc-500 mb-1">Stream Address</div>
-              <a
-                href={data.streamScannerUrl}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="font-mono text-[11px] text-indigo-400 hover:text-indigo-300 transition-colors flex items-center gap-1 group break-all"
-              >
+              <a href={data.streamScannerUrl} target="_blank" rel="noopener noreferrer" className="font-mono text-[11px] text-indigo-400 hover:text-indigo-300 transition-colors flex items-center gap-1 group break-all">
                 <span className="break-all">{data.streamAddress}</span>
                 <ExternalLink className="w-3 h-3 flex-shrink-0 opacity-60 group-hover:opacity-100" />
               </a>
             </div>
-
             <div className="grid grid-cols-2 gap-2">
               <div className="bg-zinc-900/60 border border-zinc-800 rounded-xl px-3 py-2.5">
                 <div className="text-[9px] font-black uppercase tracking-widest text-zinc-500 mb-1">Recipient</div>
@@ -241,33 +194,20 @@ function CreateStreamSuccessModal({
                 <div className="font-mono text-[11px] text-zinc-300">{data.amount}</div>
               </div>
             </div>
-
             <div className="bg-zinc-900/60 border border-zinc-800 rounded-xl px-3 py-2.5">
               <div className="text-[9px] font-black uppercase tracking-widest text-zinc-500 mb-1">Transaction</div>
-              <a
-                href={data.explorerUrl}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="font-mono text-[11px] text-indigo-400 hover:text-indigo-300 transition-colors flex items-start gap-1 group"
-              >
+              <a href={data.explorerUrl} target="_blank" rel="noopener noreferrer" className="font-mono text-[11px] text-indigo-400 hover:text-indigo-300 transition-colors flex items-start gap-1 group">
                 <span className="break-all leading-relaxed">{data.signature}</span>
                 <ExternalLink className="w-3 h-3 flex-shrink-0 mt-0.5 opacity-60 group-hover:opacity-100" />
               </a>
             </div>
           </div>
-
           <div className="flex gap-3">
-            <button
-              onClick={handleCopyLink}
-              className="flex-1 flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-zinc-800 hover:bg-zinc-700 border border-zinc-700 text-zinc-200 text-sm font-semibold transition-all"
-            >
+            <button onClick={handleCopyLink} className="flex-1 flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-zinc-800 hover:bg-zinc-700 border border-zinc-700 text-zinc-200 text-sm font-semibold transition-all">
               {copied ? <Check className="w-4 h-4 text-emerald-400" /> : <Copy className="w-4 h-4" />}
               {copied ? "Copied!" : "Copy Link"}
             </button>
-            <button
-              onClick={onOk}
-              className="flex-1 px-4 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-sm font-semibold transition-all shadow-lg shadow-emerald-900/40"
-            >
+            <button onClick={onOk} className="flex-1 px-4 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-sm font-semibold transition-all shadow-lg shadow-emerald-900/40">
               Go To Active Stream
             </button>
           </div>
@@ -277,37 +217,49 @@ function CreateStreamSuccessModal({
   );
 }
 
-type Props = {
-  initialStreams?: any[];
-};
+// ---------------------------------------------------------------------------
+// Dynamic imports
+// ---------------------------------------------------------------------------
+
+type Props = { initialStreams?: any[] };
 
 const DashboardActionPanels = dynamic(
-  () => import("@/components/dashboard/dashboard-action-panels").then((mod) => mod.DashboardActionPanels),
+  () => import("@/components/dashboard/dashboard-action-panels").then((m) => m.DashboardActionPanels),
   { ssr: false, loading: () => null }
 );
-
 const StreamDetailsDrawer = dynamic(
-  () => import("@/components/dashboard/stream-details-drawer").then((mod) => mod.StreamDetailsDrawer),
+  () => import("@/components/dashboard/stream-details-drawer").then((m) => m.StreamDetailsDrawer),
   { ssr: false, loading: () => null }
 );
-
 const EnhancedChatbot = dynamic(
-  () => import("@/components/dashboard/enhanced-chatbot").then((mod) => mod.EnhancedChatbot),
+  () => import("@/components/dashboard/enhanced-chatbot").then((m) => m.EnhancedChatbot),
   { ssr: false, loading: () => null }
 );
 
-type TxPhase = "wallet_approval" | "sending" | "confirming";
+// ---------------------------------------------------------------------------
+// Constants
+// ---------------------------------------------------------------------------
+
+const TX_TIMEOUT_MS = 90_000;
+
+// ---------------------------------------------------------------------------
+// Home
+// ---------------------------------------------------------------------------
 
 export default function Home({ initialStreams = [] }: Props) {
   const router = useRouter();
-  const { wallet, connected } = useWalletConnection();
+
+  // ── Wallet ────────────────────────────────────────────────────────────────
+  // NOTE: currentConnector added to destructure so classifyConnector can read it
+  const { wallet, connected, currentConnector } = useWalletConnection();
   const { endpoint } = useClusterState();
+
   const mintPresets = useMemo(() => getMintPresets(endpoint), [endpoint]);
   const clusterLabel = useMemo(() => getClusterLabel(endpoint), [endpoint]);
-  const defaultMint = useMemo(() => getDefaultMint(endpoint), [endpoint]);
-  const [activeTab, setActiveTab] = useState<TabId>("streams");
+  const defaultMint  = useMemo(() => getDefaultMint(endpoint),  [endpoint]);
 
-  // Auto-switch tabs when onboarding step changes
+  // ── UI tabs ───────────────────────────────────────────────────────────────
+  const [activeTab, setActiveTab] = useState<TabId>("streams");
   const { isActive: onboardingActive, currentStepIndex, getTargetTab } = useOnboarding();
   useEffect(() => {
     if (!onboardingActive) return;
@@ -315,6 +267,8 @@ export default function Home({ initialStreams = [] }: Props) {
     if (target) setActiveTab(target as TabId);
     if (target === "create_streams") setCreateMode("csv");
   }, [onboardingActive, getTargetTab, currentStepIndex]);
+
+  // ── Streams ───────────────────────────────────────────────────────────────
   const [nowTs, setNowTs] = useState(() => Math.floor(Date.now() / 1000));
   const [streams, setStreams] = useState<any[]>(initialStreams);
   const [filteredStreamsCount, setFilteredStreamsCount] = useState(initialStreams.length);
@@ -322,52 +276,38 @@ export default function Home({ initialStreams = [] }: Props) {
   const [copiedId, setCopiedId] = useState<string | null>(null);
   const [createStreamSuccess, setCreateStreamSuccess] = useState<CreateStreamSuccessData | null>(null);
 
-  // Details Drawer State
+  // ── Drawer ────────────────────────────────────────────────────────────────
   const [selectedStream, setSelectedStream] = useState<any | null>(null);
   const [loadingDetails, setLoadingDetails] = useState(false);
 
-  // Multisig States
+  // ── Multisig ──────────────────────────────────────────────────────────────
   const [useMultisig, setUseMultisig] = useState(false);
 
-  // CSV States
-  const [createMode, setCreateMode] = useState<"manual" | "csv">("manual");
+  // ── CSV ───────────────────────────────────────────────────────────────────
+  const [createMode, setCreateMode]     = useState<"manual" | "csv">("manual");
   const [csvCreateText, setCsvCreateText] = useState(() => buildCreateStreamCsvTemplate(endpoint));
-  const [csvEditText, setCsvEditText] = useState(
-    "id,amount,duration,cliff_duration,milestones\nStreamCSV-XXXXX,1800,10800,0,"
-  );
-
+  const [csvEditText, setCsvEditText]   = useState("id,amount,duration,cliff_duration,milestones\nStreamCSV-XXXXX,1800,10800,0,");
   const fileInputCreateRef = useRef<HTMLInputElement>(null);
-  const fileInputEditRef = useRef<HTMLInputElement>(null);
+  const fileInputEditRef   = useRef<HTMLInputElement>(null);
 
-  // Form States
+  // ── Forms ─────────────────────────────────────────────────────────────────
   const [createForm, setCreateForm] = useState({
-    recipient: "",
-    amount: "1000",
-    mint: defaultMint,
-    type: "0", // 0: Linear, 1: Cliff, 2: Milestone
-    startDate: "",
-    duration: "3600",
-    endDate: "",
-    cliffDuration: "600",
-    cliffDate: "",
-    milestoneCount: "4",
+    recipient: "", amount: "1000", mint: defaultMint,
+    type: "0", startDate: "", duration: "3600", endDate: "",
+    cliffDuration: "600", cliffDate: "", milestoneCount: "4",
   });
-
   const [milestoneAmounts, setMilestoneAmounts] = useState<string[]>(["250", "250", "250", "250"]);
-
-  const [withdrawForm, setWithdrawForm] = useState({ streamId: "" });
-  const [cancelForm, setCancelForm] = useState({ streamId: "" });
-  const [unlockForm, setUnlockForm] = useState({ streamId: "" });
+  const [withdrawForm,     setWithdrawForm]     = useState({ streamId: "" });
+  const [cancelForm,       setCancelForm]       = useState({ streamId: "" });
+  const [unlockForm,       setUnlockForm]       = useState({ streamId: "" });
   const [editMilestoneForm, setEditMilestoneForm] = useState({
-    streamId: "",
-    amounts: ["250", "250", "250", "250"],
-    totalAmount: "",
-    mintDecimals: null as number | null,
+    streamId: "", amounts: ["250", "250", "250", "250"],
+    totalAmount: "", mintDecimals: null as number | null,
   });
   const [editLinearForm, setEditLinearForm] = useState({ streamId: "", newEndDuration: "", topupAmount: "" });
-  const [editCliffForm, setEditCliffForm] = useState({ streamId: "", newCliffDuration: "" });
+  const [editCliffForm,  setEditCliffForm]  = useState({ streamId: "", newCliffDuration: "" });
 
-  // Notifications — powered by global NotificationContext
+  // ── Notifications ─────────────────────────────────────────────────────────
   const { addNotification } = useNotifications();
   const connectedWalletAddress = connected && wallet?.account.address ? String(wallet.account.address) : null;
 
@@ -381,13 +321,7 @@ export default function Home({ initialStreams = [] }: Props) {
   const showParsedTxError = useCallback(
     (err: unknown, fallback: string) => {
       const parsed = parseTransactionError(err);
-      addNotification({
-        type: "error",
-        title: parsed.title,
-        message: parsed.detail || fallback,
-        raw: parsed.raw,
-        event: "generic",
-      });
+      addNotification({ type: "error", title: parsed.title, message: parsed.detail || fallback, raw: parsed.raw, event: "generic" });
     },
     [addNotification]
   );
@@ -398,7 +332,27 @@ export default function Home({ initialStreams = [] }: Props) {
     setTimeout(() => setCopiedId(null), 2000);
   }, []);
 
-  // Fetch Streams
+  // ── Transaction state (component-level, not inside handleAction) ──────────
+  const [activeTxAction, setActiveTxAction] = useState<string | null>(null);
+  const [activeTxPhase,  setActiveTxPhase]  = useState<TxPhase | null>(null);
+  const [txFrozen,       setTxFrozen]       = useState(false);
+  const txTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // clearTxStatus at component scope so every catch block can call it
+  const clearTxStatus = useCallback(() => {
+    if (txTimeoutRef.current) clearTimeout(txTimeoutRef.current);
+    setActiveTxAction(null);
+    setActiveTxPhase(null);
+    setTxFrozen(false);
+  }, []);
+
+  // Manual reset button handler
+  const handleResetTxState = useCallback(() => {
+    clearTxStatus();
+    showNotification("info", "Transaction state reset. You can safely retry.");
+  }, [clearTxStatus, showNotification]);
+
+  // ── Data fetching ─────────────────────────────────────────────────────────
   const fetchStreams = useCallback(async () => {
     setLoading(true);
     try {
@@ -412,52 +366,28 @@ export default function Home({ initialStreams = [] }: Props) {
     }
   }, [showNotification]);
 
-  // CSV Diff & Versioning States & Handlers
-  const [csvVersions, setCsvVersions] = useState<any[]>([]);
-  const [compareVersionSelected, setCompareVersionSelected] = useState<string>("0"); // "0" means Live DB
-  const [csvDiffResult, setCsvDiffResult] = useState<any | null>(null);
-  const [loadingDiff, setLoadingDiff] = useState(false);
-  const [activeTxAction, setActiveTxAction] = useState<string | null>(null);
-  const [activeTxPhase, setActiveTxPhase] = useState<TxPhase | null>(null);
+  // ── CSV versioning ────────────────────────────────────────────────────────
+  const [csvVersions,           setCsvVersions]          = useState<any[]>([]);
+  const [compareVersionSelected, setCompareVersionSelected] = useState<string>("0");
+  const [csvDiffResult,         setCsvDiffResult]        = useState<any | null>(null);
+  const [loadingDiff,           setLoadingDiff]          = useState(false);
 
   const fetchCsvVersions = useCallback(async () => {
     try {
       const params = connectedWalletAddress ? { uploader: connectedWalletAddress } : undefined;
       const res = await api.get("/csv/versions", { params });
       setCsvVersions(res.data);
-    } catch (err) {
-      console.error("Failed to fetch CSV versions:", err);
-    }
+    } catch (err) { console.error("Failed to fetch CSV versions:", err); }
   }, [connectedWalletAddress]);
 
   const handleDeleteCsvVersion = useCallback(async () => {
-    if (!connectedWalletAddress) {
-      showNotification("error", "Connect the creator wallet before deleting a CSV version.");
-      return;
-    }
-
-    if (compareVersionSelected === "0") {
-      showNotification("error", "Select a historical CSV version first.");
-      return;
-    }
-
+    if (!connectedWalletAddress) { showNotification("error", "Connect the creator wallet before deleting a CSV version."); return; }
+    if (compareVersionSelected === "0") { showNotification("error", "Select a historical CSV version first."); return; }
     const versionToDelete = Number(compareVersionSelected);
-    if (!Number.isFinite(versionToDelete) || versionToDelete <= 0) {
-      showNotification("error", "Invalid CSV version selected.");
-      return;
-    }
-
-    const confirmed = window.confirm(`Delete CSV version ${versionToDelete}? This cannot be undone.`);
-    if (!confirmed) return;
-
+    if (!Number.isFinite(versionToDelete) || versionToDelete <= 0) { showNotification("error", "Invalid CSV version selected."); return; }
+    if (!window.confirm(`Delete CSV version ${versionToDelete}? This cannot be undone.`)) return;
     try {
-      await api.delete("/csv/version", {
-        data: {
-          version: versionToDelete,
-          uploader: connectedWalletAddress,
-        },
-      });
-
+      await api.delete("/csv/version", { data: { version: versionToDelete, uploader: connectedWalletAddress } });
       showNotification("success", `CSV version ${versionToDelete} deleted.`);
       setCompareVersionSelected("0");
       setCsvDiffResult(null);
@@ -469,33 +399,19 @@ export default function Home({ initialStreams = [] }: Props) {
 
   const handleAnalyzeDiff = async (mode: "create" | "edit") => {
     const csvText = mode === "create" ? csvCreateText : csvEditText;
-    if (!csvText || csvText.trim() === "") {
-      showNotification("error", "Please provide or upload a CSV file first.");
-      return;
-    }
-
+    if (!csvText?.trim()) { showNotification("error", "Please provide or upload a CSV file first."); return; }
     setLoadingDiff(true);
     try {
-      const payload: any = {
-        csvText,
-        mode,
-        uploader: connectedWalletAddress || undefined,
-      };
-      if (compareVersionSelected !== "0") {
-        payload.compareVersion = Number(compareVersionSelected);
-      }
-
+      const payload: any = { csvText, mode, uploader: connectedWalletAddress || undefined };
+      if (compareVersionSelected !== "0") payload.compareVersion = Number(compareVersionSelected);
       const res = await api.post("/csv/diff", payload);
       setCsvDiffResult({ ...res.data, mode });
       showNotification("success", "CSV structural diff computed successfully!");
     } catch (err: any) {
       showNotification("error", err.response?.data?.error || "Failed to calculate CSV diff.");
-    } finally {
-      setLoadingDiff(false);
-    }
+    } finally { setLoadingDiff(false); }
   };
 
-  // Fetch Single Stream Details (to load transactions)
   const fetchStreamDetails = useCallback(async (id: string) => {
     setLoadingDetails(true);
     try {
@@ -504,209 +420,136 @@ export default function Home({ initialStreams = [] }: Props) {
     } catch (err: any) {
       console.error(err);
       showNotification("error", "Failed to fetch stream details and transaction history.");
-    } finally {
-      setLoadingDetails(false);
-    }
+    } finally { setLoadingDetails(false); }
   }, [showNotification]);
 
-  useEffect(() => {
-    setCompareVersionSelected("0");
-    fetchCsvVersions();
-  }, [connectedWalletAddress, fetchCsvVersions]);
+  // ── Effects ───────────────────────────────────────────────────────────────
+  useEffect(() => { setCompareVersionSelected("0"); fetchCsvVersions(); }, [connectedWalletAddress, fetchCsvVersions]);
 
   useEffect(() => {
     fetchStreams();
     fetchCsvVersions();
     const interval = setInterval(fetchStreams, 15000);
-
-    // Read URL query parameters to prefill actions
     if (typeof window !== "undefined") {
       const params = new URLSearchParams(window.location.search);
       const tab = params.get("tab") as TabId;
       const streamId = params.get("streamId");
-      if (tab) {
-        setActiveTab(tab);
-      }
+      if (tab) setActiveTab(tab);
       if (streamId) {
-        if (tab === "withdraw") setWithdrawForm(prev => ({ ...prev, streamId }));
-        if (tab === "cancel") setCancelForm(prev => ({ ...prev, streamId }));
+        if (tab === "withdraw")         setWithdrawForm(prev => ({ ...prev, streamId }));
+        if (tab === "cancel")           setCancelForm(prev => ({ ...prev, streamId }));
         if (tab === "unlock_milestone") setUnlockForm(prev => ({ ...prev, streamId }));
-        if (tab === "edit_milestone") setEditMilestoneForm(prev => ({ ...prev, streamId, amounts: prev.amounts }));
-        if (tab === "edit_linear") setEditLinearForm(prev => ({ ...prev, streamId }));
-        if (tab === "edit_cliff") setEditCliffForm(prev => ({ ...prev, streamId }));
+        if (tab === "edit_milestone")   setEditMilestoneForm(prev => ({ ...prev, streamId, amounts: prev.amounts }));
+        if (tab === "edit_linear")      setEditLinearForm(prev => ({ ...prev, streamId }));
+        if (tab === "edit_cliff")       setEditCliffForm(prev => ({ ...prev, streamId }));
       }
     }
-
     return () => clearInterval(interval);
-  }, []);
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
-    const reloadData = () => {
-      fetchStreams();
-      fetchCsvVersions();
-    };
-
-    const handlePageShow = () => reloadData();
-    const handleFocus = () => reloadData();
-    const handleVisible = () => {
-      if (document.visibilityState === "visible") {
-        reloadData();
-      }
-    };
-
-    window.addEventListener("pageshow", handlePageShow);
-    window.addEventListener("focus", handleFocus);
-    document.addEventListener("visibilitychange", handleVisible);
-
+    const reload = () => { fetchStreams(); fetchCsvVersions(); };
+    const onVisible = () => { if (document.visibilityState === "visible") reload(); };
+    window.addEventListener("pageshow", reload);
+    window.addEventListener("focus", reload);
+    document.addEventListener("visibilitychange", onVisible);
     return () => {
-      window.removeEventListener("pageshow", handlePageShow);
-      window.removeEventListener("focus", handleFocus);
-      document.removeEventListener("visibilitychange", handleVisible);
+      window.removeEventListener("pageshow", reload);
+      window.removeEventListener("focus", reload);
+      document.removeEventListener("visibilitychange", onVisible);
     };
-  }, []);
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
-    const interval = setInterval(() => {
-      setNowTs(Math.floor(Date.now() / 1000));
-    }, 1000);
-
+    const interval = setInterval(() => setNowTs(Math.floor(Date.now() / 1000)), 1000);
     return () => clearInterval(interval);
   }, []);
 
   useEffect(() => {
     if (activeTab !== "edit_milestone") return;
     if (!editMilestoneForm.streamId || editMilestoneForm.totalAmount) return;
-
-    const stream = streams.find((item) => String(item?.id || "") === editMilestoneForm.streamId);
+    const stream = streams.find((s) => String(s?.id || "") === editMilestoneForm.streamId);
     if (!stream) return;
-
     setEditMilestoneForm((prev) => ({
       ...prev,
-      amounts: buildMilestoneAmountsFromStream(stream),
-      totalAmount: String(stream?.totalAmount ?? ""),
+      amounts:      buildMilestoneAmountsFromStream(stream),
+      totalAmount:  String(stream?.totalAmount ?? ""),
       mintDecimals: typeof stream?.mintDecimals === "number" ? stream.mintDecimals : null,
     }));
   }, [activeTab, editMilestoneForm.streamId, editMilestoneForm.totalAmount, streams]);
 
   const handleMilestoneCountChange = useCallback((val: string) => {
     setCreateForm((prev) => ({ ...prev, milestoneCount: val }));
-
     const count = parseInt(val, 10);
     if (Number.isNaN(count) || count <= 0) return;
-
-    const decimals = mintPresets.find((preset) => preset.mint === createForm.mint)?.decimals ?? 0;
+    const decimals = mintPresets.find((p) => p.mint === createForm.mint)?.decimals ?? 0;
     setMilestoneAmounts(buildEvenMilestoneAmounts(createForm.amount, count, decimals));
   }, [createForm.amount, createForm.mint, mintPresets]);
 
-  // Re-distribute milestone amounts when total amount or mint changes
   useEffect(() => {
     if (createForm.type !== "2") return;
     const count = parseInt(createForm.milestoneCount, 10);
     if (Number.isNaN(count) || count <= 0) return;
-    const decimals = mintPresets.find((preset) => preset.mint === createForm.mint)?.decimals ?? 0;
+    const decimals = mintPresets.find((p) => p.mint === createForm.mint)?.decimals ?? 0;
     setMilestoneAmounts(buildEvenMilestoneAmounts(createForm.amount, count, decimals));
   }, [createForm.amount, createForm.mint, createForm.type, createForm.milestoneCount, mintPresets]);
 
-  // Format Helpers
-  const formatDate = (ts: string) => new Date(Number(ts) * 1000).toLocaleString();
+  // ── CSV helpers ───────────────────────────────────────────────────────────
   const shorten = (address: string) => address ? `${address.slice(0, 6)}...${address.slice(-6)}` : "";
 
-  // Helper to parse pasted CSV client-side
   const parseCsv = (csvText: string) => {
     const lines = csvText.trim().split("\n");
     if (lines.length < 2) return [];
-
-    const headers = lines[0].split(",").map((header) => header.trim().toLowerCase());
-
+    const headers = lines[0].split(",").map((h) => h.trim().toLowerCase());
     return lines.slice(1).map((line) => {
-      const values = line.split(",").map((value) => value.trim());
+      const values = line.split(",").map((v) => v.trim());
       const obj: any = {};
-
       headers.forEach((header, index) => {
         if (values[index] === undefined) return;
-
         const rawValue = values[index];
         const parsedValue = rawValue === "true" ? true : rawValue === "false" ? false : rawValue;
-
-        if (header === "cliff_duration" || header === "cliffduration") {
-          obj.cliffDuration = parsedValue;
-          return;
-        }
-
-        if (header === "milestone_count" || header === "milestonecount") {
-          obj.milestoneCount = parsedValue;
-          return;
-        }
-
-        if (header === "milestones") {
-          obj.milestones = values
-            .slice(index)
-            .map((value) => value.trim())
-            .filter(Boolean)
-            .join(";");
-          return;
-        }
-
+        if (header === "cliff_duration" || header === "cliffduration") { obj.cliffDuration = parsedValue; return; }
+        if (header === "milestone_count" || header === "milestonecount") { obj.milestoneCount = parsedValue; return; }
+        if (header === "milestones") { obj.milestones = values.slice(index).map((v) => v.trim()).filter(Boolean).join(";"); return; }
         obj[header] = parsedValue;
       });
-
       return obj;
     });
   };
 
   const buildCsvCreateInput = (item: any, index: number) => {
-    const milestones = String(item.milestones || "")
-      .split(";")
-      .map((value: string) => value.trim())
-      .filter(Boolean);
-
-    if (Number(item.type) === 2 && milestones.length === 0) {
+    const milestones = String(item.milestones || "").split(";").map((v: string) => v.trim()).filter(Boolean);
+    if (Number(item.type) === 2 && milestones.length === 0)
       throw new Error(`CSV Row #${index + 1}: milestone streams require a semicolon-separated milestones column.`);
-    }
-
     return {
-      recipient: String(item.recipient || "").trim(),
-      amount: String(item.amount ?? "").trim(),
-      mint: String(item.mint || defaultMint).trim(),
-      type: String(item.type ?? 0).trim(),
-      duration: String(item.duration ?? 0).trim(),
-      cliffDuration: String(item.cliffDuration ?? 0).trim(),
-      milestoneCount: String(item.milestoneCount ?? milestones.length).trim(),
+      recipient:       String(item.recipient || "").trim(),
+      amount:          String(item.amount ?? "").trim(),
+      mint:            String(item.mint || defaultMint).trim(),
+      type:            String(item.type ?? 0).trim(),
+      duration:        String(item.duration ?? 0).trim(),
+      cliffDuration:   String(item.cliffDuration ?? 0).trim(),
+      milestoneCount:  String(item.milestoneCount ?? milestones.length).trim(),
       milestoneAmounts: milestones,
-      nonce: Date.now() + index,
+      nonce:           Date.now() + index,
     };
   };
 
-  // CSV File Reader / Selection handlers
   const handleCsvUpload = (e: React.ChangeEvent<HTMLInputElement>, mode: "create" | "edit") => {
     const file = e.target.files?.[0];
     if (!file) return;
-
     const reader = new FileReader();
     reader.onload = (event) => {
       const text = event.target?.result as string;
-      if (mode === "create") {
-        setCsvCreateText(text);
-        showNotification("success", `CSV Loaded: ${file.name} successfully imported and loaded!`);
-      } else {
-        setCsvEditText(text);
-        showNotification("success", `CSV Loaded: ${file.name} successfully imported and loaded!`);
-      }
+      if (mode === "create") { setCsvCreateText(text); } else { setCsvEditText(text); }
+      showNotification("success", `CSV Loaded: ${file.name} successfully imported and loaded!`);
     };
     reader.readAsText(file);
   };
 
-  // Download template utility
   const downloadTemplate = (mode: "create" | "edit") => {
     const headers = mode === "create"
       ? buildCreateStreamCsvTemplate(endpoint)
-      : [
-          "id,type,amount,duration,cliff_duration,milestones",
-          "LinearStreamId,0,250,10800,,",
-          "CliffStreamId,1,,,3600,",
-          "MilestoneStreamId,2,,,,400;300;300",
-        ].join("\n");
-
+      : ["id,type,amount,duration,cliff_duration,milestones", "LinearStreamId,0,250,10800,,", "CliffStreamId,1,,,3600,", "MilestoneStreamId,2,,,,400;300;300"].join("\n");
     const blob = new Blob([headers], { type: "text/csv;charset=utf-8;" });
     const url = URL.createObjectURL(blob);
     const link = document.createElement("a");
@@ -719,438 +562,264 @@ export default function Home({ initialStreams = [] }: Props) {
     showNotification("success", `${mode === "create" ? "Creation" : "Editing"} CSV template downloaded!`);
   };
 
-  // Check if a Stream was created via CSV
-  const isStreamCsvCreated = (streamId: string): boolean => {
-    const stream = streams.find(s => s.id === streamId);
+  const isStreamCsvCreated = (streamId: string) => {
+    const stream = streams.find((s) => s.id === streamId);
     return stream ? stream.isCsvCreated : false;
   };
 
-  // Simulators / Submit Handlers
+  // ── handleAction ──────────────────────────────────────────────────────────
   const handleAction = async (actionName: string, data: any) => {
+
+    // setTxStatus is local to handleAction (uses component-level state setters)
     const setTxStatus = (phase: TxPhase) => {
       setActiveTxAction(actionName);
       setActiveTxPhase(phase);
-    };
-    const clearTxStatus = () => {
-      setActiveTxAction(null);
-      setActiveTxPhase(null);
+      setTxFrozen(false);
+      if (txTimeoutRef.current) clearTimeout(txTimeoutRef.current);
+      txTimeoutRef.current = setTimeout(() => {
+        setActiveTxAction(null);
+        setActiveTxPhase(null);
+        setTxFrozen(true);
+        showNotification("error", "Transaction timed out. Use the Reset button to continue.");
+      }, TX_TIMEOUT_MS);
     };
 
-    if (useMultisig && !["create_stream", "withdraw", "create_stream_csv"].includes(actionName)) {
-      showNotification("success", `Squads Multisig proposal created successfully! Redirecting you to Streams page...`);
-      setTimeout(() => {
-        router.push("/streams");
-      }, 2000);
+    // ── Wallet-kind guards ──────────────────────────────────────────────────
+    const walletKind = classifyConnector(currentConnector?.name);
+
+    if (walletKind === "cold" && actionName === "create_stream_csv") {
+      showNotification("error", "Batch CSV deployment is not supported on hardware wallets. Use Phantom, Solflare, or Backpack for bulk operations.");
       return;
     }
 
-    // Direct Manual Deploy
-    if (actionName === "create_stream") {
-      if (!wallet) {
-        showNotification("error", "Connect a Solana wallet before creating a stream.");
-        return;
-      }
+    // useMultisig toggle OR auto-detected multisig wallet
+    const isMultisigFlow = useMultisig || walletKind === "multisig";
+    if (isMultisigFlow && !["create_stream", "withdraw", "create_stream_csv"].includes(actionName)) {
+      showNotification("info", `Squads multisig proposal queued for "${actionName}". Approve it inside the Squads UI.`);
+      setTimeout(() => router.push("/streams"), 2000);
+      return;
+    }
 
+    // ── create_stream ───────────────────────────────────────────────────────
+    if (actionName === "create_stream") {
+      if (!wallet) { showNotification("error", "Connect a Solana wallet before creating a stream."); return; }
       try {
         const result = await createStreamOnChain({
-          wallet,
-          endpoint,
+          wallet, endpoint,
           input: {
-            recipient: data.recipient,
-            amount: data.amount,
-            mint: data.mint,
-            type: data.type,
-            startDate: data.startDate,
-            duration: data.duration,
-            cliffDuration: data.cliffDuration,
-            milestoneCount: data.milestoneCount,
-            milestoneAmounts,
+            recipient: data.recipient, amount: data.amount, mint: data.mint, type: data.type,
+            startDate: data.startDate, duration: data.duration, cliffDuration: data.cliffDuration,
+            milestoneCount: data.milestoneCount, milestoneAmounts,
           },
           onStatus: setTxStatus,
         });
-
         fetchStreams();
         const clusterParam = getExplorerClusterParam(endpoint);
         setCreateStreamSuccess({
           streamAddress: result.streamAddress,
           streamScannerUrl: `https://explorer.solana.com/address/${result.streamAddress}?cluster=${clusterParam}`,
-          signature: result.signature,
-          explorerUrl: result.explorerUrl,
-          recipient: data.recipient,
-          amount: data.amount,
-          mint: data.mint,
+          signature: result.signature, explorerUrl: result.explorerUrl,
+          recipient: data.recipient, amount: data.amount, mint: data.mint,
         });
       } catch (err: any) {
-        showParsedTxError(err, "Deployment failed.");
-      } finally {
         clearTxStatus();
-      }
+        const isRejection = err?.message?.toLowerCase().includes("user rejected")
+          || err?.message?.toLowerCase().includes("cancelled")
+          || err?.code === 4001;
+        if (isRejection) { showNotification("info", "Transaction cancelled by wallet. No funds were moved."); }
+        else { showParsedTxError(err, "Deployment failed."); }
+      } finally { clearTxStatus(); }
       return;
     }
 
+    // ── withdraw ────────────────────────────────────────────────────────────
     if (actionName === "withdraw") {
-      if (!wallet) {
-        showNotification("error", "Connect the recipient wallet before claiming tokens.");
-        return;
-      }
-
+      if (!wallet) { showNotification("error", "Connect the recipient wallet before claiming tokens."); return; }
       try {
-        const result = await withdrawFromStreamOnChain({
-          wallet,
-          endpoint,
-          input: {
-            streamAddress: data.streamId,
-            amount: data.amount,
-          },
-          onStatus: setTxStatus,
-        });
-
+        const result = await withdrawFromStreamOnChain({ wallet, endpoint, input: { streamAddress: data.streamId, amount: data.amount }, onStatus: setTxStatus });
         addNotification({ type: "success", event: "withdraw", title: "Tokens Withdrawn", message: `Tokens withdrawn successfully. Tx: ${result.signature.slice(0, 8)}…` });
-        fetchStreams();
-        setActiveTab("streams");
+        fetchStreams(); setActiveTab("streams");
       } catch (err: any) {
-        showParsedTxError(err, "Withdraw failed.");
-      } finally {
         clearTxStatus();
-      }
+        const isRejection = err?.message?.toLowerCase().includes("user rejected") || err?.code === 4001;
+        if (isRejection) { showNotification("info", "Transaction cancelled by wallet. No funds were moved."); }
+        else { showParsedTxError(err, "Withdraw failed."); }
+      } finally { clearTxStatus(); }
       return;
     }
 
+    // ── cancel ──────────────────────────────────────────────────────────────
     if (actionName === "cancel") {
-      if (!wallet) {
-        showNotification("error", "Connect the creator wallet before cancelling a stream.");
-        return;
-      }
-      
+      if (!wallet) { showNotification("error", "Connect the creator wallet before cancelling a stream."); return; }
       try {
-        const result = await cancelStreamOnChain({
-          wallet,
-          endpoint,
-          input: {
-            streamAddress: data.streamId,
-          },
-          onStatus: setTxStatus,
-        });
-
-        setStreams((prev) =>
-          prev.map((stream) =>
-            stream.id === data.streamId
-              ? { ...stream, status: 3, cancelled: true }
-              : stream
-          )
-        );
-        setSelectedStream((prev: any) =>
-          prev && prev.id === data.streamId
-            ? { ...prev, status: 3, cancelled: true }
-            : prev
-        );
-
+        const result = await cancelStreamOnChain({ wallet, endpoint, input: { streamAddress: data.streamId }, onStatus: setTxStatus });
+        setStreams((prev) => prev.map((s) => s.id === data.streamId ? { ...s, status: 3, cancelled: true } : s));
+        setSelectedStream((prev: any) => prev?.id === data.streamId ? { ...prev, status: 3, cancelled: true } : prev);
         addNotification({ type: "success", event: "stream_cancelled", title: "Stream Cancelled", message: `Stream cancelled on-chain. Tx: ${result.signature.slice(0, 8)}…` });
-        fetchStreams();
-        setActiveTab("streams");
+        fetchStreams(); setActiveTab("streams");
       } catch (err: any) {
-        showParsedTxError(err, "Cancel failed.");
-      } finally {
         clearTxStatus();
-      }
+        const isRejection = err?.message?.toLowerCase().includes("user rejected") || err?.code === 4001;
+        if (isRejection) { showNotification("info", "Transaction cancelled by wallet. No funds were moved."); }
+        else { showParsedTxError(err, "Cancel failed."); }
+      } finally { clearTxStatus(); }
       return;
     }
 
+    // ── unlock_milestone ────────────────────────────────────────────────────
     if (actionName === "unlock_milestone") {
-      if (!wallet) {
-        showNotification("error", "Connect the creator wallet before unlocking a milestone.");
-        return;
-      }
-
+      if (!wallet) { showNotification("error", "Connect the creator wallet before unlocking a milestone."); return; }
       try {
-        const result = await unlockMilestoneOnChain({
-          wallet,
-          endpoint,
-          input: {
-            streamAddress: data.streamId,
-          },
-          onStatus: setTxStatus,
-        });
-
+        const result = await unlockMilestoneOnChain({ wallet, endpoint, input: { streamAddress: data.streamId }, onStatus: setTxStatus });
         addNotification({ type: "success", event: "milestone_unlocked", title: "Milestone Unlocked", message: `Milestone #${result.unlockedMilestoneIndex} unlocked. Tx: ${result.signature.slice(0, 8)}…` });
-        fetchStreams();
-        setActiveTab("streams");
+        fetchStreams(); setActiveTab("streams");
       } catch (err: any) {
-        showParsedTxError(err, "Unlock milestone failed.");
-      } finally {
         clearTxStatus();
-      }
+        const isRejection = err?.message?.toLowerCase().includes("user rejected") || err?.code === 4001;
+        if (isRejection) { showNotification("info", "Transaction cancelled by wallet. No funds were moved."); }
+        else { showParsedTxError(err, "Unlock milestone failed."); }
+      } finally { clearTxStatus(); }
       return;
     }
 
-    // CSV bulk deploy with versioning
+    // ── create_stream_csv ───────────────────────────────────────────────────
     if (actionName === "create_stream_csv") {
-      if (!wallet) {
-        showNotification("error", "Connect a Solana wallet before bulk creating streams.");
-        return;
-      }
-
+      if (!wallet) { showNotification("error", "Connect a Solana wallet before bulk creating streams."); return; }
       try {
         const parsedItems = parseCsv(csvCreateText);
-        if (parsedItems.length === 0) {
-          showNotification("error", "CSV format invalid. Please provide correct headers.");
-          return;
-        }
-
+        if (parsedItems.length === 0) { showNotification("error", "CSV format invalid. Please provide correct headers."); return; }
         const normalizedItems = parsedItems.map((item, index) => {
-          if (!item.recipient) {
-            throw new Error(`CSV Row #${index + 1}: recipient is required.`);
-          }
-
-          if (item.amount === undefined || item.amount === null || String(item.amount).trim() === "") {
-            throw new Error(`CSV Row #${index + 1}: amount is required.`);
-          }
-
-          if (item.type === undefined || item.type === null || String(item.type).trim() === "") {
-            throw new Error(`CSV Row #${index + 1}: type is required.`);
-          }
-
-          if (item.duration === undefined || item.duration === null || String(item.duration).trim() === "") {
-            throw new Error(`CSV Row #${index + 1}: duration is required.`);
-          }
-
+          if (!item.recipient) throw new Error(`CSV Row #${index + 1}: recipient is required.`);
+          if (item.amount === undefined || item.amount === null || String(item.amount).trim() === "") throw new Error(`CSV Row #${index + 1}: amount is required.`);
+          if (item.type === undefined || item.type === null || String(item.type).trim() === "") throw new Error(`CSV Row #${index + 1}: type is required.`);
+          if (item.duration === undefined || item.duration === null || String(item.duration).trim() === "") throw new Error(`CSV Row #${index + 1}: duration is required.`);
           return buildCsvCreateInput(item, index);
         });
-
-        const batchResult = await createStreamBatchOnChain({
-          wallet,
-          endpoint,
-          inputs: normalizedItems,
-          maxStreamsPerBatch: 2,
-          onStatus: setTxStatus,
-        });
-
-        if (batchResult.streamAddresses.length === 0) {
-          throw new Error("No streams were created on-chain, so the CSV version was not saved.");
-        }
-
-        // 1. Persist file contents in Prisma version history only after the on-chain deploy succeeds.
-        await api.post("/csv/upload", {
-          content: csvCreateText,
-          filename: `bulk_create_v${csvVersions.length + 1}.csv`,
-          uploader: connectedWalletAddress || "Anonymous"
-        });
-
-      if (batchResult.streamAddresses.length > 0) {
-  for (let attempt = 0; attempt < 8; attempt++) {
-    const res = await api.post("/streams/mark-origin", {
-      ids: batchResult.streamAddresses,
-      isCsvCreated: true,
-    });
-    if (res.data.count >= batchResult.streamAddresses.length) break;
-    await new Promise(r => setTimeout(r, 1500));
-  }
-}
-
-        addNotification({ type: "success", event: "csv_deployed", title: "CSV Deployed", message: `v${csvVersions.length + 1} — ${batchResult.streamAddresses.length} streams deployed in ${batchResult.batches.length} tx(s).` });
-        
-        // Reset state
-        setCsvDiffResult(null);
-        fetchCsvVersions();
-        fetchStreams();
-        setActiveTab("streams");
-      } catch (err: any) {
-        showParsedTxError(err, "Bulk deployment failed.");
-      } finally {
-        clearTxStatus();
-      }
-      return;
-    }
-
-    // CSV Bulk Edit with Versioning
-    if (actionName === "edit_stream_csv") {
-      try {
-        if (!wallet) {
-          showNotification("error", "Connect the creator wallet before bulk editing streams.");
-          return;
-        }
-
-        const parsedItems = parseCsv(csvEditText);
-        if (parsedItems.length === 0) {
-          showNotification("error", "CSV format invalid. Please provide correct headers.");
-          return;
-        }
-
-        const batchEditResult = await editStreamBatchOnChain({
-          wallet,
-          endpoint,
-          inputs: parsedItems.map((item: any) => ({
-            id: String(item.id || ""),
-            amount: item.amount,
-            duration: item.duration,
-            cliffDuration: item.cliffDuration,
-            milestones: item.milestones,
-          })),
-        });
-        if (batchEditResult.signatures.length === 0) {
-          throw new Error("No editable rows found. Provide duration, cliff_duration, or milestones columns for CSV-created streams.");
-        }
-
-        // 1. Persist edit contents in Prisma version history only after the update succeeds.
-        await api.post("/csv/upload", {
-          content: csvEditText,
-          filename: `bulk_edit_v${csvVersions.length + 1}.csv`,
-          uploader: connectedWalletAddress || "Anonymous"
-        });
-        addNotification({ type: "success", event: "csv_edited", title: "CSV Edited", message: `v${csvVersions.length + 1} — ${batchEditResult.streamAddresses.length} streams updated in ${batchEditResult.signatures.length} tx(s).` });
-        
-        // Reset state
-        setCsvDiffResult(null);
-        fetchCsvVersions();
-        fetchStreams();
-        setActiveTab("streams");
-      } catch (err: any) {
-        showParsedTxError(err, "Bulk edit failed.");
-      }
-      return;
-    }
-
-    if (actionName === "edit_linear") {
-      try {
-        if (!wallet) {
-          showNotification("error", "Connect the creator wallet before editing a linear stream.");
-          return;
-        }
-
-        await editLinearOnChain({
-          wallet,
-          endpoint,
-          input: {
-            streamAddress: data.streamId,
-            newEndDuration: data.newEndDuration,
-            topupAmount: data.topupAmount,
-          },
-        });
-        addNotification({ type: "success", event: "stream_edited", title: "Linear Stream Updated", message: "Stream timeline extended and topped up successfully." });
-        fetchStreams();
-        setActiveTab("streams");
-      } catch (err: any) {
-        showParsedTxError(err, "Failed to update linear stream.");
-      }
-      return;
-    }
-
-    if (actionName === "edit_milestone") {
-      try {
-        if (!wallet) {
-          showNotification("error", "Connect the creator wallet before editing a milestone.");
-          return;
-        }
-
-        const amounts = Array.isArray(data.amounts) ? data.amounts : [];
-        if (amounts.length === 0) {
-          throw new Error("Milestone amounts are required.");
-        }
-
-        const stream = streams.find((item) => String(item?.id || "") === String(data.streamId || ""));
-        if (stream) {
-          const mintDecimals = typeof stream.mintDecimals === "number" ? stream.mintDecimals : 0;
-          const currentTotalAmount = parseBaseUnits(stream.totalAmount);
-          const editedTotalAmount = amounts.reduce(
-            (sum: bigint, amount: any) => sum + parseTokenAmountToBaseUnits(String(amount ?? "0"), mintDecimals),
-            BigInt(0)
-          );
-
-          if (editedTotalAmount !== currentTotalAmount) {
-            throw new Error(
-              `Milestone allocations must sum to ${formatBaseUnitsToTokenAmount(currentTotalAmount, mintDecimals)}.`
-            );
+        const batchResult = await createStreamBatchOnChain({ wallet, endpoint, inputs: normalizedItems, maxStreamsPerBatch: 2, onStatus: setTxStatus });
+        if (batchResult.streamAddresses.length === 0) throw new Error("No streams were created on-chain, so the CSV version was not saved.");
+        await api.post("/csv/upload", { content: csvCreateText, filename: `bulk_create_v${csvVersions.length + 1}.csv`, uploader: connectedWalletAddress || "Anonymous" });
+        if (batchResult.streamAddresses.length > 0) {
+          for (let attempt = 0; attempt < 8; attempt++) {
+            const res = await api.post("/streams/mark-origin", { ids: batchResult.streamAddresses, isCsvCreated: true });
+            if (res.data.count >= batchResult.streamAddresses.length) break;
+            await new Promise((r) => setTimeout(r, 1500));
           }
         }
-
-        for (let index = 0; index < amounts.length; index += 1) {
-          await editMilestoneOnChain({
-            wallet,
-            endpoint,
-            input: {
-              streamAddress: data.streamId,
-              milestoneIndex: index,
-              newAmount: amounts[index],
-            },
-          });
-        }
-
-        addNotification({ type: "success", event: "stream_edited", title: "Milestone Updated", message: "Milestone allocations updated successfully." });
-        fetchStreams();
-        setActiveTab("streams");
+        addNotification({ type: "success", event: "csv_deployed", title: "CSV Deployed", message: `v${csvVersions.length + 1} — ${batchResult.streamAddresses.length} streams deployed in ${batchResult.batches.length} tx(s).` });
+        setCsvDiffResult(null); fetchCsvVersions(); fetchStreams(); setActiveTab("streams");
       } catch (err: any) {
-        showParsedTxError(err, "Failed to update milestone allocation.");
-      }
+        clearTxStatus();
+        showParsedTxError(err, "Bulk deployment failed.");
+      } finally { clearTxStatus(); }
       return;
     }
 
-    if (actionName === "edit_cliff") {
+    // ── edit_stream_csv ─────────────────────────────────────────────────────
+    if (actionName === "edit_stream_csv") {
+      if (!wallet) { showNotification("error", "Connect the creator wallet before bulk editing streams."); return; }
       try {
-        if (!wallet) {
-          showNotification("error", "Connect the creator wallet before editing a cliff stream.");
-          return;
-        }
-
-        await editCliffOnChain({
-          wallet,
-          endpoint,
-          input: {
-            streamAddress: data.streamId,
-            newCliffDuration: data.newCliffDuration,
-          },
+        const parsedItems = parseCsv(csvEditText);
+        if (parsedItems.length === 0) { showNotification("error", "CSV format invalid. Please provide correct headers."); return; }
+        const batchEditResult = await editStreamBatchOnChain({
+          wallet, endpoint,
+          inputs: parsedItems.map((item: any) => ({ id: String(item.id || ""), amount: item.amount, duration: item.duration, cliffDuration: item.cliffDuration, milestones: item.milestones })),
         });
-        addNotification({ type: "success", event: "stream_edited", title: "Cliff Updated", message: "Cliff timestamp updated successfully." });
-        fetchStreams();
-        setActiveTab("streams");
+        if (batchEditResult.signatures.length === 0) throw new Error("No editable rows found. Provide duration, cliff_duration, or milestones columns for CSV-created streams.");
+        await api.post("/csv/upload", { content: csvEditText, filename: `bulk_edit_v${csvVersions.length + 1}.csv`, uploader: connectedWalletAddress || "Anonymous" });
+        addNotification({ type: "success", event: "csv_edited", title: "CSV Edited", message: `v${csvVersions.length + 1} — ${batchEditResult.streamAddresses.length} streams updated in ${batchEditResult.signatures.length} tx(s).` });
+        setCsvDiffResult(null); fetchCsvVersions(); fetchStreams(); setActiveTab("streams");
       } catch (err: any) {
-        showParsedTxError(err, "Failed to update cliff timestamp.");
-      }
+        clearTxStatus();
+        showParsedTxError(err, "Bulk edit failed.");
+      } finally { clearTxStatus(); }
       return;
     }
 
-    // Simulation success
+    // ── edit_linear ─────────────────────────────────────────────────────────
+    if (actionName === "edit_linear") {
+      if (!wallet) { showNotification("error", "Connect the creator wallet before editing a linear stream."); return; }
+      try {
+        await editLinearOnChain({ wallet, endpoint, input: { streamAddress: data.streamId, newEndDuration: data.newEndDuration, topupAmount: data.topupAmount } });
+        addNotification({ type: "success", event: "stream_edited", title: "Linear Stream Updated", message: "Stream timeline extended and topped up successfully." });
+        fetchStreams(); setActiveTab("streams");
+      } catch (err: any) {
+        clearTxStatus();
+        showParsedTxError(err, "Failed to update linear stream.");
+      } finally { clearTxStatus(); }
+      return;
+    }
+
+    // ── edit_milestone ──────────────────────────────────────────────────────
+    if (actionName === "edit_milestone") {
+      if (!wallet) { showNotification("error", "Connect the creator wallet before editing a milestone."); return; }
+      try {
+        const amounts = Array.isArray(data.amounts) ? data.amounts : [];
+        if (amounts.length === 0) throw new Error("Milestone amounts are required.");
+        const stream = streams.find((s) => String(s?.id || "") === String(data.streamId || ""));
+        if (stream) {
+          const mintDecimals = typeof stream.mintDecimals === "number" ? stream.mintDecimals : 0;
+          const currentTotal = parseBaseUnits(stream.totalAmount);
+          const editedTotal  = amounts.reduce((sum: bigint, amt: any) => sum + parseTokenAmountToBaseUnits(String(amt ?? "0"), mintDecimals), BigInt(0));
+          if (editedTotal !== currentTotal) throw new Error(`Milestone allocations must sum to ${formatBaseUnitsToTokenAmount(currentTotal, mintDecimals)}.`);
+        }
+        for (let i = 0; i < amounts.length; i++) {
+          await editMilestoneOnChain({ wallet, endpoint, input: { streamAddress: data.streamId, milestoneIndex: i, newAmount: amounts[i] } });
+        }
+        addNotification({ type: "success", event: "stream_edited", title: "Milestone Updated", message: "Milestone allocations updated successfully." });
+        fetchStreams(); setActiveTab("streams");
+      } catch (err: any) {
+        clearTxStatus();
+        showParsedTxError(err, "Failed to update milestone allocation.");
+      } finally { clearTxStatus(); }
+      return;
+    }
+
+    // ── edit_cliff ──────────────────────────────────────────────────────────
+    if (actionName === "edit_cliff") {
+      if (!wallet) { showNotification("error", "Connect the creator wallet before editing a cliff stream."); return; }
+      try {
+        await editCliffOnChain({ wallet, endpoint, input: { streamAddress: data.streamId, newCliffDuration: data.newCliffDuration } });
+        addNotification({ type: "success", event: "stream_edited", title: "Cliff Updated", message: "Cliff timestamp updated successfully." });
+        fetchStreams(); setActiveTab("streams");
+      } catch (err: any) {
+        clearTxStatus();
+        showParsedTxError(err, "Failed to update cliff timestamp.");
+      } finally { clearTxStatus(); }
+      return;
+    }
+
     showNotification("success", `Transaction submitted: Successfully executed ${actionName}!`);
   };
 
-  // Pre-fill helpers to easily act on a stream
+  // ── prefillAction (unchanged) ─────────────────────────────────────────────
   const prefillAction = (tab: TabId, streamOrId: any) => {
     const streamId = typeof streamOrId === "string" ? streamOrId : String(streamOrId?.id || "");
-    const stream = typeof streamOrId === "string"
-      ? streams.find((item) => String(item?.id || "") === streamId)
-      : streamOrId;
+    const stream   = typeof streamOrId === "string" ? streams.find((s) => String(s?.id || "") === streamId) : streamOrId;
     setActiveTab(tab);
-    if (tab === "withdraw") setWithdrawForm({ streamId });
-    if (tab === "cancel") setCancelForm({ streamId });
+    if (tab === "withdraw")         setWithdrawForm({ streamId });
+    if (tab === "cancel")           setCancelForm({ streamId });
     if (tab === "unlock_milestone") setUnlockForm({ streamId });
     if (tab === "edit_milestone") {
-      setEditMilestoneForm(
-        stream
-          ? {
-              streamId,
-              amounts: buildMilestoneAmountsFromStream(stream),
-              totalAmount: String(stream?.totalAmount ?? ""),
-              mintDecimals: typeof stream?.mintDecimals === "number" ? stream.mintDecimals : null,
-            }
-          : { streamId, amounts: ["250", "250", "250", "250"], totalAmount: "", mintDecimals: null }
+      setEditMilestoneForm(stream
+        ? { streamId, amounts: buildMilestoneAmountsFromStream(stream), totalAmount: String(stream?.totalAmount ?? ""), mintDecimals: typeof stream?.mintDecimals === "number" ? stream.mintDecimals : null }
+        : { streamId, amounts: ["250", "250", "250", "250"], totalAmount: "", mintDecimals: null }
       );
     }
     if (tab === "edit_linear") {
-      const duration = stream && stream.endTs && stream.startTs ? String(Number(stream.endTs) - Number(stream.startTs)) : "";
+      const duration = stream?.endTs && stream?.startTs ? String(Number(stream.endTs) - Number(stream.startTs)) : "";
       setEditLinearForm({ streamId, newEndDuration: duration, topupAmount: "" });
     }
     if (tab === "edit_cliff") {
-      const duration = stream && stream.cliffTs && stream.startTs ? String(Number(stream.cliffTs) - Number(stream.startTs)) : "";
+      const duration = stream?.cliffTs && stream?.startTs ? String(Number(stream.cliffTs) - Number(stream.startTs)) : "";
       setEditCliffForm({ streamId, newCliffDuration: duration });
     }
-    
-    // Close Drawer
     setSelectedStream(null);
   };
 
+  // ── Render ────────────────────────────────────────────────────────────────
   return (
     <main className="min-h-screen bg-zinc-950 text-zinc-50 font-sans relative overflow-hidden flex flex-col justify-between selection:bg-indigo-500/30 selection:text-indigo-200">
-      
-      {/* Background Decorative Glow */}
+
       <div className="hidden md:block absolute top-0 left-1/4 w-[500px] h-[500px] bg-indigo-950/20 rounded-full blur-[140px] pointer-events-none" />
       <div className="hidden md:block absolute bottom-0 right-1/4 w-[600px] h-[600px] bg-purple-950/15 rounded-full blur-[160px] pointer-events-none" />
 
@@ -1158,108 +827,102 @@ export default function Home({ initialStreams = [] }: Props) {
         <CreateStreamSuccessModal
           data={createStreamSuccess}
           onClose={() => setCreateStreamSuccess(null)}
-          onOk={() => {
-            setCreateStreamSuccess(null);
-            setActiveTab("streams");
-          }}
+          onOk={() => { setCreateStreamSuccess(null); setActiveTab("streams"); }}
         />
       )}
 
       <OnboardingCompletedBanner />
 
-      {/* Main Workspace Dashboard Grid */}
       <div className="max-w-7xl mx-auto w-full px-4 py-4 sm:px-6 sm:py-8 pb-20 md:pb-8 flex-grow flex flex-col md:flex-row gap-4 md:gap-8 relative z-10">
-        
+
         <DashboardSidebar activeTab={activeTab} setActiveTab={setActiveTab} streamsCount={filteredStreamsCount} />
 
-        {/* WORKSPACE AREA */}
         <section className="flex-grow min-w-0 max-w-full bg-zinc-900/25 border border-zinc-800/80 rounded-3xl p-4 sm:p-6 md:backdrop-blur-sm md:shadow-2xl shadow-none flex flex-col justify-between relative overflow-x-hidden">
-          
           <div className="w-full">
 
             {activeTab === "streams" && (
               <DashboardStreamsPanel
-                streams={streams}
-                loading={loading}
-                nowTs={nowTs}
-              fetchStreams={fetchStreams}
-              fetchStreamDetails={fetchStreamDetails}
-              connectedWalletAddress={connectedWalletAddress}
-              onFilteredCountChange={setFilteredStreamsCount}
-            />
+                streams={streams} loading={loading} nowTs={nowTs}
+                fetchStreams={fetchStreams} fetchStreamDetails={fetchStreamDetails}
+                connectedWalletAddress={connectedWalletAddress}
+                onFilteredCountChange={setFilteredStreamsCount}
+              />
             )}
 
             {activeTab !== "streams" && (
               <DashboardActionPanels
-               endpoint={endpoint} 
-                activeTab={activeTab}
-                useMultisig={useMultisig}
-                setUseMultisig={setUseMultisig}
-                createMode={createMode}
-                setCreateMode={setCreateMode}
-                createForm={createForm}
-                setCreateForm={setCreateForm}
+                endpoint={endpoint} activeTab={activeTab}
+                useMultisig={useMultisig} setUseMultisig={setUseMultisig}
+                createMode={createMode} setCreateMode={setCreateMode}
+                createForm={createForm} setCreateForm={setCreateForm}
                 onMilestoneCountChange={handleMilestoneCountChange}
-                clusterLabel={clusterLabel}
-                mintPresets={mintPresets}
-                milestoneAmounts={milestoneAmounts}
-                setMilestoneAmounts={setMilestoneAmounts}
-                csvCreateText={csvCreateText}
-                setCsvCreateText={setCsvCreateText}
-                csvEditText={csvEditText}
-                setCsvEditText={setCsvEditText}
-                compareVersionSelected={compareVersionSelected}
-                setCompareVersionSelected={setCompareVersionSelected}
-                csvVersions={csvVersions}
-                handleDeleteCsvVersion={handleDeleteCsvVersion}
-                csvDiffResult={csvDiffResult}
-                setCsvDiffResult={setCsvDiffResult}
-                loadingDiff={loadingDiff}
-                handleAnalyzeDiff={handleAnalyzeDiff}
-                handleAction={handleAction}
-                downloadTemplate={downloadTemplate}
-                fileInputCreateRef={fileInputCreateRef}
-                fileInputEditRef={fileInputEditRef}
+                clusterLabel={clusterLabel} mintPresets={mintPresets}
+                milestoneAmounts={milestoneAmounts} setMilestoneAmounts={setMilestoneAmounts}
+                csvCreateText={csvCreateText} setCsvCreateText={setCsvCreateText}
+                csvEditText={csvEditText} setCsvEditText={setCsvEditText}
+                compareVersionSelected={compareVersionSelected} setCompareVersionSelected={setCompareVersionSelected}
+                csvVersions={csvVersions} handleDeleteCsvVersion={handleDeleteCsvVersion}
+                csvDiffResult={csvDiffResult} setCsvDiffResult={setCsvDiffResult}
+                loadingDiff={loadingDiff} handleAnalyzeDiff={handleAnalyzeDiff}
+                handleAction={handleAction} downloadTemplate={downloadTemplate}
+                fileInputCreateRef={fileInputCreateRef} fileInputEditRef={fileInputEditRef}
                 handleCsvUpload={handleCsvUpload}
-                withdrawForm={withdrawForm}
-                setWithdrawForm={setWithdrawForm}
-                cancelForm={cancelForm}
-                setCancelForm={setCancelForm}
-                unlockForm={unlockForm}
-                setUnlockForm={setUnlockForm}
-                editMilestoneForm={editMilestoneForm}
-                setEditMilestoneForm={setEditMilestoneForm}
-                editLinearForm={editLinearForm}
-                setEditLinearForm={setEditLinearForm}
-                editCliffForm={editCliffForm}
-                setEditCliffForm={setEditCliffForm}
+                withdrawForm={withdrawForm} setWithdrawForm={setWithdrawForm}
+                cancelForm={cancelForm} setCancelForm={setCancelForm}
+                unlockForm={unlockForm} setUnlockForm={setUnlockForm}
+                editMilestoneForm={editMilestoneForm} setEditMilestoneForm={setEditMilestoneForm}
+                editLinearForm={editLinearForm} setEditLinearForm={setEditLinearForm}
+                editCliffForm={editCliffForm} setEditCliffForm={setEditCliffForm}
                 isStreamCsvCreated={isStreamCsvCreated}
-                activeTxAction={activeTxAction}
-                activeTxPhase={activeTxPhase}
+                activeTxAction={activeTxAction} activeTxPhase={activeTxPhase}
                 connected={!!connected}
               />
             )}
 
             <StreamDetailsDrawer
-              selectedStream={selectedStream}
-              loadingDetails={loadingDetails}
-              copiedId={copiedId}
-              copyToClipboard={copyToClipboard}
-              prefillAction={prefillAction}
-              setActiveTab={setActiveTab}
-              setCsvEditText={setCsvEditText}
-              setSelectedStream={setSelectedStream}
-              connectedWalletAddress={connectedWalletAddress}
-              currentTimeTs={nowTs}
+              selectedStream={selectedStream} loadingDetails={loadingDetails}
+              copiedId={copiedId} copyToClipboard={copyToClipboard}
+              prefillAction={prefillAction} setActiveTab={setActiveTab}
+              setCsvEditText={setCsvEditText} setSelectedStream={setSelectedStream}
+              connectedWalletAddress={connectedWalletAddress} currentTimeTs={nowTs}
             />
 
           </div>
-
         </section>
 
       </div>
 
-      {/* Chatbot Assistant */}
+      {/* ── Floating tx status / reset pill ────────────────────────────────── */}
+      {(activeTxAction || txFrozen) && (
+        <div className={`fixed bottom-24 md:bottom-8 right-4 md:right-8 z-[90] flex items-center gap-2.5 rounded-2xl border px-4 py-3 shadow-2xl backdrop-blur-xl transition-all duration-300 ${txFrozen ? "border-red-500/30 bg-red-950/80 text-red-200" : "border-zinc-700/60 bg-zinc-900/90 text-zinc-300"}`}>
+          {txFrozen ? (
+            <>
+              <AlertTriangle className="h-4 w-4 text-red-400 shrink-0" />
+              <div>
+                <div className="text-xs font-bold text-red-300">Transaction timed out</div>
+                <div className="text-[10px] text-red-400/80 mt-0.5">Check your wallet — the tx may have landed.</div>
+              </div>
+            </>
+          ) : (
+            <>
+              <div className="h-2 w-2 rounded-full bg-amber-400 animate-pulse shrink-0" />
+              <div>
+                <div className="text-xs font-bold text-zinc-200 capitalize">{activeTxPhase?.replace("_", " ") ?? "Processing"}…</div>
+                <div className="text-[10px] text-zinc-500 mt-0.5">{activeTxAction?.replace(/_/g, " ")}</div>
+              </div>
+            </>
+          )}
+          <button
+            onClick={handleResetTxState}
+            title="Reset transaction state"
+            className={`ml-2 flex items-center gap-1.5 rounded-xl border px-3 py-1.5 text-[11px] font-semibold transition-all ${txFrozen ? "border-red-500/30 bg-red-900/50 text-red-200 hover:bg-red-800/60" : "border-zinc-700 bg-zinc-800 text-zinc-300 hover:bg-zinc-700"}`}
+          >
+            <RotateCcw className="h-3 w-3" />
+            Reset
+          </button>
+        </div>
+      )}
+
       <EnhancedChatbot />
 
     </main>
