@@ -11,17 +11,18 @@ import {
   Sparkles,
   User,
   X,
-  Zap,
   AlertCircle,
   CheckCircle,
   Rocket,
 } from "lucide-react";
-import {UnifiedFlowClient} from "@unifiedflow/unified-flow-sdk";
-import { getASIOneChatService, type ChatContext, type ChatMessage, type StreamingResponse } from "@/lib/asione-chat";
+import { getASIOneChatService, type ChatContext, type ChatMessage } from "@/lib/asione-chat";
 import { PublicKey } from "@solana/web3.js";
-import { Program } from "@coral-xyz/anchor";
+import { BN } from "@coral-xyz/anchor";
+import { useUnifiedFlowClient } from "@/lib/useUnifiedFlowClient";
+import type { MilestoneInput } from "@unifiedflow/unified-flow-sdk";
+import { getStream } from "@/lib/api";
 
-// ─── Enhanced Suggestions ───────────────────────────────────────────────────
+// ─── Enhanced Suggestions ────────────────────────────────────────────────────
 const DEFAULT_SUGGESTIONS = [
   "How do I create a stream?",
   "What's the difference between vesting types?",
@@ -29,7 +30,7 @@ const DEFAULT_SUGGESTIONS = [
   "Can I bulk-create streams?",
 ];
 
-// ─── Types ───────────────────────────────────────────────────────────────────
+// ─── Types ────────────────────────────────────────────────────────────────────
 interface Message {
   id: string;
   role: "user" | "assistant";
@@ -42,27 +43,17 @@ interface Message {
   };
 }
 
-// ─── Markdown Renderer (Simple) ─────────────────────────────────────────────
+// ─── Markdown Renderer ───────────────────────────────────────────────────────
 function renderMarkdown(text: string) {
-  // Bold
   let html = text.replace(/\*\*(.*?)\*\*/g, '<strong class="font-semibold text-white">$1</strong>');
-  
-  // Italic
   html = html.replace(/\*(.*?)\*/g, '<em class="italic text-zinc-200">$1</em>');
-  
-  // Code blocks
   html = html.replace(/```([\s\S]*?)```/g, '<pre class="bg-zinc-950 border border-zinc-800 rounded-lg p-2 my-2 overflow-x-auto text-[10px] font-mono text-zinc-200"><code>$1</code></pre>');
-  
-  // Inline code
   html = html.replace(/`([^`]+)`/g, '<code class="bg-zinc-950 border border-zinc-800 rounded px-1 py-0.5 text-[10px] font-mono text-indigo-200">$1</code>');
-  
-  // Line breaks
-  html = html.replace(/\n/g, '<br />');
-  
+  html = html.replace(/\n/g, "<br />");
   return <span className="text-zinc-100" dangerouslySetInnerHTML={{ __html: html }} />;
 }
 
-// ─── Main Component ─────────────────────────────────────────────────────────
+// ─── Main Component ───────────────────────────────────────────────────────────
 export function EnhancedChatbot() {
   const [open, setOpen] = useState(false);
   const [minimized, setMinimized] = useState(false);
@@ -70,32 +61,34 @@ export function EnhancedChatbot() {
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
   const [showSuggestions, setShowSuggestions] = useState(true);
-  const [suggestions, setSuggestions] = useState(DEFAULT_SUGGESTIONS);
+  const [suggestions] = useState(DEFAULT_SUGGESTIONS);
   const [usingASI, setUsingASI] = useState(false);
   const [connectionStatus, setConnectionStatus] = useState<"connected" | "disconnected" | "checking">("checking");
-  
+
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
-  const messagesEndRef = useRef<HTMLDivElement>(null);
   const chatService = getASIOneChatService();
+
+  // ✅ Hook dipanggil di top-level component, bukan di dalam fungsi
+  const client = useUnifiedFlowClient();
 
   // Check API connection on mount
   useEffect(() => {
     const isConfigured = chatService.isConfigured();
     setConnectionStatus(isConfigured ? "connected" : "disconnected");
     setUsingASI(isConfigured);
-    
-    // Add welcome message
+
     if (messages.length === 0) {
-      const welcomeMsg: Message = {
-        id: "welcome",
-        role: "assistant",
-        text: isConfigured 
-          ? "👋 Hi! I'm your AI assistant powered by Unified Flow. I can help you with token vesting, stream management, and more. What would you like to know?"
-          : "👋 Hi! I'm your assistant. I can help you with token vesting, stream management, and more. What would you like to know?",
-        timestamp: Date.now(),
-      };
-      setMessages([welcomeMsg]);
+      setMessages([
+        {
+          id: "welcome",
+          role: "assistant",
+          text: isConfigured
+            ? "👋 Hi! I'm your AI assistant powered by Unified Flow. I can help you with token vesting, stream management, and more. What would you like to know?"
+            : "👋 Hi! I'm your assistant. I can help you with token vesting, stream management, and more. What would you like to know?",
+          timestamp: Date.now(),
+        },
+      ]);
     }
   }, []);
 
@@ -111,56 +104,126 @@ export function EnhancedChatbot() {
     }
   }, [open, minimized]);
 
-  // Build chat context
+  // ─── Build chat context ───────────────────────────────────────────────────
   const buildChatContext = (): ChatContext => {
-    const conversationHistory: ChatMessage[] = messages.map(msg => ({
+    const conversationHistory: ChatMessage[] = messages.map((msg) => ({
       role: msg.role,
       content: msg.text,
       timestamp: msg.timestamp,
     }));
-
     return {
       conversationHistory,
-      userProfile: {
-        // You can add real user context here
-        cluster: "devnet", // This should come from actual wallet state
-      },
+      userProfile: { cluster: "devnet" },
     };
   };
+// Ganti fungsi executeTool dan tambah handler di button onClick
 
-  // Execute tool call (placeholder for Web3 integration)
+const executeToolWithFeedback = async (toolName: string, args: string) => {
+  // Tambah "executing" message
+  const executingId = `tool-${Date.now()}`;
+  setMessages((prev) => [
+    ...prev,
+    {
+      id: executingId,
+      role: "assistant",
+      text: "⏳ Executing transaction...",
+      timestamp: Date.now(),
+      isStreaming: true,
+    },
+  ]);
+
+  const result = await executeTool(toolName, args);
+
+  // Update message dengan hasil
+  setMessages((prev) =>
+    prev.map((msg) =>
+      msg.id === executingId
+        ? {
+            ...msg,
+            text: result.success
+              ? `✅ ${result.message}`
+              : `❌ ${result.message}`,
+            isStreaming: false,
+          }
+        : msg
+    )
+  );
+};
+  // ─── Execute tool call ────────────────────────────────────────────────────
   const executeTool = async (toolName: string, args: string) => {
+    if (!client) {
+      return { success: false, message: "Wallet not connected. Please connect your wallet first." };
+    }
+
     try {
       const parsedArgs = JSON.parse(args);
       console.log(`Executing tool: ${toolName}`, parsedArgs);
-      
-      // TODO: Integrate with wallet adapter and @unifiedflow/unified-flow-sdk
-      // For now, this is a placeholder that simulates tool execution
-      
-      // Simulate tool execution with timeout
-      await new Promise(resolve => setTimeout(resolve, 1000));
-      
+
       switch (toolName) {
-        case "create_stream":
-          console.log("Create stream with:", parsedArgs);
-          return { success: true, message: `Stream creation initiated for ${parsedArgs.recipient}` };
-        case "withdraw_stream":
-          console.log("Withdraw from stream:", parsedArgs.stream_pda);
-          return { success: true, message: "Withdrawal initiated successfully" };
-        case "cancel_stream":
-          console.log("Cancel stream:", parsedArgs.stream_pda);
-          return { success: true, message: "Stream cancellation initiated" };
+       case "create_stream": {
+  const {
+    creator,
+    recipient,
+    mint,
+    amount,
+    startTs,
+    cliffTs,
+    endTs,
+    vestingType = 0,
+    milestones = [],
+    nonce,
+  } = parsedArgs;
+
+ const result = await client.createStream(
+   new PublicKey(recipient),
+     new PublicKey(mint),
+   
+   
+    new BN(amount),
+    new BN(startTs),
+    new BN(cliffTs),
+    new BN(endTs),
+    vestingType,
+    milestones,
+    new BN(nonce)
+  );
+  return { success: true, message: `Stream created! Tx: ${result.signature}` };
+}
+case "withdraw_stream": {
+  const { stream_pda } = parsedArgs;
+
+  const result = await client.withdraw(new PublicKey(stream_pda));
+  return { success: true, message: `Withdrawal successful! Tx: ${result.signature}` };
+}
+case "cancel_stream": {
+  const { stream_pda } = parsedArgs;
+  if (!stream_pda) return { success: false, message: "Missing stream_pda." };
+  const result = await client.cancel(new PublicKey(stream_pda));
+  return { success: true, message: `Stream cancelled! Tx: ${result.signature}` };
+}
+        case "unlock_milestone": {
+          const { stream_pda, creator, milestone_index } = parsedArgs;
+
+          const result = await client.unlockMilestone(
+            new PublicKey(stream_pda),
+            Number(milestone_index)
+          );
+          return { success: true, message: `Milestone ${milestone_index} unlocked! Tx: ${result.signature}` };
+        }
+
         default:
-          console.log("Unknown tool:", toolName);
           return { success: false, message: `Unknown tool: ${toolName}` };
       }
     } catch (error) {
       console.error("Tool execution error:", error);
-      return { success: false, message: "Tool execution failed: " + (error instanceof Error ? error.message : "Unknown error") };
+      return {
+        success: false,
+        message: "Transaction failed: " + (error instanceof Error ? error.message : "Unknown error"),
+      };
     }
   };
 
-  // Send message
+  // ─── Send message ─────────────────────────────────────────────────────────
   const sendMessage = async (text: string) => {
     if (!text.trim() || loading) return;
 
@@ -171,62 +234,48 @@ export function EnhancedChatbot() {
       timestamp: Date.now(),
     };
 
-    setMessages(prev => [...prev, userMessage]);
+    setMessages((prev) => [...prev, userMessage]);
     setInput("");
     setShowSuggestions(false);
     setLoading(true);
 
-    // Create placeholder for streaming response
     const assistantMessageId = `assistant-${Date.now()}`;
-    const assistantMessage: Message = {
-      id: assistantMessageId,
-      role: "assistant",
-      text: "",
-      timestamp: Date.now(),
-      isStreaming: true,
-    };
-    setMessages(prev => [...prev, assistantMessage]);
+    setMessages((prev) => [
+      ...prev,
+      { id: assistantMessageId, role: "assistant", text: "", timestamp: Date.now(), isStreaming: true },
+    ]);
 
     try {
       const context = buildChatContext();
-      let fullResponse = "";
-      let toolCallData: { name: string; arguments: string } | undefined;
-      let hasToolCall = false;
 
-      // Stream the response
       for await (const chunk of chatService.generateStreamingResponse(text, context)) {
         if (chunk.error) {
-          setMessages(prev => 
-            prev.map(msg => 
-              msg.id === assistantMessageId 
-                ? { ...msg, text: chunk.content, isStreaming: false }
-                : msg
+          setMessages((prev) =>
+            prev.map((msg) =>
+              msg.id === assistantMessageId ? { ...msg, text: chunk.content, isStreaming: false } : msg
             )
           );
           break;
         }
 
-        fullResponse = chunk.content;
-        
-        // Track tool calls but only update when complete
-        if (chunk.toolCall) {
-          toolCallData = chunk.toolCall;
-          hasToolCall = true;
-        }
-
-        setMessages(prev => 
-          prev.map(msg => 
-            msg.id === assistantMessageId 
-              ? { ...msg, text: fullResponse, isStreaming: !chunk.done, toolCall: chunk.done ? chunk.toolCall : undefined }
+        setMessages((prev) =>
+          prev.map((msg) =>
+            msg.id === assistantMessageId
+              ? {
+                  ...msg,
+                  text: chunk.content,
+                  isStreaming: !chunk.done,
+                  toolCall: chunk.done ? chunk.toolCall : undefined,
+                }
               : msg
           )
         );
       }
     } catch (error) {
       console.error("Chat error:", error);
-      setMessages(prev => 
-        prev.map(msg => 
-          msg.id === assistantMessageId 
+      setMessages((prev) =>
+        prev.map((msg) =>
+          msg.id === assistantMessageId
             ? { ...msg, text: "I apologize, but I encountered an error. Please try again.", isStreaming: false }
             : msg
         )
@@ -236,13 +285,11 @@ export function EnhancedChatbot() {
     }
   };
 
-  // Clear chat
   const clearChat = () => {
     setMessages([]);
     setShowSuggestions(true);
   };
 
-  // Handle keyboard input
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
     if (e.key === "Enter" && !e.shiftKey) {
       e.preventDefault();
@@ -250,28 +297,27 @@ export function EnhancedChatbot() {
     }
   };
 
-  // Get tool call display info
   const getToolCallInfo = (toolCall?: { name: string; arguments: string }) => {
     if (!toolCall) return null;
-    
     const toolLabels: Record<string, { label: string; icon: string; color: string }> = {
-      create_stream: { label: "Create Stream", icon: "🚀", color: "bg-indigo-600" },
-      withdraw_stream: { label: "Withdraw Tokens", icon: "💰", color: "bg-emerald-600" },
-      cancel_stream: { label: "Cancel Stream", icon: "⚠️", color: "bg-red-600" },
+      create_stream:    { label: "Create Stream",     icon: "🚀", color: "bg-indigo-600" },
+      withdraw_stream:  { label: "Withdraw Tokens",   icon: "💰", color: "bg-emerald-600" },
+      cancel_stream:    { label: "Cancel Stream",     icon: "⚠️", color: "bg-red-600" },
+      unlock_milestone: { label: "Unlock Milestone",  icon: "🔓", color: "bg-yellow-600" },
     };
-
     const info = toolLabels[toolCall.name] || { label: toolCall.name, icon: "⚡", color: "bg-zinc-600" };
     return { ...info, args: toolCall.arguments };
   };
 
-  // Render widget
+  // ─── Render ───────────────────────────────────────────────────────────────
   const widget = (
     <div className="fixed bottom-6 right-6 z-50 flex flex-col items-end gap-3">
-      {/* Chat Window */}
       {open && (
-        <div className={`w-[380px] bg-zinc-950 border border-zinc-800 rounded-2xl shadow-2xl overflow-hidden transition-all duration-300 ${
-          minimized ? "h-14" : "h-[600px]"
-        }`}>
+        <div
+          className={`w-[380px] bg-zinc-950 border border-zinc-800 rounded-2xl shadow-2xl overflow-hidden transition-all duration-300 ${
+            minimized ? "h-14" : "h-[600px]"
+          }`}
+        >
           {!minimized && (
             <>
               {/* Header */}
@@ -284,13 +330,21 @@ export function EnhancedChatbot() {
                     <div>
                       <h3 className="text-sm font-semibold text-white">Unified Flow Assistant</h3>
                       <div className="flex items-center gap-1.5">
-                        <div className={`w-1.5 h-1.5 rounded-full ${
-                          connectionStatus === "connected" ? "bg-emerald-400" : 
-                          connectionStatus === "checking" ? "bg-yellow-400" : "bg-red-400"
-                        }`} />
+                        <div
+                          className={`w-1.5 h-1.5 rounded-full ${
+                            connectionStatus === "connected"
+                              ? "bg-emerald-400"
+                              : connectionStatus === "checking"
+                              ? "bg-yellow-400"
+                              : "bg-red-400"
+                          }`}
+                        />
                         <span className="text-[10px] text-zinc-500">
-                          {connectionStatus === "connected" ? "AI Connected" : 
-                           connectionStatus === "checking" ? "Connecting..." : "Offline Mode"}
+                          {connectionStatus === "connected"
+                            ? "AI Connected"
+                            : connectionStatus === "checking"
+                            ? "Connecting..."
+                            : "Offline Mode"}
                         </span>
                       </div>
                     </div>
@@ -311,6 +365,16 @@ export function EnhancedChatbot() {
                   </div>
                 </div>
               </div>
+
+              {/* Wallet warning banner */}
+              {!client && (
+                <div className="flex items-center gap-2 px-4 py-2 bg-yellow-950/40 border-b border-yellow-800/40">
+                  <AlertCircle className="w-3.5 h-3.5 text-yellow-400 shrink-0" />
+                  <span className="text-[10px] text-yellow-300">
+                    Connect your wallet to execute transactions
+                  </span>
+                </div>
+              )}
 
               {/* Messages */}
               <div className="flex-1 overflow-y-auto p-4 space-y-4">
@@ -334,18 +398,20 @@ export function EnhancedChatbot() {
                       >
                         {message.role === "assistant" ? renderMarkdown(message.text) : message.text}
                       </div>
-                      
+
                       {/* Tool Call Action Button */}
                       {message.role === "assistant" && message.toolCall && !message.isStreaming && (
                         <div className="mt-2">
                           {(() => {
                             const toolInfo = getToolCallInfo(message.toolCall);
                             if (!toolInfo) return null;
-                            
                             return (
                               <button
-                                onClick={() => executeTool(message.toolCall!.name, message.toolCall!.arguments)}
-                                className={`w-full flex items-center gap-2 px-3 py-2.5 rounded-xl ${toolInfo.color} hover:opacity-90 transition-all text-white text-[11px] font-medium`}
+                                onClick={() =>
+                               executeToolWithFeedback(message.toolCall!.name, message.toolCall!.arguments)
+                                }
+                                disabled={!client}
+                                className={`w-full flex items-center gap-2 px-3 py-2.5 rounded-xl ${toolInfo.color} hover:opacity-90 disabled:opacity-40 disabled:cursor-not-allowed transition-all text-white text-[11px] font-medium`}
                               >
                                 <span className="text-lg">{toolInfo.icon}</span>
                                 <span className="flex-1 text-left">{toolInfo.label}</span>
@@ -355,11 +421,15 @@ export function EnhancedChatbot() {
                           })()}
                         </div>
                       )}
-                      
+
                       <div className="mt-1 text-[9px] text-zinc-600">
-                        {new Date(message.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                        {new Date(message.timestamp).toLocaleTimeString([], {
+                          hour: "2-digit",
+                          minute: "2-digit",
+                        })}
                       </div>
                     </div>
+
                     {message.role === "user" && (
                       <div className="shrink-0 w-8 h-8 rounded-lg bg-zinc-800 flex items-center justify-center">
                         <User className="w-4 h-4 text-zinc-400" />
@@ -432,17 +502,11 @@ export function EnhancedChatbot() {
                         : "bg-zinc-800 text-zinc-600 cursor-not-allowed"
                     }`}
                   >
-                    {loading ? (
-                      <Loader2 className="w-4 h-4 animate-spin" />
-                    ) : (
-                      <Send className="w-4 h-4" />
-                    )}
+                    {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}
                   </button>
                 </div>
                 <div className="flex items-center justify-between mt-2">
-                  <p className="text-[9px] text-zinc-600">
-                    Press Enter to send · Shift+Enter for new line
-                  </p>
+                  <p className="text-[9px] text-zinc-600">Press Enter to send · Shift+Enter for new line</p>
                   {messages.length > 1 && (
                     <button
                       onClick={clearChat}
@@ -466,7 +530,7 @@ export function EnhancedChatbot() {
         }}
         className={`group w-14 h-14 rounded-2xl flex items-center justify-center shadow-xl transition-all duration-300 ${
           open
-            ? "bg-zinc-800 border border-zinc-700 text-zinc-400 hover:text-zinc-200 rotate-0"
+            ? "bg-zinc-800 border border-zinc-700 text-zinc-400 hover:text-zinc-200"
             : "bg-gradient-to-br from-indigo-600 to-purple-600 hover:from-indigo-500 hover:to-purple-500 text-white border border-indigo-500/50 hover:shadow-indigo-900/50 hover:scale-105"
         }`}
         aria-label={open ? "Close assistant" : "Open assistant"}

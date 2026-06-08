@@ -39,7 +39,7 @@ class ASIOneChatService {
   private systemPrompt: string;
 
   constructor() {
-    this.apiKey = process.env.ASIONE_API_KEY || '';
+    this.apiKey = process.env.NEXT_PUBLIC_ASIONE_API_KEY || '';
     this.apiUrl = process.env.NEXT_PUBLIC_ASIONE_API_URL || 'https://api.asi1.ai/v1';
     this.model = process.env.NEXT_PUBLIC_ASIONE_MODEL || 'asi1';
 
