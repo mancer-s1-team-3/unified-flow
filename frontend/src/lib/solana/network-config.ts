@@ -72,7 +72,7 @@ function parseVisibility(raw: string | undefined, cluster: ClusterKey): ClusterV
   }
   throw new Error(
     `[network-config] Invalid NEXT_PUBLIC_${cluster.toUpperCase()}_VISIBILITY="${raw}". ` +
-      `Expected "enable", "disable", or "hide".`,
+    `Expected "enable", "disable", or "hide".`,
   );
 }
 
@@ -99,7 +99,7 @@ function requireField(
   if (!v) {
     throw new Error(
       `[network-config] Missing required env "${envKey}" for enabled cluster "${cluster}". ` +
-        `Set it or change NEXT_PUBLIC_${cluster.toUpperCase()}_VISIBILITY to "disable" or "hide".`,
+      `Set it or change NEXT_PUBLIC_${cluster.toUpperCase()}_VISIBILITY to "disable" or "hide".`,
     );
   }
   return v;
@@ -165,7 +165,7 @@ function resolveDefaultCluster(): ClusterKey {
   if (NETWORKS[cluster] === null) {
     throw new Error(
       `[network-config] NEXT_PUBLIC_DEFAULT_CLUSTER="${cluster}" is set but the cluster is not enabled. ` +
-        `Set NEXT_PUBLIC_${cluster.toUpperCase()}_VISIBILITY=enable or pick a different default.`,
+      `Set NEXT_PUBLIC_${cluster.toUpperCase()}_VISIBILITY=enable or pick a different default.`,
     );
   }
   return cluster;
