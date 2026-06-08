@@ -7,6 +7,7 @@ import Image from "next/image";
 import { AlertTriangle, Check, ChevronDown, Shield, Download, Layers, Lock, RefreshCw, Terminal, Upload, XCircle } from "lucide-react";
 import { CsvDiffPanel } from "@/components/dashboard/csv-diff-panel";
 import type { MintPreset } from "@/components/dashboard/token-mints";
+import { PreflightChecklist } from "./preflight-checklist";
 const QUICK_DURATIONS = [
   { label: "1M", value: 60 * 60 * 24 * 30 },
   { label: "3M", value: 60 * 60 * 24 * 90 },
@@ -309,6 +310,7 @@ type Props = {
   activeTxAction: string | null;
   activeTxPhase: "wallet_approval" | "sending" | "confirming" | null;
   connected: boolean;
+  endpoint: string;
 };
 
 export function DashboardActionPanels(props: Props) {
@@ -358,6 +360,7 @@ export function DashboardActionPanels(props: Props) {
     activeTxAction,
     activeTxPhase,
     connected,
+    endpoint,
   } = props;
 
   const mintPickerRef = useRef<HTMLDivElement | null>(null);
@@ -365,6 +368,8 @@ export function DashboardActionPanels(props: Props) {
   const [cliffInputMode, setCliffInputMode] = useState<"duration" | "date">("duration");
   const [durationInputMode, setDurationInputMode] = useState<"duration" | "date">("duration");
   const feeEstimate = useFeeEstimate();
+  const csvMilestoneValidation = useCsvMilestoneValidation(csvCreateText);
+  const csvEditMilestoneValidation = useCsvMilestoneValidation(csvEditText);
   const withdrawFeeUsd =
   feeEstimate.solCost && feeEstimate.solPrice
     ? feeEstimate.solCost * feeEstimate.solPrice
@@ -517,8 +522,12 @@ export function DashboardActionPanels(props: Props) {
     activeTxAction === "create_stream";
   const withdrawDisabled = !withdrawForm.streamId?.trim() || activeTxAction === "withdraw";
   const unlockDisabled = !unlockForm.streamId?.trim() || activeTxAction === "unlock_milestone";
-  const createCsvDisabled = !csvCreateText?.trim() || activeTxAction === "create_stream_csv";
-  const editCsvDisabled = !csvEditText?.trim() || activeTxAction === "edit_stream_csv";
+const createCsvDisabled = !csvCreateText?.trim() 
+  || activeTxAction === "create_stream_csv"
+  || csvMilestoneValidation.hasErrors;  // ← tambah ini
+const editCsvDisabled = !csvEditText?.trim() 
+  || activeTxAction === "edit_stream_csv"
+  || csvEditMilestoneValidation.hasErrors;  // ← tambah ini
   const editMilestoneDisabled =
     isStreamCsvCreated(editMilestoneForm.streamId) ||
     !editMilestoneForm.streamId?.trim() ||
@@ -565,7 +574,7 @@ export function DashboardActionPanels(props: Props) {
             </div>
             <div>
               <h4 className="text-xs font-bold text-zinc-200">Squads Multisig Execution</h4>
-              <p className="text-[10px] text-zinc-500">Enable this option to bundle your action as a Squads multisig proposal instead of executing directly.</p>
+              <p className="text-[10px] text-zinc-400">Enable this option to bundle your action as a Squads multisig proposal instead of executing directly.</p>
             </div>
           </div>
 
@@ -586,6 +595,7 @@ export function DashboardActionPanels(props: Props) {
 
       {activeTab === "create_streams" && (
         <div className="animate-in fade-in-30 duration-200 overflow-x-hidden max-w-full">
+          <PreflightChecklist endpoint={endpoint} />  
           <div className="flex flex-col gap-4 border-b border-zinc-900 pb-4 mb-6 sm:flex-row sm:items-center sm:justify-between max-w-full min-w-0">
             <div className="min-w-0 max-w-full">
               <h2 className="text-2xl font-extrabold tracking-tight">Create Stream</h2>
@@ -1186,7 +1196,8 @@ export function DashboardActionPanels(props: Props) {
                 <label className="block text-xs font-semibold text-zinc-400 uppercase tracking-wider mb-1.5">CSV Payload Preview / Editor</label>
                 <textarea rows={8} value={csvCreateText} onChange={(e) => setCsvCreateText(e.target.value)} className="w-full bg-zinc-950 border border-zinc-800 rounded-xl px-4 py-3 text-xs focus:outline-none focus:border-indigo-500 font-mono" />
               </div>
-
+              {/* ─── Milestone Validation ─── */}
+              <CsvMilestoneValidationPanel csvText={csvCreateText} />
               <CsvDiffPanel csvDiffResult={csvDiffResult} compareVersionSelected={compareVersionSelected} onClose={() => setCsvDiffResult(null)} />
 
               <button
@@ -1298,7 +1309,8 @@ export function DashboardActionPanels(props: Props) {
                 className="w-full bg-zinc-950 border border-zinc-800 rounded-xl px-4 py-3 text-xs focus:outline-none focus:border-emerald-500 font-mono"
               />
             </div>
-
+            {/* ─── Milestone Validation ─── */}
+            <CsvMilestoneValidationPanel csvText={csvEditText} />
             <CsvDiffPanel
               csvDiffResult={csvDiffResult}
               compareVersionSelected={compareVersionSelected}
@@ -1551,7 +1563,7 @@ export function DashboardActionPanels(props: Props) {
       <div className={`mt-12 bg-zinc-950 border border-zinc-900 rounded-2xl p-4 font-mono text-[11px] relative overflow-hidden ${mobileNarrowFormClass}`}>
         <div className="absolute top-0 right-0 p-3 flex gap-2"><span className="w-2.5 h-2.5 rounded-full bg-red-500/60" /><span className="w-2.5 h-2.5 rounded-full bg-amber-500/60" /><span className="w-2.5 h-2.5 rounded-full bg-green-500/60" /></div>
         <div className="flex items-center gap-2 text-indigo-400 font-bold mb-2"><Terminal className="w-4 h-4 shrink-0" /><span>Equivalent CLI / Agent Skill Call</span></div>
-        <div className="text-zinc-400 select-all overflow-hidden whitespace-normal break-words py-1 sm:overflow-x-auto sm:whitespace-nowrap sm:break-normal">{activeTab === "create_streams" && <span>{createMode === "manual" ? `$ unified-flow create-stream --recipient ${createForm.recipient || "<address>"} --amount ${createForm.amount} --type ${createForm.type === "0" ? "linear" : createForm.type === "1" ? "milestone" : "cliff"} --duration ${createForm.duration}` : `$ unified-flow create-bulk --csv ./vesting_list.csv --endpoint devnet`}</span>}{activeTab === "edit_csv" && <span>$ unified-flow edit-bulk --csv ./vesting_edits.csv --endpoint devnet</span>}{activeTab === "withdraw" && <span>$ unified-flow claim-tokens --stream {withdrawForm.streamId || "<stream_pda>"}</span>}{activeTab === "cancel" && <span>$ unified-flow cancel-stream --stream {cancelForm.streamId || "<stream_pda>"}</span>}{activeTab === "unlock_milestone" && <span>$ unified-flow unlock-milestone --stream {unlockForm.streamId || "<stream_pda>"}</span>}{activeTab === "edit_milestone" && <span>$ unified-flow edit-milestone --stream {editMilestoneForm.streamId || "<stream_pda>"} --all-indexes</span>}{activeTab === "edit_linear" && <span>$ unified-flow edit-linear --stream {editLinearForm.streamId || "<stream_pda>"} {editLinearForm.newEndDuration ? `--duration ${editLinearForm.newEndDuration}` : ""} {editLinearForm.topupAmount ? `--topup ${editLinearForm.topupAmount}` : ""}</span>}{activeTab === "edit_cliff" && <span>$ unified-flow edit-cliff --stream {editCliffForm.streamId || "<stream_pda>"} --cliff-duration {editCliffForm.newCliffDuration || "<duration_seconds>"}</span>}</div>
+        <div className="text-zinc-400 select-all overflow-hidden whitespace-normal break-words py-1 sm:overflow-x-auto sm:whitespace-nowrap sm:break-normal">{activeTab === "create_streams" && <span>{createMode === "manual" ? `$ unifiedflow create-stream --recipient ${createForm.recipient || "<address>"} --amount ${createForm.amount} --type ${createForm.type === "0" ? "linear" : createForm.type === "1" ? "milestone" : "cliff"} --duration ${createForm.duration}` : `$ unifiedflow create-bulk --csv ./vesting_list.csv --endpoint devnet`}</span>}{activeTab === "edit_csv" && <span>$ unifiedflow edit-bulk --csv ./vesting_edits.csv --endpoint devnet</span>}{activeTab === "withdraw" && <span>$ unifiedflow claim-tokens --stream {withdrawForm.streamId || "<stream_pda>"}</span>}{activeTab === "cancel" && <span>$ unifiedflow cancel-stream --stream {cancelForm.streamId || "<stream_pda>"}</span>}{activeTab === "unlock_milestone" && <span>$ unifiedflow unlock-milestone --stream {unlockForm.streamId || "<stream_pda>"}</span>}{activeTab === "edit_milestone" && <span>$ unifiedflow edit-milestone --stream {editMilestoneForm.streamId || "<stream_pda>"} --all-indexes</span>}{activeTab === "edit_linear" && <span>$ unifiedflow edit-linear --stream {editLinearForm.streamId || "<stream_pda>"} {editLinearForm.newEndDuration ? `--duration ${editLinearForm.newEndDuration}` : ""} {editLinearForm.topupAmount ? `--topup ${editLinearForm.topupAmount}` : ""}</span>}{activeTab === "edit_cliff" && <span>$ unifiedflow edit-cliff --stream {editCliffForm.streamId || "<stream_pda>"} --cliff-duration {editCliffForm.newCliffDuration || "<duration_seconds>"}</span>}</div>
       </div>
       
     </>
@@ -1591,6 +1603,146 @@ function useFeeEstimate() {
   const solCost = solPrice ? FEE_USD / solPrice : null;
 
   return { solPrice, solCost, loading, error, refetch: fetchPrice };
+}
+
+function useCsvMilestoneValidation(csvText: string) {
+  return useMemo(() => {
+    if (!csvText?.trim()) return { rows: [], hasErrors: false };
+
+    const lines = csvText.trim().split("\n");
+    if (lines.length < 2) return { rows: [], hasErrors: false };
+
+    const headers = lines[0].split(",").map((h) => h.trim().toLowerCase());
+    const typeIdx = headers.indexOf("type");
+    const amountIdx = headers.indexOf("amount");
+    const milestonesIdx = headers.indexOf("milestones");
+    const recipientIdx = headers.indexOf("recipient");
+
+    if (typeIdx === -1 || amountIdx === -1) return { rows: [], hasErrors: false };
+
+    const rows: {
+      rowNum: number;
+      recipient: string;
+      totalAmount: number;
+      milestones: number[];
+      milestoneSum: number;
+      pct: number;
+      remaining: number;
+      isMatch: boolean;
+      hasInvalid: boolean;
+    }[] = [];
+
+    for (let i = 1; i < lines.length; i++) {
+      const line = lines[i].trim();
+      if (!line) continue;
+      const values = line.split(",").map((v) => v.trim());
+      if (values[typeIdx] !== "2") continue;
+
+      const recipient = recipientIdx !== -1 ? (values[recipientIdx] ?? "") : "";
+      const totalAmount = parseFloat(values[amountIdx] ?? "0") || 0;
+      let milestones: number[] = [];
+  if (milestonesIdx !== -1) {
+  const raw = values.slice(milestonesIdx).join(";"); // join sisa kolom dengan ";"
+  // Support both ";" and "," as milestone separators
+  milestones = raw
+    .split(/[;,]/)
+    .map((v) => v.trim())
+    .filter(Boolean)
+    .map((v) => parseFloat(v) || 0);
+}
+
+      const milestoneSum = milestones.reduce((a, b) => a + b, 0);
+      const remaining = totalAmount - milestoneSum;
+      const pct = totalAmount > 0 ? Math.min((milestoneSum / totalAmount) * 100, 100) : 0;
+      const isMatch = totalAmount > 0 && Math.abs(remaining) < 0.0000001;
+      const hasInvalid = milestones.length === 0 || milestones.some((v) => v <= 0 || !Number.isFinite(v));
+
+      rows.push({ rowNum: i, recipient, totalAmount, milestones, milestoneSum, pct, remaining, isMatch, hasInvalid });
+    }
+
+    return { rows, hasErrors: rows.some((r) => !r.isMatch || r.hasInvalid) };
+  }, [csvText]);
+}
+
+function CsvMilestoneValidationPanel({ csvText }: { csvText: string }) {
+  const { rows, hasErrors } = useCsvMilestoneValidation(csvText);
+  if (rows.length === 0) return null;
+
+  const allGood = !hasErrors;
+
+  return (
+    <div className={`rounded-2xl border overflow-hidden transition-all duration-300 ${
+      allGood ? "border-emerald-500/30" : "border-amber-500/30"
+    }`}>
+      <div className={`flex items-center justify-between px-4 py-3 border-b ${
+        allGood ? "border-emerald-500/20 bg-emerald-950/10" : "border-amber-500/20 bg-amber-950/10"
+      }`}>
+        <div className="flex items-center gap-2">
+          <span className={`w-1.5 h-1.5 rounded-full ${allGood ? "bg-emerald-400" : "bg-amber-400 animate-pulse"}`} />
+          <span className="text-[10px] font-black uppercase tracking-widest text-zinc-400">
+            Milestone Rows ({rows.length})
+          </span>
+        </div>
+        <span className={`text-[10px] font-bold ${allGood ? "text-emerald-400" : "text-amber-400"}`}>
+          {allGood ? "All balanced" : `${rows.filter((r) => !r.isMatch || r.hasInvalid).length} unbalanced`}
+        </span>
+      </div>
+
+      <div className="divide-y divide-zinc-900/60">
+        {rows.map((row) => {
+          const barColor = row.hasInvalid ? "bg-rose-500" : row.isMatch ? "bg-emerald-500" : row.pct > 100 ? "bg-rose-500" : "bg-amber-400";
+          const statusColor = row.hasInvalid ? "text-rose-400" : row.isMatch ? "text-emerald-400" : "text-amber-400";
+          const shortRecipient = row.recipient ? `${row.recipient.slice(0, 6)}…${row.recipient.slice(-4)}` : `Row #${row.rowNum}`;
+
+          return (
+            <div key={row.rowNum} className="px-4 py-3 bg-zinc-950/40">
+              <div className="flex items-center justify-between mb-2">
+                <span className="font-mono text-[10px] text-zinc-500">{shortRecipient}</span>
+                <span className={`text-[10px] font-black font-mono ${statusColor}`}>{row.pct.toFixed(1)}%</span>
+              </div>
+              <div className="relative h-1.5 w-full rounded-full bg-zinc-900 overflow-hidden mb-2">
+                <div className={`absolute left-0 top-0 h-full rounded-full transition-all duration-500 ${barColor}`}
+                  style={{ width: `${Math.min(row.pct, 100)}%` }} />
+              </div>
+              <div className="grid grid-cols-3 gap-2 text-[10px] font-mono mb-2">
+                <div><div className="text-zinc-600 text-[9px] uppercase">Allocated</div><div className={statusColor}>{row.milestoneSum.toLocaleString()}</div></div>
+                <div><div className="text-zinc-600 text-[9px] uppercase">Total</div><div className="text-zinc-300">{row.totalAmount.toLocaleString()}</div></div>
+                <div>
+                  <div className="text-zinc-600 text-[9px] uppercase">{row.remaining < 0 ? "Excess" : "Remaining"}</div>
+                  <div className={row.remaining < 0 ? "text-rose-400" : row.remaining === 0 ? "text-emerald-400" : "text-amber-400"}>
+                    {Math.abs(row.remaining).toLocaleString()}
+                  </div>
+                </div>
+              </div>
+              <div className="flex flex-wrap gap-1 mb-1.5">
+                {row.milestones.map((m, idx) => (
+                  <span key={idx} className={`px-1.5 py-0.5 rounded-md text-[9px] font-mono font-bold border ${
+                    m <= 0 ? "border-rose-500/40 bg-rose-950/20 text-rose-400" : "border-zinc-800 bg-zinc-900/50 text-zinc-400"
+                  }`}>#{idx}: {m}</span>
+                ))}
+              </div>
+              <div className={`text-[9px] font-semibold ${statusColor}`}>
+                {row.hasInvalid ? "⚠ Missing or zero milestone values"
+                  : row.isMatch ? "✓ Allocations balanced"
+                  : row.remaining > 0 ? `${row.remaining.toLocaleString()} tokens unallocated`
+                  : `Over-allocated by ${Math.abs(row.remaining).toLocaleString()}`}
+              </div>
+            </div>
+          );
+        })}
+      </div>
+
+      {!allGood && (
+        <div className="px-4 py-3 border-t border-amber-500/20 bg-amber-950/10 flex items-start gap-2">
+          <span className="text-amber-400 text-[10px]">⚠</span>
+          <p className="text-[10px] text-amber-300/80 leading-relaxed">
+            Fix milestone allocations before deploying. Each milestone row requires{" "}
+            <strong className="text-amber-300">allocations that sum exactly to total amount</strong>.
+          </p>
+        </div>
+      )}
+    </div>
+  );
 }
 // ──────────────────────────────────────────────────────────────────────────
 // ─── MilestoneAllocationCounter ──────────────────────────────────────────

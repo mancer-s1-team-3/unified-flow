@@ -14,8 +14,8 @@ import fs from "fs";
 import path from "path";
 import dotenv from "dotenv";
 
-import { connection } from "../services/rpc";
-import idl from "../idl/unified_flow.json";
+import { connection } from "./services/rpc";
+import idl from "./idl/unified_flow.json";
 
 dotenv.config();
 
@@ -96,7 +96,7 @@ ${C_BOLD}WRITE TRANSACTION COMMANDS:${C_RESET}
 `);
 }
 
-async function main() {
+export async function main() {
     const args = process.argv.slice(2);
     if (args.length === 0 || args[0] === "--help" || args[0] === "-h") {
         printHelp();
@@ -315,11 +315,10 @@ ${C_BLUE}${C_BOLD}🌊 Vesting Stream Details:${C_RESET}
                 const feeReceiver = PublicKey.findProgramAddressSync([Buffer.from("fee_vault")], PROGRAM_ID)[0];
 
                 const chainlinkFeed = new PublicKey("99B2bTijsU6f1GCT73HmdR7HCFFjGMBcPZY6jZ96ynrR");
-                const seqNumber = new anchor.BN(Math.floor(Math.random() * 100000));
 
                 logInfo("Submitting claim/withdrawal transaction...");
                 const tx = await program.methods
-                    .withdraw(seqNumber)
+                    .withdraw()
                     .accounts({
                         recipient: signer.publicKey,
                         mint: mint,

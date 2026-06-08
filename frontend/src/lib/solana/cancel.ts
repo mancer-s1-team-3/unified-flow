@@ -137,6 +137,7 @@ export async function cancelStreamOnChain({
     tokenProgram: TOKEN_PROGRAM_ID.toBase58() as any,
   } as any);
 
+
   const anchorInstruction = await program.methods
     .cancel()
     .accounts({
@@ -148,7 +149,6 @@ export async function cancelStreamOnChain({
       creatorTokenAccount,
       recipientTokenAccount,
       tokenProgram: TOKEN_PROGRAM_ID,
-      systemProgram: SystemProgram.programId,
     })
     .instruction();
 
@@ -163,7 +163,6 @@ export async function cancelStreamOnChain({
       { address: creatorTokenAccount.toBase58(), role: AccountRole.WRITABLE },
       { address: recipientTokenAccount.toBase58(), role: AccountRole.WRITABLE },
       { address: TOKEN_PROGRAM_ID.toBase58(), role: AccountRole.READONLY },
-      { address: SystemProgram.programId.toBase58(), role: AccountRole.READONLY },
     ],
     data: anchorInstruction.data,
   } as any;

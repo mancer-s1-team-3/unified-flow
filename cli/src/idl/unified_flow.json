@@ -1,0 +1,1889 @@
+{
+  "address": "8M5yieUh7pxwUi1YBByDF82nqoorZwaKi8dBoMVpurFa",
+  "metadata": {
+    "name": "unified_flow",
+    "version": "0.1.0",
+    "spec": "0.1.0",
+    "description": "Created with Anchor"
+  },
+  "instructions": [
+    {
+      "name": "cancel",
+      "discriminator": [
+        232,
+        219,
+        223,
+        41,
+        219,
+        236,
+        220,
+        190
+      ],
+      "accounts": [
+        {
+          "name": "creator",
+          "writable": true,
+          "signer": true
+        },
+        {
+          "name": "mint",
+          "relations": [
+            "stream"
+          ]
+        },
+        {
+          "name": "config",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  99,
+                  111,
+                  110,
+                  102,
+                  105,
+                  103
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "stream",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  115,
+                  116,
+                  114,
+                  101,
+                  97,
+                  109
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "stream.creator",
+                "account": "StreamAccount"
+              },
+              {
+                "kind": "account",
+                "path": "stream.recipient",
+                "account": "StreamAccount"
+              },
+              {
+                "kind": "account",
+                "path": "stream.nonce",
+                "account": "StreamAccount"
+              }
+            ]
+          }
+        },
+        {
+          "name": "vault",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "account",
+                "path": "stream"
+              },
+              {
+                "kind": "account",
+                "path": "token_program"
+              },
+              {
+                "kind": "account",
+                "path": "mint"
+              }
+            ],
+            "program": {
+              "kind": "const",
+              "value": [
+                140,
+                151,
+                37,
+                143,
+                78,
+                36,
+                137,
+                241,
+                187,
+                61,
+                16,
+                41,
+                20,
+                142,
+                13,
+                131,
+                11,
+                90,
+                19,
+                153,
+                218,
+                255,
+                16,
+                132,
+                4,
+                142,
+                123,
+                216,
+                219,
+                233,
+                248,
+                89
+              ]
+            }
+          }
+        },
+        {
+          "name": "creator_token_account",
+          "writable": true
+        },
+        {
+          "name": "recipient_token_account",
+          "writable": true
+        },
+        {
+          "name": "token_program"
+        }
+      ],
+      "args": []
+    },
+    {
+      "name": "create_stream",
+      "discriminator": [
+        71,
+        188,
+        111,
+        127,
+        108,
+        40,
+        229,
+        158
+      ],
+      "accounts": [
+        {
+          "name": "creator",
+          "writable": true,
+          "signer": true
+        },
+        {
+          "name": "recipient"
+        },
+        {
+          "name": "mint"
+        },
+        {
+          "name": "config",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  99,
+                  111,
+                  110,
+                  102,
+                  105,
+                  103
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "stream",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  115,
+                  116,
+                  114,
+                  101,
+                  97,
+                  109
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "creator"
+              },
+              {
+                "kind": "account",
+                "path": "recipient"
+              },
+              {
+                "kind": "arg",
+                "path": "nonce"
+              }
+            ]
+          }
+        },
+        {
+          "name": "vault",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "account",
+                "path": "stream"
+              },
+              {
+                "kind": "account",
+                "path": "token_program"
+              },
+              {
+                "kind": "account",
+                "path": "mint"
+              }
+            ],
+            "program": {
+              "kind": "const",
+              "value": [
+                140,
+                151,
+                37,
+                143,
+                78,
+                36,
+                137,
+                241,
+                187,
+                61,
+                16,
+                41,
+                20,
+                142,
+                13,
+                131,
+                11,
+                90,
+                19,
+                153,
+                218,
+                255,
+                16,
+                132,
+                4,
+                142,
+                123,
+                216,
+                219,
+                233,
+                248,
+                89
+              ]
+            }
+          }
+        },
+        {
+          "name": "creator_token_account",
+          "writable": true
+        },
+        {
+          "name": "system_program",
+          "address": "11111111111111111111111111111111"
+        },
+        {
+          "name": "token_program"
+        },
+        {
+          "name": "associated_token_program",
+          "address": "ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJA8knL"
+        }
+      ],
+      "args": [
+        {
+          "name": "amount",
+          "type": "u64"
+        },
+        {
+          "name": "start_ts",
+          "type": "i64"
+        },
+        {
+          "name": "cliff_ts",
+          "type": "i64"
+        },
+        {
+          "name": "end_ts",
+          "type": "i64"
+        },
+        {
+          "name": "vesting_type",
+          "type": "u8"
+        },
+        {
+          "name": "milestones",
+          "type": {
+            "vec": {
+              "defined": {
+                "name": "MilestoneInput"
+              }
+            }
+          }
+        },
+        {
+          "name": "nonce",
+          "type": "u64"
+        }
+      ]
+    },
+    {
+      "name": "edit_cliff",
+      "discriminator": [
+        41,
+        203,
+        122,
+        7,
+        21,
+        225,
+        162,
+        98
+      ],
+      "accounts": [
+        {
+          "name": "creator",
+          "writable": true,
+          "signer": true,
+          "relations": [
+            "stream"
+          ]
+        },
+        {
+          "name": "config",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  99,
+                  111,
+                  110,
+                  102,
+                  105,
+                  103
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "stream",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  115,
+                  116,
+                  114,
+                  101,
+                  97,
+                  109
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "stream.creator",
+                "account": "StreamAccount"
+              },
+              {
+                "kind": "account",
+                "path": "stream.recipient",
+                "account": "StreamAccount"
+              },
+              {
+                "kind": "account",
+                "path": "stream.nonce",
+                "account": "StreamAccount"
+              }
+            ]
+          }
+        }
+      ],
+      "args": [
+        {
+          "name": "new_cliff_ts",
+          "type": "i64"
+        }
+      ]
+    },
+    {
+      "name": "edit_linear",
+      "discriminator": [
+        255,
+        42,
+        53,
+        36,
+        79,
+        96,
+        83,
+        223
+      ],
+      "accounts": [
+        {
+          "name": "creator",
+          "writable": true,
+          "signer": true,
+          "relations": [
+            "stream"
+          ]
+        },
+        {
+          "name": "mint",
+          "relations": [
+            "stream"
+          ]
+        },
+        {
+          "name": "config",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  99,
+                  111,
+                  110,
+                  102,
+                  105,
+                  103
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "stream",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  115,
+                  116,
+                  114,
+                  101,
+                  97,
+                  109
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "stream.creator",
+                "account": "StreamAccount"
+              },
+              {
+                "kind": "account",
+                "path": "stream.recipient",
+                "account": "StreamAccount"
+              },
+              {
+                "kind": "account",
+                "path": "stream.nonce",
+                "account": "StreamAccount"
+              }
+            ]
+          }
+        },
+        {
+          "name": "vault",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "account",
+                "path": "stream"
+              },
+              {
+                "kind": "account",
+                "path": "token_program"
+              },
+              {
+                "kind": "account",
+                "path": "mint"
+              }
+            ],
+            "program": {
+              "kind": "const",
+              "value": [
+                140,
+                151,
+                37,
+                143,
+                78,
+                36,
+                137,
+                241,
+                187,
+                61,
+                16,
+                41,
+                20,
+                142,
+                13,
+                131,
+                11,
+                90,
+                19,
+                153,
+                218,
+                255,
+                16,
+                132,
+                4,
+                142,
+                123,
+                216,
+                219,
+                233,
+                248,
+                89
+              ]
+            }
+          }
+        },
+        {
+          "name": "creator_token_account",
+          "writable": true
+        },
+        {
+          "name": "token_program"
+        }
+      ],
+      "args": [
+        {
+          "name": "new_end_ts",
+          "type": "i64"
+        },
+        {
+          "name": "topup_amount",
+          "type": "u64"
+        }
+      ]
+    },
+    {
+      "name": "edit_milestone",
+      "discriminator": [
+        123,
+        218,
+        165,
+        226,
+        209,
+        227,
+        8,
+        166
+      ],
+      "accounts": [
+        {
+          "name": "creator",
+          "writable": true,
+          "signer": true,
+          "relations": [
+            "stream"
+          ]
+        },
+        {
+          "name": "stream",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  115,
+                  116,
+                  114,
+                  101,
+                  97,
+                  109
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "stream.creator",
+                "account": "StreamAccount"
+              },
+              {
+                "kind": "account",
+                "path": "stream.recipient",
+                "account": "StreamAccount"
+              },
+              {
+                "kind": "account",
+                "path": "stream.nonce",
+                "account": "StreamAccount"
+              }
+            ]
+          }
+        },
+        {
+          "name": "milestone",
+          "writable": true
+        },
+        {
+          "name": "mint",
+          "relations": [
+            "stream"
+          ]
+        },
+        {
+          "name": "vault",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "account",
+                "path": "stream"
+              },
+              {
+                "kind": "account",
+                "path": "token_program"
+              },
+              {
+                "kind": "account",
+                "path": "mint"
+              }
+            ],
+            "program": {
+              "kind": "const",
+              "value": [
+                140,
+                151,
+                37,
+                143,
+                78,
+                36,
+                137,
+                241,
+                187,
+                61,
+                16,
+                41,
+                20,
+                142,
+                13,
+                131,
+                11,
+                90,
+                19,
+                153,
+                218,
+                255,
+                16,
+                132,
+                4,
+                142,
+                123,
+                216,
+                219,
+                233,
+                248,
+                89
+              ]
+            }
+          }
+        },
+        {
+          "name": "creator_token_account",
+          "writable": true
+        },
+        {
+          "name": "token_program"
+        }
+      ],
+      "args": [
+        {
+          "name": "new_amount",
+          "type": "u64"
+        }
+      ]
+    },
+    {
+      "name": "initialize_config",
+      "discriminator": [
+        208,
+        127,
+        21,
+        1,
+        194,
+        190,
+        196,
+        70
+      ],
+      "accounts": [
+        {
+          "name": "admin",
+          "writable": true,
+          "signer": true
+        },
+        {
+          "name": "config",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  99,
+                  111,
+                  110,
+                  102,
+                  105,
+                  103
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "system_program",
+          "address": "11111111111111111111111111111111"
+        }
+      ],
+      "args": []
+    },
+    {
+      "name": "unlock_milestone",
+      "discriminator": [
+        131,
+        196,
+        6,
+        134,
+        153,
+        130,
+        248,
+        238
+      ],
+      "accounts": [
+        {
+          "name": "creator",
+          "writable": true,
+          "signer": true,
+          "relations": [
+            "stream"
+          ]
+        },
+        {
+          "name": "stream",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  115,
+                  116,
+                  114,
+                  101,
+                  97,
+                  109
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "stream.creator",
+                "account": "StreamAccount"
+              },
+              {
+                "kind": "account",
+                "path": "stream.recipient",
+                "account": "StreamAccount"
+              },
+              {
+                "kind": "account",
+                "path": "stream.nonce",
+                "account": "StreamAccount"
+              }
+            ]
+          }
+        },
+        {
+          "name": "milestone",
+          "writable": true
+        },
+        {
+          "name": "system_program",
+          "address": "11111111111111111111111111111111"
+        }
+      ],
+      "args": []
+    },
+    {
+      "name": "withdraw",
+      "discriminator": [
+        183,
+        18,
+        70,
+        156,
+        148,
+        109,
+        161,
+        34
+      ],
+      "accounts": [
+        {
+          "name": "recipient",
+          "writable": true,
+          "signer": true
+        },
+        {
+          "name": "mint",
+          "relations": [
+            "stream"
+          ]
+        },
+        {
+          "name": "config",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  99,
+                  111,
+                  110,
+                  102,
+                  105,
+                  103
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "stream",
+          "docs": [
+            "Stream account"
+          ],
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  115,
+                  116,
+                  114,
+                  101,
+                  97,
+                  109
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "stream.creator",
+                "account": "StreamAccount"
+              },
+              {
+                "kind": "account",
+                "path": "stream.recipient",
+                "account": "StreamAccount"
+              },
+              {
+                "kind": "account",
+                "path": "stream.nonce",
+                "account": "StreamAccount"
+              }
+            ]
+          }
+        },
+        {
+          "name": "vault",
+          "docs": [
+            "Vault token account (ATA owned by stream PDA)"
+          ],
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "account",
+                "path": "stream"
+              },
+              {
+                "kind": "account",
+                "path": "token_program"
+              },
+              {
+                "kind": "account",
+                "path": "mint"
+              }
+            ],
+            "program": {
+              "kind": "const",
+              "value": [
+                140,
+                151,
+                37,
+                143,
+                78,
+                36,
+                137,
+                241,
+                187,
+                61,
+                16,
+                41,
+                20,
+                142,
+                13,
+                131,
+                11,
+                90,
+                19,
+                153,
+                218,
+                255,
+                16,
+                132,
+                4,
+                142,
+                123,
+                216,
+                219,
+                233,
+                248,
+                89
+              ]
+            }
+          }
+        },
+        {
+          "name": "recipient_ata",
+          "docs": [
+            "Token account recipient"
+          ],
+          "writable": true
+        },
+        {
+          "name": "fee_vault",
+          "docs": [
+            "Recipient fee SOL"
+          ],
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  102,
+                  101,
+                  101,
+                  95,
+                  118,
+                  97,
+                  117,
+                  108,
+                  116
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "chainlink_feed"
+        },
+        {
+          "name": "token_program"
+        },
+        {
+          "name": "system_program",
+          "address": "11111111111111111111111111111111"
+        }
+      ],
+      "args": []
+    },
+    {
+      "name": "withdraw_fees",
+      "discriminator": [
+        198,
+        212,
+        171,
+        109,
+        144,
+        215,
+        174,
+        89
+      ],
+      "accounts": [
+        {
+          "name": "admin",
+          "writable": true,
+          "signer": true
+        },
+        {
+          "name": "config",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  99,
+                  111,
+                  110,
+                  102,
+                  105,
+                  103
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "fee_vault",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  102,
+                  101,
+                  101,
+                  95,
+                  118,
+                  97,
+                  117,
+                  108,
+                  116
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "destination",
+          "writable": true
+        },
+        {
+          "name": "system_program",
+          "address": "11111111111111111111111111111111"
+        }
+      ],
+      "args": [
+        {
+          "name": "amount",
+          "type": "u64"
+        }
+      ]
+    }
+  ],
+  "accounts": [
+    {
+      "name": "ConfigAccount",
+      "discriminator": [
+        189,
+        255,
+        97,
+        70,
+        186,
+        189,
+        24,
+        102
+      ]
+    },
+    {
+      "name": "MilestoneAccount",
+      "discriminator": [
+        21,
+        222,
+        32,
+        140,
+        43,
+        166,
+        109,
+        19
+      ]
+    },
+    {
+      "name": "StreamAccount",
+      "discriminator": [
+        243,
+        60,
+        164,
+        106,
+        199,
+        192,
+        110,
+        53
+      ]
+    }
+  ],
+  "events": [
+    {
+      "name": "CliffEdited",
+      "discriminator": [
+        143,
+        207,
+        9,
+        136,
+        149,
+        157,
+        201,
+        139
+      ]
+    },
+    {
+      "name": "FeesWithdrawn",
+      "discriminator": [
+        234,
+        15,
+        0,
+        119,
+        148,
+        241,
+        40,
+        21
+      ]
+    },
+    {
+      "name": "LinearEdited",
+      "discriminator": [
+        94,
+        168,
+        133,
+        235,
+        122,
+        111,
+        156,
+        155
+      ]
+    },
+    {
+      "name": "MilestoneEdited",
+      "discriminator": [
+        178,
+        220,
+        80,
+        222,
+        55,
+        97,
+        104,
+        50
+      ]
+    },
+    {
+      "name": "MilestoneUnlocked",
+      "discriminator": [
+        234,
+        55,
+        24,
+        33,
+        42,
+        152,
+        104,
+        241
+      ]
+    },
+    {
+      "name": "StreamCancelled",
+      "discriminator": [
+        91,
+        215,
+        29,
+        237,
+        194,
+        6,
+        184,
+        92
+      ]
+    },
+    {
+      "name": "StreamCreated",
+      "discriminator": [
+        93,
+        150,
+        91,
+        15,
+        166,
+        8,
+        251,
+        166
+      ]
+    },
+    {
+      "name": "TokensClaimed",
+      "discriminator": [
+        25,
+        128,
+        244,
+        55,
+        241,
+        136,
+        200,
+        91
+      ]
+    }
+  ],
+  "errors": [
+    {
+      "code": 6000,
+      "name": "InvalidAmount",
+      "msg": "Amount must be greater than zero"
+    },
+    {
+      "code": 6001,
+      "name": "InvalidSchedule",
+      "msg": "End date must be after start date"
+    },
+    {
+      "code": 6002,
+      "name": "InvalidCliff",
+      "msg": "Cliff date must be between start and end dates"
+    },
+    {
+      "code": 6003,
+      "name": "InvalidEndDate",
+      "msg": "End date must be in the future"
+    },
+    {
+      "code": 6004,
+      "name": "InvalidStartDate",
+      "msg": "Start date must not be in the past"
+    },
+    {
+      "code": 6005,
+      "name": "DurationTooShort",
+      "msg": "Stream duration too short"
+    },
+    {
+      "code": 6006,
+      "name": "MathOverflow",
+      "msg": "Math overflow"
+    },
+    {
+      "code": 6007,
+      "name": "InvalidRecipient",
+      "msg": "Invalid recipient"
+    },
+    {
+      "code": 6008,
+      "name": "InvalidMint",
+      "msg": "Invalid mint"
+    },
+    {
+      "code": 6009,
+      "name": "InvalidTokenOwner",
+      "msg": "Invalid token owner"
+    },
+    {
+      "code": 6010,
+      "name": "InsufficientBalance",
+      "msg": "Insufficient balance"
+    },
+    {
+      "code": 6011,
+      "name": "MintNotAllowed",
+      "msg": "Mint not allowed"
+    },
+    {
+      "code": 6012,
+      "name": "ProtocolPaused",
+      "msg": "Protocol paused"
+    },
+    {
+      "code": 6013,
+      "name": "AmountTooSmall",
+      "msg": "Amount too small"
+    },
+    {
+      "code": 6014,
+      "name": "InvalidMintDecimals",
+      "msg": "Invalid mint decimals"
+    },
+    {
+      "code": 6015,
+      "name": "TransferFeeMintUnsupported",
+      "msg": "Transfer fee tokens unsupported"
+    },
+    {
+      "code": 6016,
+      "name": "StreamNotActive",
+      "msg": "Stream not active"
+    },
+    {
+      "code": 6017,
+      "name": "StreamNotCancelable",
+      "msg": "Stream not cancelable"
+    },
+    {
+      "code": 6018,
+      "name": "NothingToWithdraw",
+      "msg": "No tokens available to withdraw"
+    },
+    {
+      "code": 6019,
+      "name": "Unauthorized",
+      "msg": "Signer is not the stream recipient"
+    },
+    {
+      "code": 6020,
+      "name": "InvalidOracleFeed",
+      "msg": "Invalid oracle price feed"
+    },
+    {
+      "code": 6021,
+      "name": "StaleOraclePrice",
+      "msg": "Oracle price is stale (> 1 hour)"
+    },
+    {
+      "code": 6022,
+      "name": "InvalidOraclePrice",
+      "msg": "Oracle returned invalid price"
+    },
+    {
+      "code": 6023,
+      "name": "InvalidFeeReceiver",
+      "msg": "Invalid fee receiver account"
+    },
+    {
+      "code": 6024,
+      "name": "AlreadyCancelled",
+      "msg": "Already cancelled"
+    },
+    {
+      "code": 6025,
+      "name": "FullyVested",
+      "msg": "Fully vested"
+    },
+    {
+      "code": 6026,
+      "name": "StreamExpired",
+      "msg": "Stream expired"
+    },
+    {
+      "code": 6027,
+      "name": "MilestoneAlreadyUnlocked",
+      "msg": "Milestone already unlocked"
+    },
+    {
+      "code": 6028,
+      "name": "InvalidVestingType",
+      "msg": "Invalid vesting type"
+    },
+    {
+      "code": 6029,
+      "name": "InvalidMilestoneCount",
+      "msg": "Invalid milestone count"
+    },
+    {
+      "code": 6030,
+      "name": "InvalidMilestonePda",
+      "msg": "Invalid milestone PDA"
+    },
+    {
+      "code": 6031,
+      "name": "InvalidMilestoneAmount",
+      "msg": "Invalid milestone amount"
+    },
+    {
+      "code": 6032,
+      "name": "PreviousMilestoneNotApproved",
+      "msg": "Previous milestone not approved"
+    },
+    {
+      "code": 6033,
+      "name": "InvalidMilestoneOrder",
+      "msg": "Invalid milestone order"
+    },
+    {
+      "code": 6034,
+      "name": "PreviousMilestoneMissing",
+      "msg": "Previous milestone missing"
+    },
+    {
+      "code": 6035,
+      "name": "StreamAlreadyStarted",
+      "msg": "Stream already started and cannot be modified"
+    }
+  ],
+  "types": [
+    {
+      "name": "CliffEdited",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "stream",
+            "type": "pubkey"
+          },
+          {
+            "name": "old_cliff_ts",
+            "type": "i64"
+          },
+          {
+            "name": "new_cliff_ts",
+            "type": "i64"
+          },
+          {
+            "name": "timestamp",
+            "type": "i64"
+          }
+        ]
+      }
+    },
+    {
+      "name": "ConfigAccount",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "admin_authority",
+            "type": "pubkey"
+          },
+          {
+            "name": "fee_authority",
+            "type": "pubkey"
+          },
+          {
+            "name": "paused",
+            "type": "bool"
+          },
+          {
+            "name": "withdraw_fee_bps",
+            "type": "u16"
+          },
+          {
+            "name": "max_withdraw_fee_bps",
+            "type": "u16"
+          },
+          {
+            "name": "fee_change_timelock_seconds",
+            "type": "u64"
+          },
+          {
+            "name": "pending_fees",
+            "type": {
+              "option": {
+                "defined": {
+                  "name": "PendingFees"
+                }
+              }
+            }
+          },
+          {
+            "name": "allowed_mints",
+            "type": {
+              "vec": "pubkey"
+            }
+          },
+          {
+            "name": "bump",
+            "type": "u8"
+          }
+        ]
+      }
+    },
+    {
+      "name": "FeesWithdrawn",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "admin",
+            "type": "pubkey"
+          },
+          {
+            "name": "destination",
+            "type": "pubkey"
+          },
+          {
+            "name": "amount",
+            "type": "u64"
+          },
+          {
+            "name": "timestamp",
+            "type": "i64"
+          }
+        ]
+      }
+    },
+    {
+      "name": "LinearEdited",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "stream",
+            "type": "pubkey"
+          },
+          {
+            "name": "old_end_ts",
+            "type": "i64"
+          },
+          {
+            "name": "new_end_ts",
+            "type": "i64"
+          },
+          {
+            "name": "old_total_amount",
+            "type": "u64"
+          },
+          {
+            "name": "new_total_amount",
+            "type": "u64"
+          },
+          {
+            "name": "topup_amount",
+            "type": "u64"
+          },
+          {
+            "name": "timestamp",
+            "type": "i64"
+          }
+        ]
+      }
+    },
+    {
+      "name": "MilestoneAccount",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "stream",
+            "type": "pubkey"
+          },
+          {
+            "name": "index",
+            "type": "u8"
+          },
+          {
+            "name": "unlock_ts",
+            "type": "i64"
+          },
+          {
+            "name": "amount",
+            "type": "u64"
+          },
+          {
+            "name": "approved",
+            "type": "bool"
+          },
+          {
+            "name": "unlocked",
+            "type": "bool"
+          },
+          {
+            "name": "bump",
+            "type": "u8"
+          }
+        ]
+      }
+    },
+    {
+      "name": "MilestoneEdited",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "stream",
+            "type": "pubkey"
+          },
+          {
+            "name": "milestone",
+            "type": "pubkey"
+          },
+          {
+            "name": "index",
+            "type": "u8"
+          },
+          {
+            "name": "old_amount",
+            "type": "u64"
+          },
+          {
+            "name": "new_amount",
+            "type": "u64"
+          },
+          {
+            "name": "timestamp",
+            "type": "i64"
+          }
+        ]
+      }
+    },
+    {
+      "name": "MilestoneInput",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "amount",
+            "type": "u64"
+          }
+        ]
+      }
+    },
+    {
+      "name": "MilestoneUnlocked",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "stream",
+            "type": "pubkey"
+          },
+          {
+            "name": "milestone",
+            "type": "pubkey"
+          },
+          {
+            "name": "index",
+            "type": "u8"
+          },
+          {
+            "name": "amount",
+            "type": "u64"
+          },
+          {
+            "name": "unlock_ts",
+            "type": "i64"
+          }
+        ]
+      }
+    },
+    {
+      "name": "PendingFees",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "new_withdraw_fee_bps",
+            "type": "u16"
+          },
+          {
+            "name": "effective_at",
+            "type": "i64"
+          }
+        ]
+      }
+    },
+    {
+      "name": "StreamAccount",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "creator",
+            "type": "pubkey"
+          },
+          {
+            "name": "recipient",
+            "type": "pubkey"
+          },
+          {
+            "name": "mint",
+            "type": "pubkey"
+          },
+          {
+            "name": "vault",
+            "type": "pubkey"
+          },
+          {
+            "name": "total_amount",
+            "type": "u64"
+          },
+          {
+            "name": "withdrawn",
+            "type": "u64"
+          },
+          {
+            "name": "start_ts",
+            "type": "i64"
+          },
+          {
+            "name": "cliff_ts",
+            "type": "i64"
+          },
+          {
+            "name": "end_ts",
+            "type": "i64"
+          },
+          {
+            "name": "vesting_type",
+            "type": "u8"
+          },
+          {
+            "name": "status",
+            "type": "u8"
+          },
+          {
+            "name": "cancelable",
+            "type": "bool"
+          },
+          {
+            "name": "milestone_count",
+            "type": "u8"
+          },
+          {
+            "name": "next_milestone_index",
+            "type": "u8"
+          },
+          {
+            "name": "cancelled",
+            "type": "bool"
+          },
+          {
+            "name": "nonce",
+            "type": "u64"
+          },
+          {
+            "name": "bump",
+            "type": "u8"
+          },
+          {
+            "name": "unlocked_milestone_amount",
+            "type": "u64"
+          }
+        ]
+      }
+    },
+    {
+      "name": "StreamCancelled",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "stream",
+            "type": "pubkey"
+          },
+          {
+            "name": "creator",
+            "type": "pubkey"
+          },
+          {
+            "name": "recipient",
+            "type": "pubkey"
+          },
+          {
+            "name": "vested_amount",
+            "type": "u64"
+          },
+          {
+            "name": "returned_to_creator",
+            "type": "u64"
+          },
+          {
+            "name": "claimable_for_recipient",
+            "type": "u64"
+          },
+          {
+            "name": "timestamp",
+            "type": "i64"
+          }
+        ]
+      }
+    },
+    {
+      "name": "StreamCreated",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "stream",
+            "type": "pubkey"
+          },
+          {
+            "name": "creator",
+            "type": "pubkey"
+          },
+          {
+            "name": "recipient",
+            "type": "pubkey"
+          },
+          {
+            "name": "mint",
+            "type": "pubkey"
+          },
+          {
+            "name": "vault",
+            "type": "pubkey"
+          },
+          {
+            "name": "total_amount",
+            "type": "u64"
+          },
+          {
+            "name": "vesting_type",
+            "type": "u8"
+          },
+          {
+            "name": "start_ts",
+            "type": "i64"
+          },
+          {
+            "name": "cliff_ts",
+            "type": "i64"
+          },
+          {
+            "name": "end_ts",
+            "type": "i64"
+          },
+          {
+            "name": "milestone_count",
+            "type": "u8"
+          },
+          {
+            "name": "cancelable",
+            "type": "bool"
+          },
+          {
+            "name": "nonce",
+            "type": "u64"
+          },
+          {
+            "name": "created_at",
+            "type": "i64"
+          }
+        ]
+      }
+    },
+    {
+      "name": "TokensClaimed",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "stream",
+            "type": "pubkey"
+          },
+          {
+            "name": "recipient",
+            "type": "pubkey"
+          },
+          {
+            "name": "mint",
+            "type": "pubkey"
+          },
+          {
+            "name": "claimable",
+            "type": "u64"
+          },
+          {
+            "name": "fee_lamports",
+            "type": "u64"
+          },
+          {
+            "name": "withdrawn_total",
+            "type": "u64"
+          },
+          {
+            "name": "timestamp",
+            "type": "i64"
+          }
+        ]
+      }
+    }
+  ]
+}

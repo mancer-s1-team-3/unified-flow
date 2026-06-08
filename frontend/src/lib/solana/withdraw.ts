@@ -310,7 +310,7 @@ export async function withdrawFromStreamOnChain({
   } as any);
 
   const anchorInstruction = await program.methods
-    .withdraw(requestedAmount)
+    .withdraw()
     .accounts({
       recipient,
       mint,

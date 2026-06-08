@@ -429,11 +429,15 @@ describe("unlock-milestone", () => {
 
         const vault = getAssociatedTokenAddressSync(mint, streamPDA, true, TOKEN_PROGRAM_ID);
         const recipientAta = getAssociatedTokenAddressSync(mint, recipient.publicKey, true, TOKEN_PROGRAM_ID);
-
+        const [configPda] = PublicKey.findProgramAddressSync(
+            [Buffer.from("config")],
+            program.programId
+        );
         await program.methods
             .cancel()
-            .accounts({
+            .accountsStrict({
                 creator: creator.publicKey,
+                config: configPda,
                 mint,
                 stream: streamPDA,
                 vault,

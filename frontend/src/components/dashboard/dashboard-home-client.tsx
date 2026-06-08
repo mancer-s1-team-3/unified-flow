@@ -7,9 +7,7 @@ import { CheckCircle2, Copy, Check, X, ExternalLink } from "lucide-react";
 import { api } from "@/lib/api";
 import { useClusterState, useWalletConnection } from "@solana/react-hooks";
 import { DashboardSidebar } from "@/components/dashboard/dashboard-sidebar";
-import { StreamDetailsDrawer } from "@/components/dashboard/stream-details-drawer";
 import { DashboardStreamsPanel } from "@/components/dashboard/dashboard-streams-panel";
-import { ChatbotWidget } from "@/components/dashboard/chatbot-widget";
 import type { TabId } from "@/components/dashboard/types";
 import { createStreamBatchOnChain, createStreamOnChain } from "@/lib/solana/create-stream";
 import { editCliffOnChain } from "@/lib/solana/edit-cliff";
@@ -285,6 +283,16 @@ type Props = {
 
 const DashboardActionPanels = dynamic(
   () => import("@/components/dashboard/dashboard-action-panels").then((mod) => mod.DashboardActionPanels),
+  { ssr: false, loading: () => null }
+);
+
+const StreamDetailsDrawer = dynamic(
+  () => import("@/components/dashboard/stream-details-drawer").then((mod) => mod.StreamDetailsDrawer),
+  { ssr: false, loading: () => null }
+);
+
+const EnhancedChatbot = dynamic(
+  () => import("@/components/dashboard/enhanced-chatbot").then((mod) => mod.EnhancedChatbot),
   { ssr: false, loading: () => null }
 );
 
@@ -813,7 +821,7 @@ export default function Home({ initialStreams = [] }: Props) {
         showNotification("error", "Connect the creator wallet before cancelling a stream.");
         return;
       }
-
+      
       try {
         const result = await cancelStreamOnChain({
           wallet,
@@ -928,12 +936,16 @@ export default function Home({ initialStreams = [] }: Props) {
           uploader: connectedWalletAddress || "Anonymous"
         });
 
-        if (batchResult.streamAddresses.length > 0) {
-          await api.post("/streams/mark-origin", {
-            ids: batchResult.streamAddresses,
-            isCsvCreated: true,
-          });
-        }
+      if (batchResult.streamAddresses.length > 0) {
+  for (let attempt = 0; attempt < 8; attempt++) {
+    const res = await api.post("/streams/mark-origin", {
+      ids: batchResult.streamAddresses,
+      isCsvCreated: true,
+    });
+    if (res.data.count >= batchResult.streamAddresses.length) break;
+    await new Promise(r => setTimeout(r, 1500));
+  }
+}
 
         addNotification({ type: "success", event: "csv_deployed", title: "CSV Deployed", message: `v${csvVersions.length + 1} — ${batchResult.streamAddresses.length} streams deployed in ${batchResult.batches.length} tx(s).` });
         
@@ -1179,6 +1191,7 @@ export default function Home({ initialStreams = [] }: Props) {
 
             {activeTab !== "streams" && (
               <DashboardActionPanels
+               endpoint={endpoint} 
                 activeTab={activeTab}
                 useMultisig={useMultisig}
                 setUseMultisig={setUseMultisig}
@@ -1247,7 +1260,7 @@ export default function Home({ initialStreams = [] }: Props) {
       </div>
 
       {/* Chatbot Assistant */}
-      <ChatbotWidget />
+      <EnhancedChatbot />
 
     </main>
   );

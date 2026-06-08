@@ -1,8 +1,19 @@
 import express from "express";
+import * as anchor from "@coral-xyz/anchor";
+import {
+    ASSOCIATED_TOKEN_PROGRAM_ID,
+    TOKEN_PROGRAM_ID,
+    getAssociatedTokenAddress,
+} from "@solana/spl-token";
+import {
+    Keypair,
+    PublicKey,
+    SystemProgram,
+    Connection,
+} from "@solana/web3.js";
 import cors from "cors";
 import fs from "node:fs/promises";
 import path from "node:path";
-import { PublicKey } from "@solana/web3.js";
 
 import prisma from "../db/prisma";
 import { connection } from "../services/rpc";
@@ -13,6 +24,229 @@ const app = express();
 
 app.use(cors());
 app.use(express.json());
+
+// =====================================================
+// CONSTANTS & SETUP
+// =====================================================
+
+const PROGRAM_ID = new PublicKey("8M5yieUh7pxwUi1YBByDF82nqoorZwaKi8dBoMVpurFa");
+const CONFIG_SEED = Buffer.from("config");
+const STREAM_SEED = Buffer.from("stream");
+const MILESTONE_SEED = Buffer.from("milestone");
+
+// Initialize Anchor program
+// Create a dedicated Connection for Anchor (not the RpcPool wrapper)
+const anchorConnection = new Connection(connection.activeHttpEndpoint, "confirmed");
+const provider = new anchor.AnchorProvider(anchorConnection, new anchor.Wallet(Keypair.generate()), {
+    commitment: "confirmed",
+});
+const program = new anchor.Program(idl as any, provider);
+
+// =====================================================
+// PDA DERIVATION FUNCTIONS
+// =====================================================
+
+function getConfigPda(): [PublicKey, number] {
+    return PublicKey.findProgramAddressSync([CONFIG_SEED], PROGRAM_ID);
+}
+
+function getStreamPda(creator: PublicKey, recipient: PublicKey, nonce: bigint): [PublicKey, number] {
+    const nonceBuffer = Buffer.alloc(8);
+    nonceBuffer.writeBigUInt64LE(nonce);
+    return PublicKey.findProgramAddressSync(
+        [STREAM_SEED, creator.toBuffer(), recipient.toBuffer(), nonceBuffer],
+        PROGRAM_ID
+    );
+}
+
+function getVaultPda(streamPda: PublicKey, mint: PublicKey): [PublicKey, number] {
+    return PublicKey.findProgramAddressSync(
+        [streamPda.toBuffer(), TOKEN_PROGRAM_ID.toBuffer(), mint.toBuffer()],
+        TOKEN_PROGRAM_ID
+    );
+}
+
+function getMilestonePda(streamPda: PublicKey, index: number): [PublicKey, number] {
+    return PublicKey.findProgramAddressSync(
+        [MILESTONE_SEED, streamPda.toBuffer(), Buffer.from([index])],
+        PROGRAM_ID
+    );
+}
+
+// =====================================================
+// TRANSACTION BUILDING FUNCTIONS
+// =====================================================
+
+async function buildWithdrawTransaction(
+    streamId: string
+): Promise<{ transaction: string; accounts: any }> {
+    const stream = await prisma.stream.findUnique({
+        where: { id: streamId },
+    });
+
+    if (!stream) {
+        throw new Error("Stream not found");
+    }
+
+    const creatorPubkey = new PublicKey(stream.creator);
+    const recipientPubkey = new PublicKey(stream.recipient);
+    const mintPubkey = new PublicKey(stream.mint);
+    const nonce = BigInt(stream.nonce);
+
+    const [configPda] = getConfigPda();
+    const [streamPda] = getStreamPda(creatorPubkey, recipientPubkey, nonce);
+    const [vaultPda] = getVaultPda(streamPda, mintPubkey);
+    const recipientAta = await getAssociatedTokenAddress(mintPubkey, recipientPubkey);
+
+    const tx = await program.methods
+        .withdraw()
+        .accounts({
+            recipient: recipientPubkey,
+            mint: mintPubkey,
+            config: configPda,
+            stream: streamPda,
+            vault: vaultPda,
+            recipientTokenAccount: recipientAta,
+            tokenProgram: TOKEN_PROGRAM_ID,
+        })
+        .transaction();
+
+    tx.feePayer = recipientPubkey;
+    const { blockhash } = await anchorConnection.getLatestBlockhash();
+    tx.recentBlockhash = blockhash;
+
+    return {
+        transaction: Buffer.from(tx.serialize({ requireAllSignatures: false })).toString("base64"),
+        accounts: {
+            recipient: recipientPubkey.toBase58(),
+            mint: mintPubkey.toBase58(),
+            config: configPda.toBase58(),
+            stream: streamPda.toBase58(),
+            vault: vaultPda.toBase58(),
+            recipientTokenAccount: recipientAta.toBase58(),
+        },
+    };
+}
+
+async function buildCancelTransaction(
+    streamId: string
+): Promise<{ transaction: string; accounts: any }> {
+    const stream = await prisma.stream.findUnique({
+        where: { id: streamId },
+    });
+
+    if (!stream) {
+        throw new Error("Stream not found");
+    }
+
+    if (!stream.cancelable) {
+        throw new Error("Stream is not cancelable");
+    }
+
+    const creatorPubkey = new PublicKey(stream.creator);
+    const recipientPubkey = new PublicKey(stream.recipient);
+    const mintPubkey = new PublicKey(stream.mint);
+    const nonce = BigInt(stream.nonce);
+
+    const [configPda] = getConfigPda();
+    const [streamPda] = getStreamPda(creatorPubkey, recipientPubkey, nonce);
+    const [vaultPda] = getVaultPda(streamPda, mintPubkey);
+    const creatorAta = await getAssociatedTokenAddress(mintPubkey, creatorPubkey);
+    const recipientAta = await getAssociatedTokenAddress(mintPubkey, recipientPubkey);
+
+    const tx = await program.methods
+        .cancel()
+        .accounts({
+            creator: creatorPubkey,
+            mint: mintPubkey,
+            config: configPda,
+            stream: streamPda,
+            vault: vaultPda,
+            creatorTokenAccount: creatorAta,
+            recipientTokenAccount: recipientAta,
+            tokenProgram: TOKEN_PROGRAM_ID,
+        })
+        .transaction();
+
+    tx.feePayer = creatorPubkey;
+    const { blockhash } = await anchorConnection.getLatestBlockhash();
+    tx.recentBlockhash = blockhash;
+
+    return {
+        transaction: Buffer.from(tx.serialize({ requireAllSignatures: false })).toString("base64"),
+        accounts: {
+            creator: creatorPubkey.toBase58(),
+            mint: mintPubkey.toBase58(),
+            config: configPda.toBase58(),
+            stream: streamPda.toBase58(),
+            vault: vaultPda.toBase58(),
+            creatorTokenAccount: creatorAta.toBase58(),
+            recipientTokenAccount: recipientAta.toBase58(),
+        },
+    };
+}
+
+async function buildUnlockMilestoneTransaction(
+    streamId: string,
+    milestoneIndex: number
+): Promise<{ transaction: string; accounts: any }> {
+    const stream = await prisma.stream.findUnique({
+        where: { id: streamId },
+    });
+
+    if (!stream) {
+        throw new Error("Stream not found");
+    }
+
+    if (stream.vestingType !== 2) {
+        throw new Error("Stream is not a milestone vesting type");
+    }
+
+    if (milestoneIndex >= stream.milestoneCount) {
+        throw new Error("Invalid milestone index");
+    }
+
+    const creatorPubkey = new PublicKey(stream.creator);
+    const recipientPubkey = new PublicKey(stream.recipient);
+    const mintPubkey = new PublicKey(stream.mint);
+    const nonce = BigInt(stream.nonce);
+
+    const [configPda] = getConfigPda();
+    const [streamPda] = getStreamPda(creatorPubkey, recipientPubkey, nonce);
+    const [vaultPda] = getVaultPda(streamPda, mintPubkey);
+    const [milestonePda] = getMilestonePda(streamPda, milestoneIndex);
+
+    const tx = await program.methods
+        .unlockMilestone(new anchor.BN(milestoneIndex))
+        .accounts({
+            creator: creatorPubkey,
+            recipient: recipientPubkey,
+            mint: mintPubkey,
+            config: configPda,
+            stream: streamPda,
+            vault: vaultPda,
+            milestone: milestonePda,
+            tokenProgram: TOKEN_PROGRAM_ID,
+        })
+        .transaction();
+
+    tx.feePayer = creatorPubkey;
+    const { blockhash } = await anchorConnection.getLatestBlockhash();
+    tx.recentBlockhash = blockhash;
+
+    return {
+        transaction: Buffer.from(tx.serialize({ requireAllSignatures: false })).toString("base64"),
+        accounts: {
+            creator: creatorPubkey.toBase58(),
+            recipient: recipientPubkey.toBase58(),
+            mint: mintPubkey.toBase58(),
+            config: configPda.toBase58(),
+            stream: streamPda.toBase58(),
+            vault: vaultPda.toBase58(),
+            milestone: milestonePda.toBase58(),
+        },
+    };
+}
 
 async function readSkillMarkdown() {
     const skillPath = path.resolve(__dirname, "../../skill.md");
@@ -485,6 +719,66 @@ app.post("/users/upsert", async (req, res) => {
             create: { walletAddress: walletAddress.trim(), ...(displayName !== undefined ? { displayName } : {}) },
         });
         res.send(JSON.stringify(user));
+    } catch (err: any) {
+        res.status(400).send({ error: err.message });
+    }
+});
+
+// =====================================================
+// STREAM ACTIONS
+// =====================================================
+
+// Withdraw tokens from a stream
+app.post("/streams/:id/withdraw", async (req, res) => {
+    const { id } = req.params;
+
+    try {
+        const result = await buildWithdrawTransaction(id);
+
+        res.send(JSON.stringify({
+            success: true,
+            transaction: result.transaction,
+            accounts: result.accounts,
+        }, bigintReplacer));
+    } catch (err: any) {
+        res.status(400).send({ error: err.message });
+    }
+});
+
+// Cancel a stream
+app.post("/streams/:id/cancel", async (req, res) => {
+    const { id } = req.params;
+
+    try {
+        const result = await buildCancelTransaction(id);
+
+        res.send(JSON.stringify({
+            success: true,
+            transaction: result.transaction,
+            accounts: result.accounts,
+        }, bigintReplacer));
+    } catch (err: any) {
+        res.status(400).send({ error: err.message });
+    }
+});
+
+// Unlock a milestone
+app.post("/streams/:id/unlock-milestone", async (req, res) => {
+    const { id } = req.params;
+    const { milestoneIndex } = req.body as { milestoneIndex?: number };
+
+    if (milestoneIndex === undefined || milestoneIndex === null) {
+        return res.status(400).send({ error: "milestoneIndex is required." });
+    }
+
+    try {
+        const result = await buildUnlockMilestoneTransaction(id, milestoneIndex);
+
+        res.send(JSON.stringify({
+            success: true,
+            transaction: result.transaction,
+            accounts: result.accounts,
+        }, bigintReplacer));
     } catch (err: any) {
         res.status(400).send({ error: err.message });
     }

@@ -1,0 +1,18 @@
+{
+  "name": "@unifiedflow/unified-flow-sdk",
+  "version": "1.0.0",
+  "description": "SDK for the Unified Flow program",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "scripts": {
+    "build": "tsc"
+  },
+  "dependencies": {
+    "@coral-xyz/anchor": "^0.30.0",
+    "@solana/spl-token": "^0.4.0",
+    "@solana/web3.js": "^1.90.0"
+  },
+  "devDependencies": {
+    "typescript": "^5.0.0"
+  }
+}

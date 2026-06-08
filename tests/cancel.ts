@@ -310,11 +310,16 @@ describe("cancel", () => {
     opts: { signer?: Keypair } = {}
   ) {
     const signer = opts.signer ?? creator;
+    const [configPda] = PublicKey.findProgramAddressSync(
+      [Buffer.from("config")],
+      program.programId
+    );
     return program.methods
       .cancel()
-      .accounts({
+      .accountsStrict({
         creator: signer.publicKey,
         mint,
+        config: configPda,
         stream: streamPda,
         vault: getAssociatedTokenAddressSync(mint, streamPda, true, TOKEN_PROGRAM_ID),
         creatorTokenAccount: creatorAta,
@@ -648,13 +653,17 @@ describe("cancel", () => {
   it("fails with Unauthorized when non-creator (recipient) tries to cancel", async () => {
     await setTime(BASE_NOW);
     const { streamPda, recipientAta } = await setupLinearStream();
-
+    const [configPda] = PublicKey.findProgramAddressSync(
+      [Buffer.from("config")],
+      program.programId
+    );
     await expectError(
       program.methods
         .cancel()
-        .accounts({
+        .accountsStrict({
           creator: recipient.publicKey, // wrong signer
           mint,
+          config: configPda,
           stream: streamPda,
           vault: getAssociatedTokenAddressSync(mint, streamPda, true, TOKEN_PROGRAM_ID),
           creatorTokenAccount: recipientAta,
@@ -670,15 +679,19 @@ describe("cancel", () => {
   it("fails with Unauthorized when stranger tries to cancel", async () => {
     await setTime(BASE_NOW);
     const { streamPda, creatorAta, recipientAta } = await setupLinearStream();
-
+    const [configPda] = PublicKey.findProgramAddressSync(
+      [Buffer.from("config")],
+      program.programId
+    );
     const strangerAta = await createAta(mint, stranger.publicKey);
 
     await expectError(
       program.methods
         .cancel()
-        .accounts({
+        .accountsStrict({
           creator: stranger.publicKey,
           mint,
+          config: configPda,
           stream: streamPda,
           vault: getAssociatedTokenAddressSync(mint, streamPda, true, TOKEN_PROGRAM_ID),
           creatorTokenAccount: strangerAta,

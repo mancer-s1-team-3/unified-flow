@@ -1,5 +1,7 @@
 import dotenv from "dotenv";
 import { PublicKey } from "@solana/web3.js";
+import { Program, AnchorProvider, type Idl } from "@coral-xyz/anchor";
+import { Keypair } from "@solana/web3.js";
 import { connection } from "./rpc";
 import prisma from "../db/prisma";
 import { parseEventsSafely } from "./eventParser";
@@ -12,10 +14,12 @@ import {
     normalizeLinearEdited,
     normalizeCliffEdited,
 } from "./eventNormalizer";
+import idl from "../idl/unified_flow.json";
 
 dotenv.config();
 
 const PROGRAM_ID = new PublicKey(process.env.PROGRAM_ID!);
+const PROGRAM_IDL = idl as Idl;
 
 export async function startIndexer() {
     console.log("Starting indexer...");
@@ -97,7 +101,6 @@ async function handleStreamCreated(
     signature: string
 ) {
     console.log("STREAM CREATED:", event);
-
     const normalized = normalizeStreamCreated(event);
     if (!normalized) {
         console.warn("Skipping StreamCreated event with missing fields:", event);
@@ -105,10 +108,43 @@ async function handleStreamCreated(
     }
 
     const streamId = normalized.stream;
+    const milestoneCount = normalized.milestoneCount;
+
+    // Fetch milestones FIRST before upsert to avoid empty milestones window
+    let milestonesStr = "";
+    if (milestoneCount > 0) {
+        try {
+            const provider = new AnchorProvider(
+                connection as any,
+                { publicKey: Keypair.generate().publicKey, signTransaction: async () => { throw new Error("Read-only"); }, signAllTransactions: async () => { throw new Error("Read-only"); } },
+                { commitment: "confirmed" }
+            );
+            const program = new Program(PROGRAM_IDL, provider);
+            const amounts: string[] = [];
+
+            for (let i = 0; i < milestoneCount; i++) {
+                const [milestonePda] = PublicKey.findProgramAddressSync(
+                    [Buffer.from("milestone"), new PublicKey(streamId).toBuffer(), Buffer.from([i])],
+                    PROGRAM_ID
+                );
+                const account = await (program.account as any).milestoneAccount.fetch(milestonePda);
+                amounts.push(account.amount.toString());
+            }
+
+            milestonesStr = amounts.join(";");
+            console.log(`Fetched ${milestoneCount} milestones for stream ${streamId}`);
+        } catch (error) {
+            console.error(`Error fetching milestones for stream ${streamId}:`, error);
+        }
+    }
 
     await prisma.stream.upsert({
         where: { id: streamId },
-        update: {},
+        update: {
+            // Only update milestones if we fetched them successfully
+            // Never overwrite isCsvCreated — mark-origin may have already set it
+            ...(milestonesStr ? { milestones: milestonesStr } : {}),
+        },
         create: {
             id: streamId,
             creator: normalized.creator,
@@ -121,11 +157,13 @@ async function handleStreamCreated(
             cliffTs: normalized.cliffTs,
             endTs: normalized.endTs,
             vestingType: normalized.vestingType,
-            status: 1, // ACTIVE
+            status: 1,
             cancelable: normalized.cancelable,
             milestoneCount: normalized.milestoneCount,
+            milestones: milestonesStr,
             nonce: normalized.nonce,
             bump: 0,
+            isCsvCreated: false, // default; mark-origin will update after frontend deploy
         }
     });
 

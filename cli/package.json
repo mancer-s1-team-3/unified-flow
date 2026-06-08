@@ -1,0 +1,42 @@
+{
+  "name": "@unifiedflow/cli",
+  "version": "1.0.2",
+  "description": "CLI tool for Unified Flow token distribution protocol",
+  "main": "dist/index.js",
+  "bin": {
+    "unifiedflow": "./dist/cli-entry.js"
+  },
+  "files": [
+    "dist",
+    "README.md"
+  ],
+  "scripts": {
+    "build": "tsc",
+    "prepublishOnly": "npm run build",
+    "start": "node dist/index.js"
+  },
+  "keywords": [
+    "solana",
+    "token",
+    "vesting",
+    "distribution",
+    "cli",
+    "blockchain"
+  ],
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "@coral-xyz/anchor": "^0.32.1",
+    "@solana/spl-token": "^0.4.14",
+    "@solana/web3.js": "^1.98.4",
+    "bs58": "^6.0.0",
+    "dotenv": "^16.6.1"
+  },
+  "devDependencies": {
+    "@types/node": "^20.19.41",
+    "typescript": "^5.9.3"
+  },
+  "engines": {
+    "node": ">=16.0.0"
+  }
+}

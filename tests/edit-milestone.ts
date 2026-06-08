@@ -617,11 +617,17 @@ describe("edit-milestone", () => {
         // FIX: Cancel struct butuh recipient_token_account yang sudah diinisialisasi
         const recipientAta = await createAta(context, admin, mint, recipient.publicKey);
 
+        const [configPda] = PublicKey.findProgramAddressSync(
+            [Buffer.from("config")],
+            program.programId
+        );
+
         await program.methods
             .cancel()
-            .accounts({
+            .accountsStrict({
                 creator: creator.publicKey,
                 mint,
+                config: configPda,
                 stream: streamPda,
                 vault: vaultAta,
                 creatorTokenAccount: creatorAta,

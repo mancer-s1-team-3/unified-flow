@@ -342,9 +342,10 @@ describe("overflow", () => {
   ) {
     return program.methods
       .editLinear(new BN(newEndTs), new BN(topup.toString()))
-      .accounts({
+      .accountsStrict({
         creator: creator.publicKey,
         mint,
+        config: configPda,
         stream: streamPda,
         vault: vaultAta,
         creatorTokenAccount,

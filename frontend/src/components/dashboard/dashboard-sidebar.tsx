@@ -117,6 +117,7 @@ export function MobileBottomNav({
           <button
             onClick={() => setSheetOpen(false)}
             className="p-1 rounded-lg text-zinc-500 hover:text-zinc-200 hover:bg-zinc-800/60 transition-all"
+            aria-label="Close menu"
           >
             <X className="w-3.5 h-3.5" />
           </button>

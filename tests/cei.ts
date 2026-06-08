@@ -329,8 +329,9 @@ describe("cei", () => {
   ) {
     return program.methods
       .editLinear(new BN(newEndTs), new BN(topup))
-      .accounts({
+      .accountsStrict({
         creator: creator.publicKey,
+        config: configPda,
         mint,
         stream: streamPda,
         vault: vaultAta,

@@ -268,6 +268,42 @@ http://localhost:3000
 
 If the backend is also running on port `3000`, run one of the services on a different port.
 
+## TypeScript SDK
+
+A TypeScript SDK is provided in the `sdk/` directory to simplify interacting with the Unified Flow program. It provides auto-resolution of PDAs and a convenient wrapper class.
+
+### Features
+- Pre-configured `UnifiedFlowClient` class to execute all program instructions.
+- Helper utilities to derive all PDAs (e.g., Streams, Milestones, Config, Vault ATAs).
+- Exports standard Anchor IDL types for full type-safety.
+
+### Usage Example
+```typescript
+import { UnifiedFlowClient } from "@uniflow/unified-flow-sdk";
+
+// Initialize the client with an active Anchor Program instance
+const client = new UnifiedFlowClient(program);
+
+// Create a new stream easily without deriving PDAs manually
+await client.createStream(
+  creatorPublicKey,
+  recipientPublicKey,
+  mintPublicKey,
+  amountBN,
+  startTsBN,
+  cliffTsBN,
+  endTsBN,
+  vestingType,
+  milestonesArray,
+  nonceBN
+).signers([creatorKeypair]).rpc();
+```
+
+To use it in the frontend or backend, add the following to your `package.json` dependencies:
+```json
+"@uniflow/unified-flow-sdk": "file:../sdk"
+```
+
 ## Deploy to Devnet
 
 Switch the Solana CLI to devnet:
