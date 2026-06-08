@@ -323,25 +323,33 @@ export const StreamDetailsDrawer = memo(function StreamDetailsDrawer({
               )}
 
               {isCreatorWallet && selectedStream.isCsvCreated ? (
+                   <>
+                   {selectedStream.vestingType === 2 && (
+                    <button onClick={() => prefillAction("unlock_milestone", selectedStream.id)} className="sm:col-span-2 flex items-center justify-center gap-1.5 bg-zinc-900 hover:bg-zinc-800 text-indigo-400 hover:text-indigo-300 border border-zinc-800 hover:border-zinc-700 py-2.5 rounded-xl transition-all">
+                      <Unlock className="w-3.5 h-3.5" />
+                      Unlock Milestone Target
+                    </button>
+                  )}
+                 
                 <button
                   onClick={() => {
                     const decimals =
-  typeof selectedStream.mintDecimals === "number"
-    ? selectedStream.mintDecimals
-    : 0;
+                    typeof selectedStream.mintDecimals === "number"
+                      ? selectedStream.mintDecimals
+                      : 0;
 
-const humanAmount =
-  Number(selectedStream.totalAmount || 0) /
-  Math.pow(10, decimals);
+                    const humanAmount =
+                      Number(selectedStream.totalAmount || 0) /
+                      Math.pow(10, decimals);
 
                     const vestingType = Number(selectedStream.vestingType || 0);
                     const duration = Math.max(Number(selectedStream.endTs || 0) - Number(selectedStream.startTs || 0), 0);
                     const cliffDuration = Math.max(Number(selectedStream.cliffTs || 0) - Number(selectedStream.startTs || 0), 0);
                     const milestones =
-  String(selectedStream.milestones || "")
-    .split(";")
-    .map(v => Number(v) / Math.pow(10, decimals))
-    .join(";");
+                    String(selectedStream.milestones || "")
+                      .split(";")
+                      .map(v => Number(v) / Math.pow(10, decimals))
+                      .join(";");
                     const header = "id,type,amount,duration,cliff_duration,milestones";
                     let row = `${selectedStream.id},${vestingType},${selectedStream.totalAmount},,,`;
 
@@ -362,6 +370,7 @@ const humanAmount =
                   <FileText className="w-3.5 h-3.5" />
                   Edit via CSV Console
                 </button>
+               </>
               ) : isCreatorWallet ? (
                 <>
                   {selectedStream.vestingType === 2 && (
