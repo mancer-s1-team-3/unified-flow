@@ -140,7 +140,7 @@ export async function cancelStreamOnChain({
 
   const anchorInstruction = await program.methods
     .cancel()
-    .accountsPartial({
+    .accounts({
       creator,
       mint,
       config: configPda,
