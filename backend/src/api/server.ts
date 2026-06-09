@@ -23,7 +23,26 @@ import idl from "../idl/unified_flow.json";
 
 const app = express();
 
-app.use(cors());
+// Restrict browser cross-origin access to known frontends. Configure via the
+// CORS_ORIGINS env (comma-separated); falls back to local dev ports. Requests
+// without an Origin header (curl, server-to-server, health checks) are allowed
+// through — CORS is a browser-enforced control, not a substitute for auth.
+const allowedOrigins = (process.env.CORS_ORIGINS || "http://localhost:3000,http://localhost:3001")
+    .split(",")
+    .map((origin) => origin.trim())
+    .filter(Boolean);
+
+app.use(
+    cors({
+        origin(origin, callback) {
+            if (!origin || allowedOrigins.includes(origin)) {
+                callback(null, true);
+            } else {
+                callback(new Error(`Origin ${origin} is not allowed by CORS`));
+            }
+        },
+    }),
+);
 app.use(express.json());
 
 // =====================================================
