@@ -1563,14 +1563,14 @@ const editCsvDisabled = !csvEditText?.trim()
       <div className={`mt-12 bg-zinc-950 border border-zinc-900 rounded-2xl p-4 font-mono text-[11px] relative overflow-hidden ${mobileNarrowFormClass}`}>
         <div className="absolute top-0 right-0 p-3 flex gap-2"><span className="w-2.5 h-2.5 rounded-full bg-red-500/60" /><span className="w-2.5 h-2.5 rounded-full bg-amber-500/60" /><span className="w-2.5 h-2.5 rounded-full bg-green-500/60" /></div>
         <div className="flex items-center gap-2 text-indigo-400 font-bold mb-2"><Terminal className="w-4 h-4 shrink-0" /><span>Equivalent CLI / Agent Skill Call</span></div>
-        <div className="text-zinc-400 select-all overflow-hidden whitespace-normal break-words py-1 sm:overflow-x-auto sm:whitespace-nowrap sm:break-normal">
+     <div className="text-zinc-400 select-all overflow-hidden whitespace-normal break-words py-1 sm:overflow-x-auto sm:whitespace-nowrap sm:break-normal">
 
   {activeTab === "create_streams" && (
     <span>
       {createMode === "manual"
         ? createForm.type === "2"
-          ? `$ unifiedflow create ${createForm.recipient || "<recipient>"} ${createForm.mint || "<mint>"} ${createForm.amount || "<amount>"} 2 ${createForm.milestones || "<100,200,300>"}`
-          : `$ unifiedflow create ${createForm.recipient || "<recipient>"} ${createForm.mint || "<mint>"} ${createForm.amount || "<amount>"} ${createForm.type || "0"} ${createForm.duration || "<duration_seconds>"}`
+          ? `$ unifiedflow create ${createForm.recipient || "<recipient>"} ${createForm.mint || "<mint>"} ${createForm.amount || "<amount>"} 2 ${milestoneAmounts.filter(Boolean).join(",") || "<100,200,300>"}`
+          : `$ unifiedflow create ${createForm.recipient || "<recipient>"} ${createForm.mint || "<mint>"} ${createForm.amount || "<amount>"} ${createForm.type || "0"}${createForm.type === "1" ? ` ${createForm.duration || "<duration_secs>"} ${createForm.cliffDuration || "<cliff_secs>"}` : ` ${createForm.duration || "<duration_secs>"}`}`
         : `$ unifiedflow create-batch ./streams.csv`}
     </span>
   )}
@@ -1595,10 +1595,24 @@ const editCsvDisabled = !csvEditText?.trim()
 
   {activeTab === "edit_milestone" && (
     <span>
-      $ unifiedflow edit-milestone{" "}
-      {editMilestoneForm.streamId || "<stream_address>"}{" "}
-      {editMilestoneForm.index || "<index>"}{" "}
-      {editMilestoneForm.amount || "<new_amount>"}
+      $ unifiedflow edit-batch ./edits.csv
+      {editMilestoneForm.streamId && (
+        <>
+          {"\n"}
+          {`# or manually: $ unifiedflow edit-milestone ${editMilestoneForm.streamId} <idx> <amt>`}
+        </>
+      )}
+    </span>
+  )}
+
+  {activeTab === "edit_linear" && (
+    <span>
+      $ unifiedflow edit-linear{" "}
+      {editLinearForm.streamId || "<stream_address>"}{" "}
+      {editLinearForm.newEndDuration || "<new_duration_secs>"}{" "}
+      {editLinearForm.topupAmount && editLinearForm.topupAmount !== "0"
+        ? editLinearForm.topupAmount
+        : "<topup_amount>"}
     </span>
   )}
 
@@ -1606,13 +1620,15 @@ const editCsvDisabled = !csvEditText?.trim()
     <span>
       $ unifiedflow edit-cliff{" "}
       {editCliffForm.streamId || "<stream_address>"}{" "}
-      {editCliffForm.newCliffTs || "<unix_timestamp>"}
+      {editCliffForm.newCliffDuration || "<new_cliff_duration_secs>"}
     </span>
   )}
 
-  
-
-
+  {activeTab === "edit_csv" && (
+    <span>
+      $ unifiedflow edit-batch ./edits.csv
+    </span>
+  )}
 
 </div>  </div>
       
