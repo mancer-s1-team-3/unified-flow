@@ -173,6 +173,67 @@ const CLI_WRITE_COMMANDS = [
   }
 ];
 
+const SDK_METHODS = [
+  {
+    name: "createStream",
+    desc: "Create a new vesting stream.",
+    example: `await client.createStream(
+  recipient,
+  mint,
+  amount,
+  startTs,
+  cliffTs,
+  endTs,
+  0,
+  [],
+  nonce
+);`,
+  },
+  {
+    name: "withdraw",
+    desc: "Withdraw vested tokens.",
+    example: `await client.withdraw(streamPDA);`,
+  },
+  {
+    name: "cancel",
+    desc: "Cancel active stream.",
+    example: `await client.cancel(streamPDA);`,
+  },
+  {
+    name: "unlockMilestone",
+    desc: "Unlock milestone.",
+    example: `await client.unlockMilestone(streamPDA, 0);`,
+  },
+  {
+    name: "editMilestone",
+    desc: "Update milestone allocation.",
+    example: `await client.editMilestone(
+  streamPDA,
+  mint,
+  milestoneIndex,
+  newAmount
+);`,
+  },
+  {
+    name: "editCliff",
+    desc: "Update cliff timestamp.",
+    example: `await client.editCliff(
+  streamPDA,
+  newCliffTs
+);`,
+  },
+  {
+    name: "editLinear",
+    desc: "Extend stream and/or topup.",
+    example: `await client.editLinear(
+  streamPDA,
+  mint,
+  newEndTs,
+  topupAmount
+);`,
+  },
+];
+
 // ============================================================================
 // INTERACTIVE CODE SNIPPET WRAPPER
 // ============================================================================
@@ -220,8 +281,9 @@ const CliCard = ({ cmd, desc, example }: { cmd: string; desc: string; example?: 
 // ============================================================================
 export default function DocsPage() {
   const router = useRouter();
-  const [activeTab, setActiveTab] = useState<"overview" | "api" | "mcp" | "cli">("overview");
-
+const [activeTab, setActiveTab] = useState<
+  "overview" | "sdk" | "api" | "mcp" | "cli"
+>("overview");
   useEffect(() => {
     const resetView = () => {
       setActiveTab("overview");
@@ -292,6 +354,11 @@ export default function DocsPage() {
         <nav className="flex flex-wrap gap-2.5 border-b border-zinc-800 pb-5 mb-10">
           {[
             { id: "overview", label: "Vesting Models", icon: <BookOpen className="w-4 h-4" /> },
+            {
+  id: "sdk",
+  label: "TypeScript SDK",
+  icon: <Coins className="w-4 h-4" />,
+},
             { id: "api", label: "REST API", icon: <Globe className="w-4 h-4" /> },
             { id: "mcp", label: "Model Context Protocol", icon: <Cpu className="w-4 h-4" /> },
             { id: "cli", label: "CLI & Agent Skills", icon: <Terminal className="w-4 h-4" /> },
@@ -398,7 +465,106 @@ export default function DocsPage() {
                 </div>
               </section>
             )}
+{activeTab === "sdk" && (
+  <section className="space-y-8 animate-fadeIn">
 
+    <div className="p-6 rounded-2xl bg-zinc-900/40 border border-zinc-800">
+      <h2 className="text-2xl font-bold flex items-center gap-2">
+        <Coins className="w-5 h-5 text-indigo-400" />
+        TypeScript SDK
+      </h2>
+
+      <p className="mt-3 text-sm text-zinc-400">
+        Official SDK for creating, managing, editing,
+        and withdrawing vesting streams on Solana.
+      </p>
+    </div>
+
+    <div className="p-6 rounded-2xl bg-zinc-900/20 border border-zinc-800">
+      <h3 className="font-semibold mb-3">
+        Installation
+      </h3>
+
+      <CodeSnippet
+        code={`npm install @unifiedflow/unified-flow-sdk`}
+      />
+    </div>
+
+    <div className="p-6 rounded-2xl bg-zinc-900/20 border border-zinc-800">
+      <h3 className="font-semibold mb-3">
+        Initialize Client
+      </h3>
+
+      <CodeSnippet
+        code={`const client = new UnifiedFlowClient(
+  program,
+  wallet,
+  connection,
+  "confirmed"
+);`}
+      />
+    </div>
+
+    <div className="space-y-4">
+      <h3 className="font-semibold">
+        Available Methods
+      </h3>
+
+      {SDK_METHODS.map((method) => (
+        <div
+          key={method.name}
+          className="p-5 rounded-2xl bg-zinc-900/20 border border-zinc-800"
+        >
+          <h4 className="font-mono text-indigo-400">
+            {method.name}()
+          </h4>
+
+          <p className="mt-2 text-xs text-zinc-400">
+            {method.desc}
+          </p>
+
+          <CodeSnippet code={method.example} />
+        </div>
+      ))}
+    </div>
+
+    <div className="p-6 rounded-2xl bg-zinc-900/20 border border-zinc-800">
+      <h3 className="font-semibold mb-3">
+        Transaction Progress
+      </h3>
+
+      <CodeSnippet
+        code={`await client.withdraw(
+  streamPDA,
+  (status) => {
+    console.log(status);
+  }
+);`}
+      />
+
+      <div className="grid grid-cols-3 gap-3 mt-4">
+        <div className="p-3 rounded-lg bg-zinc-950 border border-zinc-800">
+          <span className="font-mono text-cyan-400 text-xs">
+            wallet_approval
+          </span>
+        </div>
+
+        <div className="p-3 rounded-lg bg-zinc-950 border border-zinc-800">
+          <span className="font-mono text-amber-400 text-xs">
+            sending
+          </span>
+        </div>
+
+        <div className="p-3 rounded-lg bg-zinc-950 border border-zinc-800">
+          <span className="font-mono text-emerald-400 text-xs">
+            confirming
+          </span>
+        </div>
+      </div>
+    </div>
+
+  </section>
+)}
             {/* ================================================================
                 TAB 2: REST API
                 ================================================================ */}
