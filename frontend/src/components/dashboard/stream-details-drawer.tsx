@@ -324,13 +324,25 @@ export const StreamDetailsDrawer = memo(function StreamDetailsDrawer({
 
               {isCreatorWallet && selectedStream.isCsvCreated ? (
                    <>
-                   {selectedStream.vestingType === 2 && (
-                    <button onClick={() => prefillAction("unlock_milestone", selectedStream.id)} className="sm:col-span-2 flex items-center justify-center gap-1.5 bg-zinc-900 hover:bg-zinc-800 text-indigo-400 hover:text-indigo-300 border border-zinc-800 hover:border-zinc-700 py-2.5 rounded-xl transition-all">
-                      <Unlock className="w-3.5 h-3.5" />
-                      Unlock Milestone Target
-                    </button>
-                  )}
-                 
+                {selectedStream.vestingType === 2 && (
+      isCancelled ? (
+        <div className="sm:col-span-2 flex items-center justify-center gap-1.5 bg-zinc-900 text-zinc-500 border border-zinc-800 py-2.5 rounded-xl text-center">
+          <Unlock className="w-3.5 h-3.5" />
+          Unlock Disabled
+        </div>
+      ) : (
+        <button onClick={() => prefillAction("unlock_milestone", selectedStream.id)} className="sm:col-span-2 flex items-center justify-center gap-1.5 bg-zinc-900 hover:bg-zinc-800 text-indigo-400 hover:text-indigo-300 border border-zinc-800 hover:border-zinc-700 py-2.5 rounded-xl transition-all">
+          <Unlock className="w-3.5 h-3.5" />
+          Unlock Milestone Target
+        </button>
+      )
+    )}
+     {isCancelled ? (
+      <div className="sm:col-span-2 flex items-center justify-center gap-1.5 bg-zinc-900 text-zinc-500 border border-zinc-800 py-2.5 rounded-xl text-center">
+        <FileText className="w-3.5 h-3.5" />
+        Edit Disabled
+      </div>
+    ) : (
                 <button
                   onClick={() => {
                     const decimals =
@@ -370,28 +382,43 @@ export const StreamDetailsDrawer = memo(function StreamDetailsDrawer({
                   <FileText className="w-3.5 h-3.5" />
                   Edit via CSV Console
                 </button>
+    )}
                </>
-              ) : isCreatorWallet ? (
-                <>
-                  {selectedStream.vestingType === 2 && (
-                    <button onClick={() => prefillAction("unlock_milestone", selectedStream.id)} className="sm:col-span-2 flex items-center justify-center gap-1.5 bg-zinc-900 hover:bg-zinc-800 text-indigo-400 hover:text-indigo-300 border border-zinc-800 hover:border-zinc-700 py-2.5 rounded-xl transition-all">
-                      <Unlock className="w-3.5 h-3.5" />
-                      Unlock Milestone Target
-                    </button>
-                  )}
+             ) : isCreatorWallet ? (
+  <>
+    {selectedStream.vestingType === 2 && (
+      isCancelled ? (
+        <div className="sm:col-span-2 flex items-center justify-center gap-1.5 bg-zinc-900 text-zinc-500 border border-zinc-800 py-2.5 rounded-xl text-center">
+          <Unlock className="w-3.5 h-3.5" />
+          Unlock Disabled
+        </div>
+      ) : (
+        <button onClick={() => prefillAction("unlock_milestone", selectedStream.id)} className="sm:col-span-2 flex items-center justify-center gap-1.5 bg-zinc-900 hover:bg-zinc-800 text-indigo-400 hover:text-indigo-300 border border-zinc-800 hover:border-zinc-700 py-2.5 rounded-xl transition-all">
+          <Unlock className="w-3.5 h-3.5" />
+          Unlock Milestone Target
+        </button>
+      )
+    )}
 
-                  <button
-                    onClick={() => {
-                      const tab = selectedStream.vestingType === 0 ? "edit_linear" : selectedStream.vestingType === 1 ? "edit_cliff" : "edit_milestone";
-                      prefillAction(tab, tab === "edit_milestone" ? selectedStream : selectedStream.id);
-                    }}
-                    className="sm:col-span-2 flex items-center justify-center gap-1.5 bg-zinc-900 hover:bg-zinc-800 text-zinc-400 hover:text-zinc-200 border border-zinc-850 hover:border-zinc-750 py-2.5 rounded-xl transition-all"
-                  >
-                    <Settings className="w-3.5 h-3.5" />
-                    Modify Vesting Structure
-                  </button>
-                </>
-              ) : null}
+    {isCancelled ? (
+      <div className="sm:col-span-2 flex items-center justify-center gap-1.5 bg-zinc-900 text-zinc-500 border border-zinc-800 py-2.5 rounded-xl text-center">
+        <Settings className="w-3.5 h-3.5" />
+        Modify Disabled
+      </div>
+    ) : (
+      <button
+        onClick={() => {
+          const tab = selectedStream.vestingType === 0 ? "edit_linear" : selectedStream.vestingType === 1 ? "edit_cliff" : "edit_milestone";
+          prefillAction(tab, tab === "edit_milestone" ? selectedStream : selectedStream.id);
+        }}
+        className="sm:col-span-2 flex items-center justify-center gap-1.5 bg-zinc-900 hover:bg-zinc-800 text-zinc-400 hover:text-zinc-200 border border-zinc-850 hover:border-zinc-750 py-2.5 rounded-xl transition-all"
+      >
+        <Settings className="w-3.5 h-3.5" />
+        Modify Vesting Structure
+      </button>
+    )}
+  </>
+) : null}
             </div>
           </div>
         )}
