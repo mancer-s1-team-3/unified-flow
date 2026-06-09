@@ -296,7 +296,7 @@ export const StreamDetailsDrawer = memo(function StreamDetailsDrawer({
             <div className="text-[10px] text-zinc-500 font-bold uppercase tracking-widest">Instant Action Shortcuts</div>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs font-semibold min-w-0">
               {isRecipientWallet && !isCancelled && (
-                  isEnded && !hasClaimable ?(
+                   !hasClaimable ?(
                  <div className="flex items-center justify-center gap-1.5 bg-zinc-900 text-zinc-500 border border-zinc-800 py-2.5 rounded-xl text-center">
       <ArrowDownRight className="w-3.5 h-3.5" />
       Claim Disabled
