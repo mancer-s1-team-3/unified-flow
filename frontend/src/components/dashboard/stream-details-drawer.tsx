@@ -62,7 +62,9 @@ export const StreamDetailsDrawer = memo(function StreamDetailsDrawer({
   const isFullyClaimed = total > 0 && withdrawn >= total;
   const isEnded = !isCancelled && (selectedStream.vestingType === 2 ? isMilestoneCompleted : currentTimeTs >= end);
   const cancelDisabled = isCancelled || isEnded || isFullyClaimed;
-  const hasClaimable = unlocked > withdrawn;
+  const hasClaimable = selectedStream.vestingType === 2
+  ? unlocked > withdrawn                          // milestone: pakai unlockedAmount
+  : total > withdrawn;                            // linear/cliff: pakai total - withdrawn
 
   const drawer = (
     <div className="fixed inset-0 z-50 bg-zinc-950/95 sm:bg-black/60 backdrop-blur-md flex justify-end overflow-x-hidden animate-in fade-in duration-200">
@@ -296,20 +298,18 @@ export const StreamDetailsDrawer = memo(function StreamDetailsDrawer({
             <div className="text-[10px] text-zinc-500 font-bold uppercase tracking-widest">Instant Action Shortcuts</div>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs font-semibold min-w-0">
               {isRecipientWallet && !isCancelled && (
-                   !hasClaimable ?(
-                 <div className="flex items-center justify-center gap-1.5 bg-zinc-900 text-zinc-500 border border-zinc-800 py-2.5 rounded-xl text-center">
+  isEnded && !hasClaimable ? (
+    <div className="flex items-center justify-center gap-1.5 bg-zinc-900 text-zinc-500 border border-zinc-800 py-2.5 rounded-xl text-center">
       <ArrowDownRight className="w-3.5 h-3.5" />
       Claim Disabled
     </div>
-              ):(
-
-        
-                <button onClick={() => prefillAction("withdraw", selectedStream.id)} className="flex items-center justify-center gap-1.5 bg-indigo-600 hover:bg-indigo-700 text-zinc-50 py-2.5 rounded-xl transition-all">
+  ) : (
+    <button onClick={() => prefillAction("withdraw", selectedStream.id)} className="flex items-center justify-center gap-1.5 bg-indigo-600 hover:bg-indigo-700 text-zinc-50 py-2.5 rounded-xl transition-all">
       <ArrowDownRight className="w-3.5 h-3.5" />
       Claim Tokens
     </button>
-              ))}
-
+  )
+)}
               {isCreatorWallet && selectedStream.cancelable && !cancelDisabled && (
                 <button onClick={() => prefillAction("cancel", selectedStream.id)} className="flex items-center justify-center gap-1.5 bg-zinc-900 hover:bg-zinc-800 text-red-400 hover:text-red-300 border border-zinc-800 hover:border-zinc-700 py-2.5 rounded-xl transition-all">
                   <XCircle className="w-3.5 h-3.5" />
