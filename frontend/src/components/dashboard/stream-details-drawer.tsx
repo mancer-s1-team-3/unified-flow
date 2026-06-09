@@ -297,17 +297,17 @@ export const StreamDetailsDrawer = memo(function StreamDetailsDrawer({
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs font-semibold min-w-0">
               {isRecipientWallet && !isCancelled && (
                   isEnded && !hasClaimable ?(
-                <button onClick={() => prefillAction("withdraw", selectedStream.id)} className="flex items-center justify-center gap-1.5 bg-indigo-600 hover:bg-indigo-700 text-zinc-50 py-2.5 rounded-xl transition-all">
-                  <ArrowDownRight className="w-3.5 h-3.5" />
-                  Claim Tokens
-                </button>
+                 <div className="flex items-center justify-center gap-1.5 bg-zinc-900 text-zinc-500 border border-zinc-800 py-2.5 rounded-xl text-center">
+      <ArrowDownRight className="w-3.5 h-3.5" />
+      Claim Disabled
+    </div>
               ):(
 
         
-                <div className="flex items-center justify-center gap-1.5 bg-zinc-900 text-zinc-500 border border-zinc-800 py-2.5 rounded-xl text-center">
-                  <ArrowDownRight className="w-3.5 h-3.5" />
-                  Claim Disabled
-                </div>
+                <button onClick={() => prefillAction("withdraw", selectedStream.id)} className="flex items-center justify-center gap-1.5 bg-indigo-600 hover:bg-indigo-700 text-zinc-50 py-2.5 rounded-xl transition-all">
+      <ArrowDownRight className="w-3.5 h-3.5" />
+      Claim Tokens
+    </button>
               ))}
 
               {isCreatorWallet && selectedStream.cancelable && !cancelDisabled && (
