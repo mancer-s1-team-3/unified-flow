@@ -1,114 +1,440 @@
 ---
-title: Solana Token Distribution AI Agent Skills & Capabilities
-description: A comprehensive skill and tool specification manual for AI Agents managing Solana-based vesting, streaming, and milestone workflows.
+
+title: Unified Flow AI Agent Skills & Capabilities
+description: Comprehensive capability specification for AI agents interacting with Unified Flow token vesting, streaming, milestone management, SDK, MCP, and CLI interfaces.
 category: AI Agents
 tags:
-  - solana
-  - mcp
-  - vesting
-  - cli
-  - ai-agents
----
 
-# 🧠 Solana Token Distribution AI Agent Skills & Capabilities
-
-This document is a comprehensive skill manual for AI Agents (such as Cursor, Claude Desktop, or Gemini) interacting with the **Solana Token Vesting & Streaming Protocol** through our backend services, MCP tools, and CLI commands.
-
----
-
-## 🛠️ 1. Core Protocol Agent Skills
-
-An AI Agent equipped with this codebase possesses the following specialized skills:
-
-### 🪙 Skill A: Vesting Stream Management
-*   **Linear Vesting Stream Creation**: Establish constant, second-by-second token releases.
-*   **Cliff Vesting Stream Creation**: Lock tokens until an exact timestamp (cliff) is reached, unlocking the full amount at once.
-*   **Milestone Vesting Stream Creation**: Lock tokens in custom sequential milestone buckets.
-*   **On-Chain Stream Verification**: Inspect the exact remaining, withdrawn, start, end, and cliff states on the Solana blockchain.
-
-### 🔐 Skill B: Milestone Orchestration
-*   **PDA Derivation**: Calculate exact, unique seeds for sequential milestone PDAs:
-    `[b"milestone", streamPda, [index_u8]]`
-*   **Sequential Unlocking**: Trigger milestone releases in exact sequence (e.g. Milestone 0, then 1, then 2).
-*   **Dynamic Rebalancing**: Edit un-unlocked milestone allocations, automatically transferring tokens to/from the stream's vault to reflect the new allocation.
-
-### 💸 Skill C: Liquidity & Claims
-*   **Claim/Withdrawal Execution**: Claim unlocked tokens from active streams into the recipient's ATA.
-*   **Oracle-Driven Fee Handling**: Read the devnet Chainlink price feed (`99B2bTijsU6f1GCT73HmdR7HCFFjGMBcPZY6jZ96ynrR`) to calculate the dynamic SOL transaction fee automatically.
-*   **Cancellation Recovery**: Cancel active streams, returning unvested tokens to the creator and claimable tokens to the recipient.
+* solana
+* vesting
+* streaming
+* milestones
+* mcp
+* sdk
+* cli
+* ai-agents
 
 ---
 
-## 🔌 2. MCP Tools Reference Sheet
+# 🧠 Unified Flow AI Agent Skills & Capabilities
 
-When speaking to an AI client, these tools are exposed natively. The agent can invoke:
+This document defines the capabilities, operational boundaries, and workflow patterns available to AI agents interacting with the Unified Flow Protocol.
 
-| Tool Name | Operation Type | Key Inputs | Description |
-| :--- | :--- | :--- | :--- |
-| `get_streams` | Indexed API Query | `creator`, `recipient`, `status`, `vestingType`, `limit` | Fetch indexed streams from the backend API. |
-| `get_stream_details` | On-Chain Read | `streamAddress` | Read live, raw on-chain state & all derived milestone PDAs. |
-| `get_protocol_config` | On-Chain Read | None | Get global protocol setup, admin permissions, and withdraw fees. |
-| `create_stream` | Transaction | `recipient`, `mint`, `amount`, `vestingType`, `milestones`, `nonce` | Construct, sign, and broadcast a new vesting stream transaction. |
-| `withdraw_from_stream`| Transaction | `streamAddress` | Claim available vested tokens using dynamic Chainlink feed rates. |
-| `cancel_stream` | Transaction | `streamAddress` | Creator cancels stream, returning unvested tokens. |
-| `unlock_milestone` | Transaction | `streamAddress` | Approve and unlock the next sequential milestone in a stream. |
-| `edit_milestone` | Transaction | `streamAddress`, `milestoneIndex`, `newAmount` | Re-allocate tokens for a locked milestone. |
-| `edit_cliff` | Transaction | `streamAddress`, `newCliffTs` | Shift the cliff date of an active, unwithdrawn stream. |
-| `initialize_protocol` | Transaction | None | Initialize global protocol configuration. |
+Unified Flow enables programmable token vesting, milestone-based distributions, and streaming payments on Solana.
 
 ---
 
-## 📟 3. CLI Command Cheat Sheet
+# 🛠️ 1. Core Protocol Skills
 
-AI agents or terminal users can perform operations directly using:
+## 🪙 Skill A: Vesting Stream Management
 
-*   **View global config**:
-    ```bash
-    npm run cli config
-    ```
-*   **View stream state & milestones**:
-    ```bash
-    npm run cli view <streamAddress>
-    ```
-*   **Initialize protocol config**:
-    ```bash
-    npm run cli init
-    ```
-*   **Create a Linear Stream (10,000 tokens for 30 days)**:
-    ```bash
-    npm run cli create <recipient> <mint> 10000 0 2592000
-    ```
-*   **Create a Milestone Stream (1,000 tokens split into 300, 300, 400)**:
-    ```bash
-    npm run cli create <recipient> <mint> 1000 2 300,300,400
-    ```
-*   **Withdraw claimable tokens**:
-    ```bash
-    npm run cli withdraw <streamAddress>
-    ```
-*   **Unlock next milestone**:
-    ```bash
-    npm run cli unlock <streamAddress>
-    ```
-*   **Edit milestone #1 amount to 500**:
-    ```bash
-    npm run cli edit-milestone <streamAddress> 1 500
-    ```
-*   **Edit cliff timestamp**:
-    ```bash
-    npm run cli edit-cliff <streamAddress> <newTimestamp>
-    ```
-*   **Cancel stream**:
-    ```bash
-    npm run cli cancel <streamAddress>
-    ```
+AI agents can:
+
+* Create Linear Vesting Streams
+* Create Cliff Vesting Streams
+* Create Milestone Vesting Streams
+* Verify stream state directly on-chain
+* Track vesting progress
+* Calculate vested and claimable balances
+* Monitor stream lifecycle status
+
+Supported vesting models:
+
+| Type      | Value | Description                                            |
+| --------- | ----- | ------------------------------------------------------ |
+| Linear    | 0     | Continuous token release over time                     |
+| Cliff     | 1     | Entire allocation unlocks at cliff timestamp           |
+| Milestone | 2     | Tokens unlock sequentially through milestone approvals |
 
 ---
 
-## 🛡️ 4. Protocol Boundaries & Safety Rules
+## 🔐 Skill B: Milestone Orchestration
 
-For AI agents performing operations, the following rules **must** be enforced:
-1.  **Milestone Allocation Sum**: When creating a milestone stream, the sum of all elements in the `milestones` array **must exactly equal** the total `amount` parameter, otherwise the transaction will fail.
-2.  **Milestone Unlock Order**: Milestones must be unlocked sequentially. Trying to unlock milestone index `2` before milestone index `1` is approved will trigger an on-chain program error.
-3.  **Oracle Feed Dependency**: To execute withdrawals, the Chainlink feed `99B2bTijsU6f1GCT73HmdR7HCFFjGMBcPZY6jZ96ynrR` must be accessible. If the feed is stale (older than 1 hour), withdrawals are automatically blocked on-chain to prevent fee exploitation.
-4.  **Edit Cliffs**: Cliffs can only be edited if the stream hasn't started and no tokens have been withdrawn yet.
+AI agents can:
+
+* Derive milestone PDAs
+* Verify milestone accounts
+* Unlock milestones sequentially
+* Edit locked milestone allocations
+* Track milestone progress
+* Validate milestone totals
+
+Milestone PDA derivation:
+
+```text
+[b"milestone", streamPda, [index_u8]]
+```
+
+Example:
+
+```text
+Milestone 0
+Milestone 1
+Milestone 2
+...
+```
+
+Unlock order is strictly sequential.
+
+---
+
+## ✏️ Skill C: Stream Modification
+
+AI agents can modify active streams.
+
+### Edit Milestone
+
+Adjust locked milestone allocations.
+
+Supported actions:
+
+* Increase milestone allocation
+* Decrease milestone allocation
+* Automatically rebalance vault accounting
+
+### Edit Cliff
+
+Modify cliff timestamp before withdrawals occur.
+
+Supported actions:
+
+* Move cliff later
+* Move cliff earlier (subject to protocol rules)
+
+### Edit Linear
+
+Modify an active linear stream.
+
+Supported actions:
+
+* Extend end timestamp
+* Add additional tokens
+* Perform extension and top-up in a single transaction
+
+---
+
+## 💸 Skill D: Claims & Liquidity Management
+
+AI agents can:
+
+* Withdraw vested tokens
+* Calculate claimable balances
+* Monitor vault balances
+* Handle fee calculations
+* Recover funds through cancellation
+
+Supported actions:
+
+### Withdraw
+
+Transfer claimable tokens from stream vault to recipient ATA.
+
+### Cancel
+
+Cancel active streams.
+
+Protocol behavior:
+
+* Unvested tokens return to creator
+* Claimable tokens remain withdrawable by recipient
+
+---
+
+## 📊 Skill E: Stream Monitoring & Verification
+
+Agents can inspect:
+
+* Creator address
+* Recipient address
+* Token mint
+* Stream vault
+* Start timestamp
+* Cliff timestamp
+* End timestamp
+* Total allocation
+* Withdrawn amount
+* Stream status
+* Milestone states
+
+Supported lifecycle states:
+
+| Status    | Description                |
+| --------- | -------------------------- |
+| Active    | Stream currently vesting   |
+| Completed | Fully vested and withdrawn |
+| Cancelled | Stream terminated          |
+| Unknown   | Reserved state             |
+
+---
+
+# 🔌 2. MCP Tools Reference
+
+| Tool                 | Type        | Description                    |
+| -------------------- | ----------- | ------------------------------ |
+| get_streams          | Query       | Fetch indexed streams          |
+| get_stream_details   | Read        | Read raw on-chain stream state |
+| get_protocol_config  | Read        | Read protocol configuration    |
+| create_stream        | Transaction | Create vesting stream          |
+| withdraw_from_stream | Transaction | Withdraw vested tokens         |
+| cancel_stream        | Transaction | Cancel stream                  |
+| unlock_milestone     | Transaction | Unlock next milestone          |
+| edit_milestone       | Transaction | Modify milestone allocation    |
+| edit_cliff           | Transaction | Modify cliff timestamp         |
+| initialize_protocol  | Transaction | Initialize protocol config     |
+
+---
+
+# 💻 3. SDK Capabilities
+
+The Unified Flow SDK exposes strongly typed methods for AI-assisted development.
+
+Available methods:
+
+```typescript
+createStream(...)
+withdraw(...)
+cancel(...)
+unlockMilestone(...)
+editMilestone(...)
+editCliff(...)
+editLinear(...)
+```
+
+Builder pattern support:
+
+```typescript
+const builder = await client.withdraw(...);
+
+await builder.rpc();
+await builder.transaction();
+await builder.simulate();
+```
+
+AI agents can generate:
+
+* Frontend integrations
+* Backend automation
+* Wallet workflows
+* Custom transaction pipelines
+* Testing scripts
+
+---
+
+# 📟 4. CLI Command Reference
+
+## Read Commands
+
+```bash
+unifiedflow config
+```
+
+```bash
+unifiedflow view <streamAddress>
+```
+
+---
+
+## Create Commands
+
+Linear stream:
+
+```bash
+unifiedflow create <recipient> <mint> 10000 0 2592000
+```
+
+Cliff stream:
+
+```bash
+unifiedflow create <recipient> <mint> 10000 1 2592000
+```
+
+Milestone stream:
+
+```bash
+unifiedflow create <recipient> <mint> 1000 2 300,300,400
+```
+
+---
+
+## Management Commands
+
+Withdraw:
+
+```bash
+unifiedflow withdraw <streamAddress>
+```
+
+Cancel:
+
+```bash
+unifiedflow cancel <streamAddress>
+```
+
+Unlock milestone:
+
+```bash
+unifiedflow unlock <streamAddress>
+```
+
+Edit milestone:
+
+```bash
+unifiedflow edit-milestone <streamAddress> <index> <amount>
+```
+
+Edit cliff:
+
+```bash
+unifiedflow edit-cliff <streamAddress> <timestamp>
+```
+
+---
+
+## Utility Commands
+
+Display version information:
+
+```bash
+unifiedflow version
+```
+
+```bash
+unifiedflow -v
+```
+
+```bash
+unifiedflow --version
+```
+
+Output:
+
+```text
+Unified Flow CLI
+
+Version: 1.x.x
+Program ID: ...
+RPC: ...
+```
+
+---
+
+# 🌐 5. Network Support
+
+| Network  | Supported |
+| -------- | --------- |
+| Devnet   | Yes       |
+| Mainnet  | Yes       |
+| Localnet | Yes       |
+
+Supported environments:
+
+* solana-test-validator
+* Bankrun
+* Devnet
+* Mainnet
+
+---
+
+# 🛡️ 6. Safety Rules
+
+AI agents MUST enforce the following constraints.
+
+## Rule 1 — Milestone Sum Validation
+
+For milestone streams:
+
+```text
+sum(milestones) == totalAmount
+```
+
+must always hold.
+
+---
+
+## Rule 2 — Sequential Unlocking
+
+Milestones must be unlocked in order.
+
+Valid:
+
+```text
+0 → 1 → 2 → 3
+```
+
+Invalid:
+
+```text
+0 → 2
+```
+
+---
+
+## Rule 3 — Chainlink Dependency
+
+Withdrawals depend on:
+
+```text
+99B2bTijsU6f1GCT73HmdR7HCFFjGMBcPZY6jZ96ynrR
+```
+
+If feed data becomes stale, withdrawals may be rejected.
+
+---
+
+## Rule 4 — Cliff Editing Restrictions
+
+Cliff updates are only allowed before withdrawal activity and subject to protocol constraints.
+
+---
+
+## Rule 5 — Cluster Consistency
+
+All PDAs, token accounts, and RPC endpoints must belong to the same Solana cluster.
+
+---
+
+## Rule 6 — Completed Streams
+
+Completed streams cannot be:
+
+* Edited
+* Cancelled
+* Unlocked
+
+---
+
+## Rule 7 — Cancelled Streams
+
+Cancelled streams are immutable and cannot be resumed.
+
+---
+
+# 🤖 7. Recommended Agent Workflows
+
+## Employee Vesting
+
+1. Create linear stream
+2. Monitor vesting progress
+3. Process withdrawals
+
+## Grant Distribution
+
+1. Create cliff vesting
+2. Verify unlock date
+3. Withdraw after cliff
+
+## Milestone Funding
+
+1. Create milestone stream
+2. Approve milestone
+3. Unlock milestone
+4. Withdraw allocation
+
+## Treasury Recovery
+
+1. Inspect stream state
+2. Calculate remaining allocation
+3. Cancel stream
+4. Return unvested funds
+
+These workflows represent the primary operational patterns expected from AI agents interacting with Unified Flow.
