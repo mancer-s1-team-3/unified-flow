@@ -745,6 +745,7 @@ export default function Home({ initialStreams = [] }: Props) {
         const batchEditResult = await editStreamBatchOnChain({
           wallet, endpoint,
           inputs: parsedItems.map((item: any) => ({ id: String(item.id || ""), amount: item.amount, duration: item.duration, cliffDuration: item.cliffDuration, milestones: item.milestones })),
+          onStatus: setTxStatus,
         });
         if (batchEditResult.signatures.length === 0) throw new Error("No editable rows found. Provide duration, cliff_duration, or milestones columns for CSV-created streams.");
         await api.post("/csv/upload", { content: csvEditText, filename: `bulk_edit_v${csvVersions.length + 1}.csv`, uploader: connectedWalletAddress || "Anonymous" });

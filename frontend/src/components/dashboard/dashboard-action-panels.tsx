@@ -1211,9 +1211,10 @@ const editCsvDisabled = !csvEditText?.trim()
               <button
                 disabled={createCsvDisabled}
                 onClick={() => handleAction("create_stream_csv", null)}
-                className={`w-full mt-4 text-white font-bold text-xs py-3 rounded-xl transition-all shadow-lg ${createCsvDisabled ? "bg-zinc-800 text-zinc-500 cursor-not-allowed shadow-none" : "bg-indigo-600 hover:bg-indigo-700 hover:shadow-indigo-500/20"}`}
+                className={`w-full mt-4 text-white font-bold text-xs py-3 rounded-xl transition-all shadow-lg flex items-center justify-center gap-2 ${createCsvDisabled ? "bg-zinc-800 text-zinc-500 cursor-not-allowed shadow-none" : "bg-indigo-600 hover:bg-indigo-700 hover:shadow-indigo-500/20"}`}
               >
-                Approve & Apply CSV Revision (Creates v{csvVersions.length + 1})
+                {activeTxAction === "create_stream_csv" && activeTxPhase ? <RefreshCw className="w-4 h-4 animate-spin" /> : null}
+                {getTxLabel("create_stream_csv", `Approve & Apply CSV Revision (Creates v${csvVersions.length + 1})`)}
               </button>
             </div>
           )}
@@ -1328,13 +1329,14 @@ const editCsvDisabled = !csvEditText?.trim()
             <button
               disabled={editCsvDisabled}
               onClick={() => handleAction("edit_stream_csv", null)}
-              className={`w-full mt-4 text-white font-bold text-xs py-3 rounded-xl transition-all shadow-lg ${
+              className={`w-full mt-4 text-white font-bold text-xs py-3 rounded-xl transition-all shadow-lg flex items-center justify-center gap-2 ${
                 editCsvDisabled
                   ? "bg-zinc-800 text-zinc-500 cursor-not-allowed shadow-none"
                   : "bg-emerald-600 hover:bg-emerald-700 hover:shadow-emerald-500/20"
               }`}
             >
-              Approve & Apply CSV Revision
+              {activeTxAction === "edit_stream_csv" && activeTxPhase ? <RefreshCw className="w-4 h-4 animate-spin" /> : null}
+              {getTxLabel("edit_stream_csv", "Approve & Apply CSV Revision")}
             </button>
           </div>
         </div>

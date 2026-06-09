@@ -44,6 +44,8 @@ type MilestoneAccountView = {
   stream: PublicKey;
 };
 
+export type TxProgressPhase = "wallet_approval" | "sending" | "confirming";
+
 type ExecuteInstructionParams = {
   connection: Connection;
   commitment: Commitment;
@@ -52,6 +54,7 @@ type ExecuteInstructionParams = {
   anchorInstructionData: Uint8Array | Buffer | number[];
   accounts: { address: string; role: AccountRole; signer?: any }[];
   programId: PublicKey;
+  onStatus?: (phase: TxProgressPhase) => void;
 };
 
 export type EditLinearInput = Readonly<{
@@ -147,6 +150,7 @@ async function executeInstruction({
   anchorInstructionData,
   accounts,
   programId,
+  onStatus,
 }: ExecuteInstructionParams) {
   const { blockhash, lastValidBlockHeight } = await connection.getLatestBlockhash(commitment);
   const kitSigner = walletSigner as any;
@@ -169,6 +173,8 @@ async function executeInstruction({
   let simulationLogs: string[] = [];
   let signature: string;
 
+  onStatus?.("wallet_approval");
+
   if (walletSignerMode === "send") {
     const sentSignature = await signAndSendTransactionMessageWithSigners(transactionMessage);
     signature = sentSignature.toString();
@@ -190,12 +196,16 @@ async function executeInstruction({
       throw new Error(simulationLogs.length > 0 ? simulationLogs.slice(-6).join("\n") : "Transaction simulation failed.");
     }
 
+    onStatus?.("sending");
+
     signature = await connection.sendRawTransaction(rawTransaction, {
       skipPreflight: true,
       maxRetries: 3,
       preflightCommitment: commitment,
     });
   }
+
+  onStatus?.("confirming");
 
   await connection.confirmTransaction({ blockhash, lastValidBlockHeight, signature }, commitment);
 
@@ -242,11 +252,13 @@ export async function editLinearOnChain({
   endpoint,
   commitment = "confirmed",
   input,
+  onStatus,
 }: {
   wallet: WalletSession;
   endpoint: string;
   commitment?: Commitment;
   input: EditLinearInput;
+  onStatus?: (phase: TxProgressPhase) => void;
 }): Promise<EditStreamResult> {
   const PROGRAM_ID = getProgramIdForEndpoint(endpoint);
   const creator = new PublicKey(wallet.account.address.toString());
@@ -319,6 +331,7 @@ export async function editLinearOnChain({
       { address: TOKEN_PROGRAM_ID.toBase58(), role: AccountRole.READONLY },
     ],
     programId: PROGRAM_ID,
+    onStatus,
   });
 
   return {
@@ -333,11 +346,13 @@ export async function editCliffOnChain({
   endpoint,
   commitment = "confirmed",
   input,
+  onStatus,
 }: {
   wallet: WalletSession;
   endpoint: string;
   commitment?: Commitment;
   input: EditCliffInput;
+  onStatus?: (phase: TxProgressPhase) => void;
 }): Promise<EditStreamResult> {
   const PROGRAM_ID = getProgramIdForEndpoint(endpoint);
   const creator = new PublicKey(wallet.account.address.toString());
@@ -390,6 +405,7 @@ export async function editCliffOnChain({
       { address: streamAddress.toBase58(), role: AccountRole.WRITABLE },
     ],
     programId: PROGRAM_ID,
+    onStatus,
   });
 
   return {
@@ -404,11 +420,13 @@ export async function editMilestoneOnChain({
   endpoint,
   commitment = "confirmed",
   input,
+  onStatus,
 }: {
   wallet: WalletSession;
   endpoint: string;
   commitment?: Commitment;
   input: EditMilestoneInput;
+  onStatus?: (phase: TxProgressPhase) => void;
 }): Promise<EditStreamResult> {
   const PROGRAM_ID = getProgramIdForEndpoint(endpoint);
   const creator = new PublicKey(wallet.account.address.toString());
@@ -494,6 +512,7 @@ export async function editMilestoneOnChain({
       { address: TOKEN_PROGRAM_ID.toBase58(), role: AccountRole.READONLY },
     ],
     programId: PROGRAM_ID,
+    onStatus,
   });
 
   return {
@@ -508,11 +527,13 @@ export async function editStreamBatchOnChain({
   endpoint,
   commitment = "confirmed",
   inputs,
+  onStatus,
 }: {
   wallet: WalletSession;
   endpoint: string;
   commitment?: Commitment;
   inputs: BatchEditCsvInput[];
+  onStatus?: (phase: TxProgressPhase) => void;
 }): Promise<BatchEditCsvResult> {
   const signatures: string[] = [];
   const streamAddresses: string[] = [];
@@ -556,6 +577,7 @@ export async function editStreamBatchOnChain({
         wallet,
         endpoint,
         commitment,
+        onStatus,
         input: {
           streamAddress,
           newEndDuration: hasDuration ? durationRaw : undefined,
@@ -575,6 +597,7 @@ export async function editStreamBatchOnChain({
         wallet,
         endpoint,
         commitment,
+        onStatus,
         input: {
           streamAddress,
           newCliffDuration: cliffRaw,
@@ -595,6 +618,7 @@ export async function editStreamBatchOnChain({
           wallet,
           endpoint,
           commitment,
+          onStatus,
           input: {
             streamAddress,
             milestoneIndex: index,
