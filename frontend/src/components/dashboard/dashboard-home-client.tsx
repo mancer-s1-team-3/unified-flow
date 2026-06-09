@@ -913,6 +913,7 @@ export default function Home({ initialStreams = [] }: Props) {
               prefillAction={prefillAction} setActiveTab={setActiveTab}
               setCsvEditText={setCsvEditText} setSelectedStream={setSelectedStream}
               connectedWalletAddress={connectedWalletAddress} currentTimeTs={nowTs}
+              endpoint={endpoint}
             />
 
           </div>

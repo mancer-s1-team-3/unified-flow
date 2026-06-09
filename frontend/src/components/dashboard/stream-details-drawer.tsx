@@ -4,6 +4,7 @@ import { memo, useEffect } from "react";
 import { createPortal } from "react-dom";
 import { ArrowDownRight, ArrowUpRight, Calendar, Check, Copy, FileText, History, Settings, Unlock, XCircle } from "lucide-react";
 import { formatDate, formatTokenAmount, getAmountUnitLabel, getMilestoneAllocations, shorten } from "./utils";
+import { getExplorerClusterParam } from "@/lib/solana/network-config";
 
 export const StreamDetailsDrawer = memo(function StreamDetailsDrawer({
   selectedStream,
@@ -16,6 +17,7 @@ export const StreamDetailsDrawer = memo(function StreamDetailsDrawer({
   setSelectedStream,
   connectedWalletAddress,
   currentTimeTs,
+  endpoint,
 }: {
   selectedStream: any;
   loadingDetails: boolean;
@@ -27,6 +29,7 @@ export const StreamDetailsDrawer = memo(function StreamDetailsDrawer({
   setSelectedStream: (value: any) => void;
   connectedWalletAddress: string | null;
   currentTimeTs: number;
+  endpoint: string;
 }) {
   useEffect(() => {
     if (!selectedStream) return;
@@ -278,7 +281,7 @@ export const StreamDetailsDrawer = memo(function StreamDetailsDrawer({
                           <span className="text-[9px] text-zinc-500 font-mono block">Slot: {tx.slot}</span>
                         </div>
 
-                        <a href={`https://solscan.io/tx/${tx.signature}?cluster=devnet`} target="_blank" rel="noopener noreferrer" className="text-indigo-400 hover:text-indigo-300 flex items-center gap-0.5 font-bold transition-all shrink-0">
+                        <a href={`https://solscan.io/tx/${tx.signature}?cluster=${getExplorerClusterParam(endpoint)}`} target="_blank" rel="noopener noreferrer" className="text-indigo-400 hover:text-indigo-300 flex items-center gap-0.5 font-bold transition-all shrink-0">
                           Solscan <ArrowUpRight className="w-3 h-3" />
                         </a>
                       </div>
