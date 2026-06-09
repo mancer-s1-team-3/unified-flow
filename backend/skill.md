@@ -1,19 +1,16 @@
 ---
-
-title: Unified Flow AI Agent Skills & Capabilities
-description: Comprehensive capability specification for AI agents interacting with Unified Flow token vesting, streaming, milestone management, SDK, MCP, and CLI interfaces.
-category: AI Agents
+title: "Solana Token Distribution AI Agent Skills & Capabilities"
+description: "Comprehensive skill and tool specification for AI agents interacting with Unified Flow on Solana"
+category: "AI Agents"
 tags:
-
-* solana
-* vesting
-* streaming
-* milestones
-* mcp
-* sdk
-* cli
-* ai-agents
-
+  - solana
+  - unifiedflow
+  - vesting
+  - streaming
+  - milestones
+  - mcp
+  - cli
+  - ai-agents
 ---
 
 # 🧠 Unified Flow AI Agent Skills & Capabilities
