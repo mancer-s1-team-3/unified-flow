@@ -55,6 +55,245 @@ function loadWallet(filePath: string): Keypair {
     return Keypair.fromSecretKey(Uint8Array.from(secret));
 }
 
+
+export function loadCsv(filePath: string) {
+    const raw = fs.readFileSync(filePath, "utf8");
+
+    const lines = raw
+        .split("\n")
+        .map((l) => l.trim())
+        .filter(Boolean);
+
+    const headers = lines[0].split(",");
+
+    return lines.slice(1).map((line) => {
+        const values = line.split(",");
+
+        return headers.reduce((obj: any, header, idx) => {
+            obj[header.trim()] = values[idx]?.trim();
+            return obj;
+        }, {});
+    });
+}
+async function createStreamFromRow(row: any) {
+    const signer = getSigner();
+    const program = getAnchorProgram(signer);
+    const programAccount: any = program.account;
+
+    const recipientPubkey = new PublicKey(row.recipient.trim());
+    const mintPubkey = new PublicKey(row.mint.trim());
+    const typeNum = parseInt(row.type, 10);
+    const amountBN = new anchor.BN(row.amount.trim());
+    const finalNonce = new anchor.BN(Date.now());
+
+    const startTs = Math.floor(Date.now() / 1000) + 10;
+    let cliffTs = startTs;
+    let endTs: number;
+    let milestonesInputs: { amount: anchor.BN }[] = [];
+
+    if (typeNum === 0 || typeNum === 1) {
+        const duration = parseInt(row.duration, 10);
+        if (isNaN(duration) || duration <= 0) {
+            throw new Error(`Row for recipient ${row.recipient}: invalid duration.`);
+        }
+        endTs = startTs + duration;
+        if (typeNum === 1) {
+            const cliffDuration = parseInt(row.cliffDuration ?? row.cliff_duration ?? "0", 10);
+            cliffTs = startTs + (cliffDuration > 0 ? cliffDuration : duration);
+        }
+    } else if (typeNum === 2) {
+        const parts = (row.milestones as string).split(";").map((p) => p.trim());
+        milestonesInputs = parts.map((p) => ({ amount: new anchor.BN(p) }));
+        const total = milestonesInputs.reduce((sum, m) => sum.add(m.amount), new anchor.BN(0));
+        if (!total.eq(amountBN)) {
+            throw new Error(`Row for recipient ${row.recipient}: milestone sum ${total} != amount ${amountBN}`);
+        }
+        endTs = startTs + 60; // placeholder; milestone streams don't use endTs for vesting logic
+    } else {
+        throw new Error(`Row for recipient ${row.recipient}: invalid type ${typeNum}.`);
+    }
+
+    const [streamPda] = PublicKey.findProgramAddressSync(
+        [
+            Buffer.from("stream"),
+            signer.publicKey.toBuffer(),
+            recipientPubkey.toBuffer(),
+            finalNonce.toArrayLike(Buffer, "le", 8),
+        ],
+        PROGRAM_ID
+    );
+    const vaultAta = await getAssociatedTokenAddress(mintPubkey, streamPda, true);
+    const creatorTokenAccount = await getAssociatedTokenAddress(mintPubkey, signer.publicKey, true);
+    const [configPda] = PublicKey.findProgramAddressSync([Buffer.from("config")], PROGRAM_ID);
+
+    const remainingAccounts: { pubkey: PublicKey; isWritable: boolean; isSigner: boolean }[] = [];
+    if (typeNum === 2) {
+        for (let i = 0; i < milestonesInputs.length; i++) {
+            const [milestonePda] = PublicKey.findProgramAddressSync(
+                [Buffer.from("milestone"), streamPda.toBuffer(), Buffer.from([i])],
+                PROGRAM_ID
+            );
+            remainingAccounts.push({ pubkey: milestonePda, isWritable: true, isSigner: false });
+        }
+    }
+
+    logInfo(`Creating stream for recipient ${row.recipient}...`);
+    const tx = await program.methods
+        .createStream(
+            amountBN,
+            new anchor.BN(startTs),
+            new anchor.BN(cliffTs),
+            new anchor.BN(endTs),
+            typeNum,
+            milestonesInputs,
+            finalNonce
+        )
+        .accounts({
+            creator: signer.publicKey,
+            recipient: recipientPubkey,
+            mint: mintPubkey,
+            config: configPda,
+            stream: streamPda,
+            vault: vaultAta,
+            creatorTokenAccount,
+            tokenProgram: TOKEN_PROGRAM_ID,
+            associatedTokenProgram: ASSOCIATED_TOKEN_PROGRAM_ID,
+            systemProgram: SystemProgram.programId,
+        })
+        .remainingAccounts(remainingAccounts)
+        .signers([signer])
+        .rpc();
+
+    logSuccess(`Stream created for ${row.recipient}: ${streamPda.toBase58()}`);
+    logInfo(`Tx: https://explorer.solana.com/tx/${tx}?cluster=devnet`);
+}
+
+async function editBatchStream(row: any) {
+    const signer = getSigner();
+    const program = getAnchorProgram(signer);
+    const programAccount: any = program.account;
+
+    const streamPubkey = new PublicKey((row.id as string).trim());
+    const streamState: any = await programAccount.streamAccount.fetch(streamPubkey);
+    const vestingType: number = streamState.vestingType;
+
+    const durationRaw = String(row.duration ?? "").trim();
+    const cliffRaw = String(row.cliffDuration ?? row.cliff_duration ?? "").trim();
+    const amountRaw = String(row.amount ?? "").trim();
+    const milestonesRaw = String(row.milestones ?? "").trim();
+
+    const hasDuration = durationRaw !== "" && durationRaw !== "0";
+    const hasCliff = cliffRaw !== "" && cliffRaw !== "0";
+    const hasAmount = amountRaw !== "" && amountRaw !== "0";
+    const hasMilestones = milestonesRaw !== "";
+
+    if (vestingType === 0) {
+        // Linear: extend duration and/or topup
+        if (!hasDuration && !hasAmount) {
+            logWarn(`Skipping linear stream ${row.id}: no duration or amount change.`);
+            return;
+        }
+
+        const startTs = new anchor.BN(String(streamState.startTs));
+        const currentEndTs = new anchor.BN(String(streamState.endTs));
+        const currentTotal = new anchor.BN(String(streamState.totalAmount));
+
+        const newEndTs = hasDuration
+            ? startTs.add(new anchor.BN(durationRaw))
+            : currentEndTs;
+        const targetTotal = hasAmount ? new anchor.BN(amountRaw) : currentTotal;
+        const topupAmount = targetTotal.gt(currentTotal)
+            ? targetTotal.sub(currentTotal)
+            : new anchor.BN(0);
+
+        const mint = streamState.mint;
+        const vault = streamState.vault;
+        const creatorTokenAccount = await getAssociatedTokenAddress(mint, signer.publicKey, true);
+        const [configPda] = PublicKey.findProgramAddressSync([Buffer.from("config")], PROGRAM_ID);
+
+        logInfo(`Editing linear stream ${row.id}...`);
+        const tx = await program.methods
+            .editLinear(newEndTs, topupAmount)
+            .accounts({
+                creator: signer.publicKey,
+                mint,
+                config: configPda,
+                stream: streamPubkey,
+                vault,
+                creatorTokenAccount,
+                tokenProgram: TOKEN_PROGRAM_ID,
+            })
+            .signers([signer])
+            .rpc();
+
+        logSuccess(`Linear stream ${row.id} updated.`);
+        logInfo(`Tx: https://explorer.solana.com/tx/${tx}?cluster=devnet`);
+
+    } else if (vestingType === 1) {
+        // Cliff: update cliff duration
+        if (!hasCliff) {
+            logWarn(`Skipping cliff stream ${row.id}: no cliffDuration provided.`);
+            return;
+        }
+
+        const startTs = new anchor.BN(String(streamState.startTs));
+        const newCliffTs = startTs.add(new anchor.BN(cliffRaw));
+        const [configPda] = PublicKey.findProgramAddressSync([Buffer.from("config")], PROGRAM_ID);
+
+        logInfo(`Editing cliff stream ${row.id}...`);
+        const tx = await program.methods
+            .editCliff(newCliffTs)
+            .accounts({
+                creator: signer.publicKey,
+                config: configPda,
+                stream: streamPubkey,
+            })
+            .signers([signer])
+            .rpc();
+
+        logSuccess(`Cliff stream ${row.id} updated.`);
+        logInfo(`Tx: https://explorer.solana.com/tx/${tx}?cluster=devnet`);
+
+    } else if (vestingType === 2) {
+        // Milestone: update each milestone amount
+        if (!hasMilestones) {
+            logWarn(`Skipping milestone stream ${row.id}: no milestones provided.`);
+            return;
+        }
+
+        const amounts = milestonesRaw.split(";").map((v) => v.trim()).filter(Boolean);
+
+        for (let index = 0; index < amounts.length; index++) {
+            const [milestonePda] = PublicKey.findProgramAddressSync(
+                [Buffer.from("milestone"), streamPubkey.toBuffer(), Buffer.from([index])],
+                PROGRAM_ID
+            );
+            const mint = streamState.mint;
+            const vault = streamState.vault;
+            const creatorTokenAccount = await getAssociatedTokenAddress(mint, signer.publicKey, true);
+
+            logInfo(`Editing milestone #${index} on stream ${row.id}...`);
+            const tx = await program.methods
+                .editMilestone(new anchor.BN(amounts[index]))
+                .accounts({
+                    creator: signer.publicKey,
+                    stream: streamPubkey,
+                    milestone: milestonePda,
+                    mint,
+                    vault,
+                    creatorTokenAccount,
+                    tokenProgram: TOKEN_PROGRAM_ID,
+                })
+                .signers([signer])
+                .rpc();
+
+            logSuccess(`Milestone #${index} on stream ${row.id} updated.`);
+            logInfo(`Tx: https://explorer.solana.com/tx/${tx}?cluster=devnet`);
+        }
+    } else {
+        logWarn(`Skipping stream ${row.id}: unknown vesting type ${vestingType}.`);
+    }
+}
 function getSigner(): Keypair {
     const defaultPath = process.env.WALLET_PATH || path.join(process.env.HOME || "", ".config/solana/id.json");
     try {
@@ -87,21 +326,33 @@ ${C_BOLD}READ COMMANDS:${C_RESET}
   ${C_GREEN}config${C_RESET}                            Print global protocol config (fees, admin, paused state).
 
 ${C_BOLD}WRITE TRANSACTION COMMANDS:${C_RESET}
-  ${C_GREEN}init${C_RESET}                              Initialize global protocol config PDA state.
-  ${C_GREEN}create <recipient> <mint> <amount> <type> [duration|milestones...]${C_RESET}
-                                            Create a new vesting stream.
-                                            Vesting types:
-                                              ${C_BOLD}0${C_RESET} - Linear (args: <durationSecs>)
-                                              ${C_BOLD}1${C_RESET} - Cliff  (args: <durationSecs>)
-                                              ${C_BOLD}2${C_RESET} - Milestone (args: comma-separated list of milestone amounts)
 
-  ${C_GREEN}withdraw <streamAddress>${C_RESET}          Withdraw claimable vested tokens from a stream.
-  ${C_GREEN}cancel <streamAddress>${C_RESET}            Cancel an active stream (returns unvested tokens to creator).
-  ${C_GREEN}unlock <streamAddress>${C_RESET}            Unlock the next milestone in a milestone stream.
+  ${C_GREEN}create <recipient> <mint> <amount> <type> [duration|milestones]${C_RESET}
+                                            Create a vesting stream.
+
+  ${C_GREEN}create-batch <csvPath>${C_RESET}
+                                            Create multiple streams from CSV file.
+
+  ${C_GREEN}withdraw <streamAddress>${C_RESET}
+                                            Withdraw claimable tokens.
+
+  ${C_GREEN}cancel <streamAddress>${C_RESET}
+                                            Cancel active stream.
+
+  ${C_GREEN}unlock <streamAddress>${C_RESET}
+                                            Unlock next milestone.
+
   ${C_GREEN}edit-milestone <stream> <idx> <amt>${C_RESET}
-                                            Modify a locked milestone allocation.
+                                            Edit locked milestone allocation.
+
+  ${C_GREEN}edit-linear <stream> [--duration] [--topup]${C_RESET}
+                                            Extend duration and/or topup a linear stream.
+
   ${C_GREEN}edit-cliff <stream> <newCliffTs>${C_RESET}
-                                            Edit stream cliff timestamp.
+                                            Edit cliff timestamp.
+
+  ${C_GREEN}edit-batch <csvPath>${C_RESET}
+                                            Bulk edit streams from CSV file.
 
 ${C_BOLD}UTILITY COMMANDS:${C_RESET}
   ${C_GREEN}version${C_RESET}                           Print CLI version information.
@@ -458,7 +709,96 @@ ${C_BLUE}${C_BOLD}🌊 Vesting Stream Details:${C_RESET}
                 logInfo(`Tx Explorer link: https://explorer.solana.com/tx/${tx}?cluster=devnet`);
                 break;
             }
+            case "edit-linear": {
+                if (args.length < 3) {
+                    logError(
+                        "Usage: npm run cli edit-linear <stream> <newDuration> [topup]"
+                    );
+                    process.exit(1);
+                }
 
+                const streamPubkey = new PublicKey(args[1]);
+                const newDuration = new anchor.BN(args[2]);
+                const topupAmount =
+                    args[3] ? new anchor.BN(args[3]) : new anchor.BN(0);
+
+                const streamState: any =
+                    await programAccount.streamAccount.fetch(streamPubkey);
+
+                const mint = streamState.mint;
+                const vault = streamState.vault;
+
+                const creatorTokenAccount =
+                    await getAssociatedTokenAddress(
+                        mint,
+                        signer.publicKey,
+                        true
+                    );
+
+                const tx = await program.methods
+                    .editLinear(newDuration, topupAmount)
+                    .accounts({
+                        creator: signer.publicKey,
+                        stream: streamPubkey,
+                        mint,
+                        vault,
+                        creatorTokenAccount,
+                        tokenProgram: TOKEN_PROGRAM_ID,
+                    })
+                    .signers([signer])
+                    .rpc();
+
+                logSuccess("Linear stream updated.");
+                logInfo(
+                    `Tx Explorer: https://explorer.solana.com/tx/${tx}?cluster=devnet`
+                );
+
+                break;
+            }
+            case "create-batch": {
+                if (args.length < 2) {
+                    logError(
+                        "Usage: npm run cli create-batch <csvPath>"
+                    );
+                    process.exit(1);
+                }
+
+                const csvPath = args[1];
+
+                logInfo(`Loading CSV ${csvPath}`);
+
+                const rows = loadCsv(csvPath);
+
+                for (const row of rows) {
+                    await createStreamFromRow(row);
+                }
+
+                logSuccess(
+                    `${rows.length} streams created successfully`
+                );
+
+                break;
+            }
+            case "edit-batch": {
+                if (args.length < 2) {
+                    logError(
+                        "Usage: npm run cli edit-batch <csvPath>"
+                    );
+                    process.exit(1);
+                }
+
+                const rows = loadCsv(args[1]);
+
+                for (const row of rows) {
+                    await editBatchStream(row);
+                }
+
+                logSuccess(
+                    `${rows.length} streams updated successfully`
+                );
+
+                break;
+            }
             case "edit-cliff": {
                 if (args.length < 3) {
                     logError("Missing arguments. Usage: npm run cli edit-cliff <stream> <newCliffTs>");
