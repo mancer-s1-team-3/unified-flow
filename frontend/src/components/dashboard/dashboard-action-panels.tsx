@@ -1591,8 +1591,58 @@ const editCsvDisabled = !csvEditText?.trim()
       <div className={`mt-12 bg-zinc-950 border border-zinc-900 rounded-2xl p-4 font-mono text-[11px] relative overflow-hidden ${mobileNarrowFormClass}`}>
         <div className="absolute top-0 right-0 p-3 flex gap-2"><span className="w-2.5 h-2.5 rounded-full bg-red-500/60" /><span className="w-2.5 h-2.5 rounded-full bg-amber-500/60" /><span className="w-2.5 h-2.5 rounded-full bg-green-500/60" /></div>
         <div className="flex items-center gap-2 text-indigo-400 font-bold mb-2"><Terminal className="w-4 h-4 shrink-0" /><span>Equivalent CLI / Agent Skill Call</span></div>
-        <div className="text-zinc-400 select-all overflow-hidden whitespace-normal break-words py-1 sm:overflow-x-auto sm:whitespace-nowrap sm:break-normal">{activeTab === "create_streams" && <span>{createMode === "manual" ? `$ unifiedflow create-stream --recipient ${createForm.recipient || "<address>"} --amount ${createForm.amount} --type ${createForm.type === "0" ? "linear" : createForm.type === "1" ? "milestone" : "cliff"} --duration ${createForm.duration}` : `$ unifiedflow create-bulk --csv ./vesting_list.csv --endpoint devnet`}</span>}{activeTab === "edit_csv" && <span>$ unifiedflow edit-bulk --csv ./vesting_edits.csv --endpoint devnet</span>}{activeTab === "withdraw" && <span>$ unifiedflow claim-tokens --stream {withdrawForm.streamId || "<stream_pda>"}</span>}{activeTab === "cancel" && <span>$ unifiedflow cancel-stream --stream {cancelForm.streamId || "<stream_pda>"}</span>}{activeTab === "unlock_milestone" && <span>$ unifiedflow unlock-milestone --stream {unlockForm.streamId || "<stream_pda>"}</span>}{activeTab === "edit_milestone" && <span>$ unifiedflow edit-milestone --stream {editMilestoneForm.streamId || "<stream_pda>"} --all-indexes</span>}{activeTab === "edit_linear" && <span>$ unifiedflow edit-linear --stream {editLinearForm.streamId || "<stream_pda>"} {editLinearForm.newEndDuration ? `--duration ${editLinearForm.newEndDuration}` : ""} {editLinearForm.topupAmount ? `--topup ${editLinearForm.topupAmount}` : ""}</span>}{activeTab === "edit_cliff" && <span>$ unifiedflow edit-cliff --stream {editCliffForm.streamId || "<stream_pda>"} --cliff-duration {editCliffForm.newCliffDuration || "<duration_seconds>"}</span>}</div>
-      </div>
+        <div className="text-zinc-400 select-all overflow-hidden whitespace-normal break-words py-1 sm:overflow-x-auto sm:whitespace-nowrap sm:break-normal">
+
+  {activeTab === "create_streams" && (
+    <span>
+      {createMode === "manual"
+        ? createForm.type === "2"
+          ? `$ unifiedflow create ${createForm.recipient || "<recipient>"} ${createForm.mint || "<mint>"} ${createForm.amount || "<amount>"} 2 ${createForm.milestones || "<100,200,300>"}`
+          : `$ unifiedflow create ${createForm.recipient || "<recipient>"} ${createForm.mint || "<mint>"} ${createForm.amount || "<amount>"} ${createForm.type || "0"} ${createForm.duration || "<duration_seconds>"}`
+        : `$ unifiedflow create-batch ./streams.csv`}
+    </span>
+  )}
+
+  {activeTab === "withdraw" && (
+    <span>
+      $ unifiedflow withdraw {withdrawForm.streamId || "<stream_address>"}
+    </span>
+  )}
+
+  {activeTab === "cancel" && (
+    <span>
+      $ unifiedflow cancel {cancelForm.streamId || "<stream_address>"}
+    </span>
+  )}
+
+  {activeTab === "unlock_milestone" && (
+    <span>
+      $ unifiedflow unlock {unlockForm.streamId || "<stream_address>"}
+    </span>
+  )}
+
+  {activeTab === "edit_milestone" && (
+    <span>
+      $ unifiedflow edit-milestone{" "}
+      {editMilestoneForm.streamId || "<stream_address>"}{" "}
+      {editMilestoneForm.index || "<index>"}{" "}
+      {editMilestoneForm.amount || "<new_amount>"}
+    </span>
+  )}
+
+  {activeTab === "edit_cliff" && (
+    <span>
+      $ unifiedflow edit-cliff{" "}
+      {editCliffForm.streamId || "<stream_address>"}{" "}
+      {editCliffForm.newCliffTs || "<unix_timestamp>"}
+    </span>
+  )}
+
+  
+
+
+
+</div>  </div>
       
     </>
   );
@@ -1876,4 +1926,3 @@ function MilestoneAllocationCounter({
     </div>
   );
 }
-// ──────────────────────────────────────────────────────────────────────────
