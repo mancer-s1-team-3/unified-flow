@@ -72,24 +72,32 @@ export function EnhancedChatbot() {
   // ✅ Hook dipanggil di top-level component, bukan di dalam fungsi
   const client = useUnifiedFlowClient();
 
-  // Check API connection on mount
+  // Check API connection on mount (resolved server-side via the backend proxy)
   useEffect(() => {
-    const isConfigured = chatService.isConfigured();
-    setConnectionStatus(isConfigured ? "connected" : "disconnected");
-    setUsingASI(isConfigured);
+    let cancelled = false;
 
-    if (messages.length === 0) {
-      setMessages([
-        {
-          id: "welcome",
-          role: "assistant",
-          text: isConfigured
-            ? "👋 Hi! I'm your AI assistant powered by Unified Flow. I can help you with token vesting, stream management, and more. What would you like to know?"
-            : "👋 Hi! I'm your assistant. I can help you with token vesting, stream management, and more. What would you like to know?",
-          timestamp: Date.now(),
-        },
-      ]);
-    }
+    chatService.checkStatus().then((isConfigured) => {
+      if (cancelled) return;
+      setConnectionStatus(isConfigured ? "connected" : "disconnected");
+      setUsingASI(isConfigured);
+
+      if (messages.length === 0) {
+        setMessages([
+          {
+            id: "welcome",
+            role: "assistant",
+            text: isConfigured
+              ? "👋 Hi! I'm your AI assistant powered by Unified Flow. I can help you with token vesting, stream management, and more. What would you like to know?"
+              : "👋 Hi! I'm your assistant. I can help you with token vesting, stream management, and more. What would you like to know?",
+            timestamp: Date.now(),
+          },
+        ]);
+      }
+    });
+
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   // Auto-scroll to bottom
