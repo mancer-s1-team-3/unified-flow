@@ -62,9 +62,11 @@ export const StreamDetailsDrawer = memo(function StreamDetailsDrawer({
   const isFullyClaimed = total > 0 && withdrawn >= total;
   const isEnded = !isCancelled && (selectedStream.vestingType === 2 ? isMilestoneCompleted : currentTimeTs >= end);
   const cancelDisabled = isCancelled || isEnded || isFullyClaimed;
-  const hasClaimable = selectedStream.vestingType === 2
-  ? unlocked > withdrawn                          // milestone: pakai unlockedAmount
-  : total > withdrawn;                            // linear/cliff: pakai total - withdrawn
+const hasClaimable = !isEnded
+  ? true                                          // belum ended → selalu ada potensi claim
+  : selectedStream.vestingType === 2
+    ? unlocked > withdrawn                        // milestone ended: pakai unlockedAmount
+    : total > withdrawn;                          // linear/cliff ended: pakai total - withdrawn
 
   const drawer = (
     <div className="fixed inset-0 z-50 bg-zinc-950/95 sm:bg-black/60 backdrop-blur-md flex justify-end overflow-x-hidden animate-in fade-in duration-200">
