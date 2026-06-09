@@ -571,6 +571,15 @@ export default function Home({ initialStreams = [] }: Props) {
     return stream ? stream.isCsvCreated : false;
   };
 
+  // True when a cliff-type stream's cliff timestamp has already elapsed — the
+  // cliff can no longer be edited on-chain, so the edit-cliff button is disabled.
+  const isCliffPassed = (streamId: string) => {
+    const stream = streams.find((s) => String(s?.id || "") === streamId);
+    if (!stream || Number(stream.vestingType) !== 1) return false;
+    const cliffTs = Number(stream.cliffTs || 0);
+    return cliffTs > 0 && nowTs >= cliffTs;
+  };
+
   // ── handleAction ──────────────────────────────────────────────────────────
   const handleAction = async (actionName: string, data: any) => {
 
@@ -881,6 +890,7 @@ export default function Home({ initialStreams = [] }: Props) {
                 editLinearForm={editLinearForm} setEditLinearForm={setEditLinearForm}
                 editCliffForm={editCliffForm} setEditCliffForm={setEditCliffForm}
                 isStreamCsvCreated={isStreamCsvCreated}
+                isCliffPassed={isCliffPassed}
                 activeTxAction={activeTxAction} activeTxPhase={activeTxPhase}
                 connected={!!connected}
               />

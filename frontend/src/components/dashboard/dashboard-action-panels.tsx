@@ -307,6 +307,7 @@ type Props = {
   editCliffForm: any;
   setEditCliffForm: (value: any) => void;
   isStreamCsvCreated: (id: string) => boolean;
+  isCliffPassed: (id: string) => boolean;
   activeTxAction: string | null;
   activeTxPhase: "wallet_approval" | "sending" | "confirming" | null;
   connected: boolean;
@@ -357,6 +358,7 @@ export function DashboardActionPanels(props: Props) {
     editCliffForm,
     setEditCliffForm,
     isStreamCsvCreated,
+    isCliffPassed,
     activeTxAction,
     activeTxPhase,
     connected,
@@ -541,8 +543,10 @@ const editCsvDisabled = !csvEditText?.trim()
     !String(editLinearForm.newEndDuration ?? "").trim() ||
     !String(editLinearForm.topupAmount ?? "").trim() ||
     activeTxAction === "edit_linear";
+  const editCliffPeriodOver = isCliffPassed(editCliffForm.streamId);
   const editCliffDisabled =
     isStreamCsvCreated(editCliffForm.streamId) ||
+    editCliffPeriodOver ||
     !editCliffForm.streamId?.trim() ||
     !String(editCliffForm.newCliffDuration ?? "").trim() ||
     activeTxAction === "edit_cliff";
@@ -1556,6 +1560,15 @@ const editCsvDisabled = !csvEditText?.trim()
         <div className="animate-in fade-in-30 duration-200">
           <div className="border-b border-zinc-900 pb-4 mb-6"><div className="flex items-center gap-2"><h2 className="text-2xl font-extrabold tracking-tight">Edit Cliff Conditions</h2></div><p className="text-xs text-zinc-400">Modify cliff release durations or shift lockup parameters</p></div>
           {isStreamCsvCreated(editCliffForm.streamId) ? <div className="bg-red-950/45 border border-red-500/30 rounded-2xl p-5 text-red-300 flex items-start gap-4 mb-6"><Lock className="w-6 h-6 text-red-400 shrink-0 mt-0.5" /><div><h4 className="text-sm font-extrabold">Manual Edit Locked!</h4><p className="text-xs text-red-400/80 mt-1 leading-relaxed">This stream was created via CSV Import. To comply with consistency requirements, CSV-created streams must be edited exclusively using the Bulk Edit CSV console.</p></div></div> : <div className="grid gap-4"><div><label className="block text-xs font-semibold text-zinc-400 uppercase tracking-wider mb-1.5">Stream ID (PDA Address)</label><input type="text" value={editCliffForm.streamId} onChange={(e) => setEditCliffForm({ ...editCliffForm, streamId: e.target.value })} className="w-full bg-zinc-950 border border-zinc-800 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:border-indigo-500 font-mono" /></div><div><label className="block text-xs font-semibold text-zinc-400 uppercase tracking-wider mb-1.5">New Cliff Duration (Seconds from Start)</label><input type="number" value={editCliffForm.newCliffDuration} onChange={(e) => setEditCliffForm({ ...editCliffForm, newCliffDuration: e.target.value })} className="w-full bg-zinc-950 border border-zinc-800 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:border-indigo-500 font-mono" /></div></div>}
+          {editCliffPeriodOver && !isStreamCsvCreated(editCliffForm.streamId) && (
+            <div className="bg-amber-950/40 border border-amber-500/30 rounded-2xl p-4 text-amber-300 flex items-start gap-3 mt-6">
+              <Lock className="w-5 h-5 text-amber-400 shrink-0 mt-0.5" />
+              <div>
+                <h4 className="text-sm font-extrabold">Cliff Period Ended</h4>
+                <p className="text-xs text-amber-400/80 mt-1 leading-relaxed">This stream's cliff timestamp has already elapsed, so the cliff can no longer be adjusted.</p>
+              </div>
+            </div>
+          )}
           <button disabled={editCliffDisabled} onClick={() => handleAction("edit_cliff", editCliffForm)} className={`w-full mt-6 text-white font-bold text-xs py-3 rounded-xl transition-all shadow-lg ${editCliffDisabled ? "bg-zinc-850 border border-zinc-800 text-zinc-550 cursor-not-allowed opacity-50" : "bg-indigo-600 hover:bg-indigo-700 hover:shadow-indigo-500/20"}`}>Adjust Cliff Timestamp</button>
         </div>
       )}
