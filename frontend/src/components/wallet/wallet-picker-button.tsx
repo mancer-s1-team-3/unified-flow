@@ -4,16 +4,22 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import {
   AlertCircle,
   AlertTriangle,
+  Check,
   CheckCircle2,
   ChevronDown,
+  Copy,
   ExternalLink,
+  Globe2,
   HardDrive,
   Info,
+  LogOut,
   Shield,
   Wallet,
   X,
 } from "lucide-react";
 import { useWalletConnection } from "@solana/react-hooks";
+import { useNetwork } from "@/components/wallet/network-context";
+import { WalletBalances } from "@/components/wallet/wallet-balances";
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -135,8 +141,11 @@ export function WalletPickerButton({ className = "" }: { className?: string }) {
   const { connectors, connect, connected, connecting, currentConnector, disconnect, wallet } =
     useWalletConnection();
 
+  const { network } = useNetwork();
+
   const [open, setOpen] = useState(false);
   const [showSupportedInfo, setShowSupportedInfo] = useState(false);
+  const [copied, setCopied] = useState(false);
   const rootRef = useRef<HTMLDivElement | null>(null);
   const mobileBrowser = useMemo(() => isMobileBrowser(), []);
   const safariDesktop = useMemo(() => isSafariDesktop(), []);
@@ -185,12 +194,9 @@ export function WalletPickerButton({ className = "" }: { className?: string }) {
   const phantomBrowseUrl = buildWalletBrowseUrl("https://phantom.app/ul/browse/");
   const solflareBrowseUrl = buildWalletBrowseUrl("https://solflare.com/ul/browse/");
 
-  const handlePrimaryAction = async () => {
-    if (connected) {
-      await disconnect();
-      setOpen(false);
-      return;
-    }
+  const handlePrimaryAction = () => {
+    // When connected, the button toggles a status dropdown (address / network /
+    // balances / disconnect) rather than disconnecting immediately.
     setOpen((v) => !v);
     setShowSupportedInfo(false);
   };
@@ -198,6 +204,22 @@ export function WalletPickerButton({ className = "" }: { className?: string }) {
   const handleConnectorSelect = async (connectorId: string) => {
     await connect(connectorId);
     setOpen(false);
+  };
+
+  const handleDisconnect = async () => {
+    await disconnect();
+    setOpen(false);
+  };
+
+  const handleCopyAddress = async () => {
+    if (!connectedAddress) return;
+    try {
+      await navigator.clipboard.writeText(connectedAddress);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1500);
+    } catch {
+      // Clipboard may be unavailable (insecure context) — ignore.
+    }
   };
 
   // ---------------------------------------------------------------------------
@@ -272,6 +294,69 @@ export function WalletPickerButton({ className = "" }: { className?: string }) {
       {/* ── Supported wallets tooltip ── */}
       {showSupportedInfo && (
         <SupportedWalletsTooltip onClose={() => setShowSupportedInfo(false)} />
+      )}
+
+      {/* ── Connected wallet status dropdown (address / network / balances) ── */}
+      {open && connected && (
+        <div className="absolute right-0 top-full z-50 mt-3 w-80 max-w-[calc(100vw-2rem)] overflow-hidden rounded-2xl border border-zinc-800 bg-zinc-950/95 shadow-2xl backdrop-blur-xl animate-in fade-in slide-in-from-top-2 duration-150">
+          <div className="flex items-center justify-between border-b border-zinc-900 px-4 py-3">
+            <div className="flex items-center gap-2">
+              <CheckCircle2 className="h-3.5 w-3.5 text-emerald-400" />
+              <span className="text-xs font-bold uppercase tracking-widest text-zinc-300">
+                Connected Wallet
+              </span>
+            </div>
+            {activeConnectorName && (
+              <span className="text-[10px] font-semibold text-zinc-500">{activeConnectorName}</span>
+            )}
+          </div>
+
+          <div className="space-y-4 p-4">
+            {/* Address */}
+            <div>
+              <div className="mb-1.5 text-[10px] font-bold uppercase tracking-widest text-zinc-500">
+                Address
+              </div>
+              <button
+                type="button"
+                onClick={handleCopyAddress}
+                title="Copy address"
+                className="flex w-full items-center justify-between gap-2 rounded-xl border border-zinc-800 bg-zinc-900/60 px-3 py-2 transition-all hover:border-zinc-700 hover:bg-zinc-800"
+              >
+                <span className="truncate font-mono text-xs text-zinc-100">{connectedAddress}</span>
+                {copied ? (
+                  <Check className="h-3.5 w-3.5 shrink-0 text-emerald-400" />
+                ) : (
+                  <Copy className="h-3.5 w-3.5 shrink-0 text-zinc-500" />
+                )}
+              </button>
+            </div>
+
+            {/* Network */}
+            <div>
+              <div className="mb-1.5 text-[10px] font-bold uppercase tracking-widest text-zinc-500">
+                Network
+              </div>
+              <div className="flex items-center gap-2 rounded-xl border border-zinc-800 bg-zinc-900/60 px-3 py-2 text-xs font-semibold text-zinc-100">
+                <Globe2 className="h-3.5 w-3.5 text-zinc-400" />
+                {network.label}
+              </div>
+            </div>
+
+            {/* Balances */}
+            <WalletBalances address={connectedAddress} />
+
+            {/* Disconnect */}
+            <button
+              type="button"
+              onClick={handleDisconnect}
+              className="flex w-full items-center justify-center gap-2 rounded-xl border border-red-500/25 bg-red-500/5 px-3 py-2.5 text-xs font-semibold text-red-300 transition-all hover:border-red-500/40 hover:bg-red-500/10"
+            >
+              <LogOut className="h-3.5 w-3.5" />
+              Disconnect
+            </button>
+          </div>
+        </div>
       )}
 
       {/* ── Connector picker dropdown ── */}
