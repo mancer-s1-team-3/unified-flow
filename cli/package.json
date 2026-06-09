@@ -1,6 +1,6 @@
 {
   "name": "@unifiedflow/cli",
-  "version": "1.0.5",
+  "version": "1.0.6",
   "description": "CLI tool for Unified Flow token distribution protocol",
   "main": "dist/index.js",
   "bin": {

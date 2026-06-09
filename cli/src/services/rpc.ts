@@ -1,7 +1,5 @@
-import dotenv from "dotenv";
 import { Connection, Commitment, PublicKey } from "@solana/web3.js";
 
-dotenv.config();
 
 const DEFAULT_COMMITMENT: Commitment = "confirmed";
 const DEFAULT_HTTP = "https://api.devnet.solana.com";
