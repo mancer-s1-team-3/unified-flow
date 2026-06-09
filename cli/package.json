@@ -1,6 +1,6 @@
 {
   "name": "@unifiedflow/cli",
-  "version": "1.0.2",
+  "version": "1.0.5",
   "description": "CLI tool for Unified Flow token distribution protocol",
   "main": "dist/index.js",
   "bin": {
@@ -29,8 +29,7 @@
     "@coral-xyz/anchor": "^0.32.1",
     "@solana/spl-token": "^0.4.14",
     "@solana/web3.js": "^1.98.4",
-    "bs58": "^6.0.0",
-    "dotenv": "^16.6.1"
+    "dotenv": "^17.4.2"
   },
   "devDependencies": {
     "@types/node": "^20.19.41",
