@@ -16,7 +16,10 @@ import {
   Layers,
   Sparkles,
   Lock,
-  Coins
+  Coins,
+  Settings,
+  XCircle,
+  Edit3
 } from "lucide-react";
 
 // ============================================================================
@@ -110,31 +113,125 @@ const MCP_TOOLS = [
   }
 ];
 
-const CLI_COMMANDS = [
+// CLI_COMMANDS split into categories
+const CLI_READ_COMMANDS = [
   {
-    cmd: "npm run cli config",
-    desc: "Print global smart contract configurations, allowed mint addresses, and admin authorities."
+    cmd: "unifiedflow view <streamAddress>",
+    desc: "Fetch & print real-time on-chain stream & milestone details with ANSI colored tree display.",
+    example: "unifiedflow view 7xKXtg2CW87d97TXJSDpbD5jBkheTqA83TZRuJosgAsU"
   },
   {
-    cmd: "npm run cli view <streamAddress>",
-    desc: "Check live on-chain status of a stream with a beautiful ANSI colored tree display of milestone states."
-  },
-  {
-    cmd: "npm run cli create <recipient> <mint> <amount> 0 <durationSecs>",
-    desc: "Create an active Linear stream releasing tokens second-by-second."
-  },
-  {
-    cmd: "npm run cli create <recipient> <mint> <amount> 2 <milestoneAmounts...>",
-    desc: "Create a milestone vesting stream (e.g. amounts: '300,300,400' for a total of 1000)."
-  },
-  {
-    cmd: "npm run cli withdraw <streamAddress>",
-    desc: "Submit a claim transaction as the stream recipient using live Chainlink feeds."
-  },
-  {
-    cmd: "npm run cli unlock <streamAddress>",
-    desc: "Creator unlocks the next sequential milestone, converting locked funds to claimable tokens."
+    cmd: "unifiedflow config",
+    desc: "Print global protocol config — fees, admin authority, paused state, and allowed mints."
   }
+];
+
+const CLI_WRITE_COMMANDS = [
+  {
+    cmd: "unifiedflow init",
+    desc: "Initialize the global protocol config PDA state. Run once by the admin before any streams can be created."
+  },
+  {
+    cmd: "unifiedflow create <recipient> <mint> <amount> 0 <durationSecs>",
+    desc: "Create a Linear vesting stream (type 0). Tokens unlock continuously second-by-second over the given duration.",
+    example: "unifiedflow create <recipient> <mint> 1000000000 0 31536000"
+  },
+  {
+    cmd: "unifiedflow create <recipient> <mint> <amount> 1 <durationSecs>",
+    desc: "Create a Cliff vesting stream (type 1). Tokens are fully locked until the cliff timestamp, then released at once.",
+    example: "unifiedflow create <recipient> <mint> 1000000000 1 15552000"
+  },
+  {
+    cmd: "unifiedflow create <recipient> <mint> <amount> 2 <milestone1,milestone2,...>",
+    desc: "Create a Milestone vesting stream (type 2). Pass comma-separated amounts — they must sum exactly to the total amount.",
+    example: "unifiedflow create <recipient> <mint> 1000000000 2 250000000,250000000,250000000,250000000"
+  },
+  {
+    cmd: "unifiedflow withdraw <streamAddress>",
+    desc: "Withdraw claimable vested tokens as the stream recipient. SOL fee is calculated dynamically via Chainlink oracle.",
+    example: "unifiedflow withdraw 7xKXtg2CW87d97TXJSDpbD5jBkheTqA83TZRuJosgAsU"
+  },
+  {
+    cmd: "unifiedflow cancel <streamAddress>",
+    desc: "Cancel an active stream as the creator. Unvested tokens are returned to the creator's wallet.",
+    example: "unifiedflow cancel 7xKXtg2CW87d97TXJSDpbD5jBkheTqA83TZRuJosgAsU"
+  },
+  {
+    cmd: "unifiedflow unlock <streamAddress>",
+    desc: "Unlock the next sequential milestone in a Milestone stream. Must be called in order — index i before i+1.",
+    example: "unifiedflow unlock 7xKXtg2CW87d97TXJSDpbD5jBkheTqA83TZRuJosgAsU"
+  },
+  {
+    cmd: "unifiedflow edit-milestone <streamAddress> <milestoneIndex> <newAmount>",
+    desc: "Modify a locked milestone allocation. The contract auto-adjusts vault token balance to match the updated total.",
+    example: "unifiedflow edit-milestone 7xKXtg2CW87d97TXJSDpbD5jBkheTqA83TZRuJosgAsU 2 300000000"
+  },
+  {
+    cmd: "unifiedflow edit-cliff <streamAddress> <newCliffTs>",
+    desc: "Edit the cliff timestamp of an existing stream. Accepts a Unix timestamp (seconds).",
+    example: "unifiedflow edit-cliff 7xKXtg2CW87d97TXJSDpbD5jBkheTqA83TZRuJosgAsU 1800000000"
+  }
+];
+
+const SDK_METHODS = [
+  {
+    name: "createStream",
+    desc: "Create a new vesting stream.",
+    example: `await client.createStream(
+  recipient,
+  mint,
+  amount,
+  startTs,
+  cliffTs,
+  endTs,
+  0,
+  [],
+  nonce
+);`,
+  },
+  {
+    name: "withdraw",
+    desc: "Withdraw vested tokens.",
+    example: `await client.withdraw(streamPDA);`,
+  },
+  {
+    name: "cancel",
+    desc: "Cancel active stream.",
+    example: `await client.cancel(streamPDA);`,
+  },
+  {
+    name: "unlockMilestone",
+    desc: "Unlock milestone.",
+    example: `await client.unlockMilestone(streamPDA, 0);`,
+  },
+  {
+    name: "editMilestone",
+    desc: "Update milestone allocation.",
+    example: `await client.editMilestone(
+  streamPDA,
+  mint,
+  milestoneIndex,
+  newAmount
+);`,
+  },
+  {
+    name: "editCliff",
+    desc: "Update cliff timestamp.",
+    example: `await client.editCliff(
+  streamPDA,
+  newCliffTs
+);`,
+  },
+  {
+    name: "editLinear",
+    desc: "Extend stream and/or topup.",
+    example: `await client.editLinear(
+  streamPDA,
+  mint,
+  newEndTs,
+  topupAmount
+);`,
+  },
 ];
 
 // ============================================================================
@@ -158,18 +255,35 @@ const CodeSnippet = ({ code }: { code: string }) => {
       >
         {copied ? <Check className="w-4 h-4 text-emerald-400" /> : <Copy className="w-4 h-4" />}
       </button>
-      <pre>{code}</pre>
+      <pre className="whitespace-pre-wrap break-all">{code}</pre>
     </div>
   );
 };
+
+// ============================================================================
+// CLI COMMAND CARD
+// ============================================================================
+const CliCard = ({ cmd, desc, example }: { cmd: string; desc: string; example?: string }) => (
+  <div className="p-5 rounded-2xl bg-zinc-900/20 border border-zinc-800">
+    <p className="text-xs font-medium text-zinc-300 leading-relaxed">{desc}</p>
+    <CodeSnippet code={cmd} />
+    {example && (
+      <div className="mt-3">
+        <span className="text-3xs uppercase tracking-wider font-semibold text-zinc-600">Example</span>
+        <CodeSnippet code={example} />
+      </div>
+    )}
+  </div>
+);
 
 // ============================================================================
 // MAIN PAGE COMPONENT
 // ============================================================================
 export default function DocsPage() {
   const router = useRouter();
-  const [activeTab, setActiveTab] = useState<"overview" | "api" | "mcp" | "cli">("overview");
-
+const [activeTab, setActiveTab] = useState<
+  "overview" | "sdk" | "api" | "mcp" | "cli"
+>("overview");
   useEffect(() => {
     const resetView = () => {
       setActiveTab("overview");
@@ -238,49 +352,30 @@ export default function DocsPage() {
 
         {/* 📑 TABS NAVIGATION */}
         <nav className="flex flex-wrap gap-2.5 border-b border-zinc-800 pb-5 mb-10">
-          <button
-            onClick={() => setActiveTab("overview")}
-            className={`flex items-center gap-2 px-5 py-2.5 rounded-xl font-medium text-sm border transition-all ${activeTab === "overview"
-                ? "bg-indigo-600/15 border-indigo-500/50 text-indigo-300 shadow-lg shadow-indigo-900/10"
-                : "bg-zinc-900/50 border-zinc-800 text-zinc-400 hover:text-zinc-200 hover:bg-zinc-950"
+          {[
+            { id: "overview", label: "Vesting Models", icon: <BookOpen className="w-4 h-4" /> },
+            {
+  id: "sdk",
+  label: "TypeScript SDK",
+  icon: <Coins className="w-4 h-4" />,
+},
+            { id: "api", label: "REST API", icon: <Globe className="w-4 h-4" /> },
+            { id: "mcp", label: "Model Context Protocol", icon: <Cpu className="w-4 h-4" /> },
+            { id: "cli", label: "CLI & Agent Skills", icon: <Terminal className="w-4 h-4" /> },
+          ].map(tab => (
+            <button
+              key={tab.id}
+              onClick={() => setActiveTab(tab.id as typeof activeTab)}
+              className={`flex items-center gap-2 px-5 py-2.5 rounded-xl font-medium text-sm border transition-all ${
+                activeTab === tab.id
+                  ? "bg-indigo-600/15 border-indigo-500/50 text-indigo-300 shadow-lg shadow-indigo-900/10"
+                  : "bg-zinc-900/50 border-zinc-800 text-zinc-400 hover:text-zinc-200 hover:bg-zinc-950"
               }`}
-          >
-            <BookOpen className="w-4.5 h-4.5" />
-            Vesting Models
-          </button>
-
-          <button
-            onClick={() => setActiveTab("api")}
-            className={`flex items-center gap-2 px-5 py-2.5 rounded-xl font-medium text-sm border transition-all ${activeTab === "api"
-                ? "bg-indigo-600/15 border-indigo-500/50 text-indigo-300 shadow-lg shadow-indigo-900/10"
-                : "bg-zinc-900/50 border-zinc-800 text-zinc-400 hover:text-zinc-200 hover:bg-zinc-950"
-              }`}
-          >
-            <Globe className="w-4.5 h-4.5" />
-            REST API
-          </button>
-
-          <button
-            onClick={() => setActiveTab("mcp")}
-            className={`flex items-center gap-2 px-5 py-2.5 rounded-xl font-medium text-sm border transition-all ${activeTab === "mcp"
-                ? "bg-indigo-600/15 border-indigo-500/50 text-indigo-300 shadow-lg shadow-indigo-900/10"
-                : "bg-zinc-900/50 border-zinc-800 text-zinc-400 hover:text-zinc-200 hover:bg-zinc-950"
-              }`}
-          >
-            <Cpu className="w-4.5 h-4.5" />
-            Model Context Protocol
-          </button>
-
-          <button
-            onClick={() => setActiveTab("cli")}
-            className={`flex items-center gap-2 px-5 py-2.5 rounded-xl font-medium text-sm border transition-all ${activeTab === "cli"
-                ? "bg-indigo-600/15 border-indigo-500/50 text-indigo-300 shadow-lg shadow-indigo-900/10"
-                : "bg-zinc-900/50 border-zinc-800 text-zinc-400 hover:text-zinc-200 hover:bg-zinc-950"
-              }`}
-          >
-            <Terminal className="w-4.5 h-4.5" />
-            CLI & Agent Skills
-          </button>
+            >
+              {tab.icon}
+              {tab.label}
+            </button>
+          ))}
         </nav>
 
         {/* 📦 CONTENT CONTAINER */}
@@ -296,7 +391,7 @@ export default function DocsPage() {
               <section className="space-y-8 animate-fadeIn">
                 <div className="p-6 rounded-2xl bg-zinc-900/40 border border-zinc-800/80 backdrop-blur-md">
                   <h2 className="text-2xl font-bold flex items-center gap-2 text-zinc-100">
-                    <BookOpen className="w-5.5 h-5.5 text-indigo-400" />
+                    <BookOpen className="w-5 h-5 text-indigo-400" />
                     Vesting & Streaming Types
                   </h2>
                   <p className="mt-3 text-zinc-400 text-sm leading-relaxed">
@@ -306,7 +401,7 @@ export default function DocsPage() {
 
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
 
-                  {/* CARD 1 */}
+                  {/* CARD 1 — Linear */}
                   <div className="p-6 rounded-2xl bg-zinc-900/30 border border-zinc-800 hover:border-zinc-700 transition-all flex flex-col justify-between">
                     <div>
                       <div className="w-10 h-10 rounded-xl bg-cyan-500/10 border border-cyan-500/20 flex items-center justify-center mb-4">
@@ -317,10 +412,13 @@ export default function DocsPage() {
                         Tokens unlock continuously on a second-by-second basis starting from <code className="text-cyan-300">startTs</code> up to <code className="text-cyan-300">endTs</code>. Highly recommended for standard team vesting.
                       </p>
                     </div>
-                    <span className="mt-4 inline-flex text-2xs uppercase tracking-wider font-semibold text-cyan-400 bg-cyan-500/5 px-2 py-0.5 rounded">Type 0</span>
+                    <div className="mt-4 space-y-1">
+                      <span className="inline-flex text-2xs uppercase tracking-wider font-semibold text-cyan-400 bg-cyan-500/5 px-2 py-0.5 rounded">Type 0</span>
+                      <p className="text-3xs text-zinc-600 font-mono">args: &lt;durationSecs&gt;</p>
+                    </div>
                   </div>
 
-                  {/* CARD 2 */}
+                  {/* CARD 2 — Cliff */}
                   <div className="p-6 rounded-2xl bg-zinc-900/30 border border-zinc-800 hover:border-zinc-700 transition-all flex flex-col justify-between">
                     <div>
                       <div className="w-10 h-10 rounded-xl bg-violet-500/10 border border-violet-500/20 flex items-center justify-center mb-4">
@@ -331,10 +429,13 @@ export default function DocsPage() {
                         Tokens remain fully locked in the program vault until <code className="text-violet-300">cliffTs</code> is met. On the cliff date, 100% of the funds are unlocked at once.
                       </p>
                     </div>
-                    <span className="mt-4 inline-flex text-2xs uppercase tracking-wider font-semibold text-violet-400 bg-violet-500/5 px-2 py-0.5 rounded">Type 1</span>
+                    <div className="mt-4 space-y-1">
+                      <span className="inline-flex text-2xs uppercase tracking-wider font-semibold text-violet-400 bg-violet-500/5 px-2 py-0.5 rounded">Type 1</span>
+                      <p className="text-3xs text-zinc-600 font-mono">args: &lt;durationSecs&gt;</p>
+                    </div>
                   </div>
 
-                  {/* CARD 3 */}
+                  {/* CARD 3 — Milestone */}
                   <div className="p-6 rounded-2xl bg-zinc-900/30 border border-zinc-800 hover:border-zinc-700 transition-all flex flex-col justify-between">
                     <div>
                       <div className="w-10 h-10 rounded-xl bg-amber-500/10 border border-amber-500/20 flex items-center justify-center mb-4">
@@ -345,23 +446,125 @@ export default function DocsPage() {
                         Tokens are allocated into distinct milestone buckets. Stream creators approve/unlock each sequential milestone on-chain to release funds to the recipient.
                       </p>
                     </div>
-                    <span className="mt-4 inline-flex text-2xs uppercase tracking-wider font-semibold text-amber-400 bg-amber-500/5 px-2 py-0.5 rounded">Type 2</span>
+                    <div className="mt-4 space-y-1">
+                      <span className="inline-flex text-2xs uppercase tracking-wider font-semibold text-amber-400 bg-amber-500/5 px-2 py-0.5 rounded">Type 2</span>
+                      <p className="text-3xs text-zinc-600 font-mono">args: &lt;m1,m2,m3,...&gt;</p>
+                    </div>
                   </div>
 
                 </div>
 
                 <div className="p-6 rounded-2xl bg-indigo-500/5 border border-indigo-500/10 flex gap-4">
-                  <Info className="w-6 h-6 text-indigo-400 shrink-0" />
+                  <Info className="w-6 h-6 text-indigo-400 shrink-0 mt-0.5" />
                   <div>
-                    <h4 className="text-sm font-semibold text-indigo-300">Dynamic Rebalancing Capabilty</h4>
+                    <h4 className="text-sm font-semibold text-indigo-300">Dynamic Rebalancing Capability</h4>
                     <p className="mt-1 text-xs text-zinc-400 leading-relaxed">
-                      For Milestone Vesting streams, our protocol allows creators to resize allocations of un-unlocked milestones. The smart contract automatically transfers tokens to or from the stream vault as needed to match the new totals!
+                      For Milestone Vesting streams, our protocol allows creators to resize allocations of un-unlocked milestones via <code className="text-indigo-300">edit-milestone</code>. The smart contract automatically transfers tokens to or from the stream vault as needed to match the new totals. Cliff timestamps can also be adjusted post-creation using <code className="text-indigo-300">edit-cliff</code>.
                     </p>
                   </div>
                 </div>
               </section>
             )}
+{activeTab === "sdk" && (
+  <section className="space-y-8 animate-fadeIn">
 
+    <div className="p-6 rounded-2xl bg-zinc-900/40 border border-zinc-800">
+      <h2 className="text-2xl font-bold flex items-center gap-2">
+        <Coins className="w-5 h-5 text-indigo-400" />
+        TypeScript SDK
+      </h2>
+
+      <p className="mt-3 text-sm text-zinc-400">
+        Official SDK for creating, managing, editing,
+        and withdrawing vesting streams on Solana.
+      </p>
+    </div>
+
+    <div className="p-6 rounded-2xl bg-zinc-900/20 border border-zinc-800">
+      <h3 className="font-semibold mb-3">
+        Installation
+      </h3>
+
+      <CodeSnippet
+        code={`npm install @unifiedflow/unified-flow-sdk`}
+      />
+    </div>
+
+    <div className="p-6 rounded-2xl bg-zinc-900/20 border border-zinc-800">
+      <h3 className="font-semibold mb-3">
+        Initialize Client
+      </h3>
+
+      <CodeSnippet
+        code={`const client = new UnifiedFlowClient(
+  program,
+  wallet,
+  connection,
+  "confirmed"
+);`}
+      />
+    </div>
+
+    <div className="space-y-4">
+      <h3 className="font-semibold">
+        Available Methods
+      </h3>
+
+      {SDK_METHODS.map((method) => (
+        <div
+          key={method.name}
+          className="p-5 rounded-2xl bg-zinc-900/20 border border-zinc-800"
+        >
+          <h4 className="font-mono text-indigo-400">
+            {method.name}()
+          </h4>
+
+          <p className="mt-2 text-xs text-zinc-400">
+            {method.desc}
+          </p>
+
+          <CodeSnippet code={method.example} />
+        </div>
+      ))}
+    </div>
+
+    <div className="p-6 rounded-2xl bg-zinc-900/20 border border-zinc-800">
+      <h3 className="font-semibold mb-3">
+        Transaction Progress
+      </h3>
+
+      <CodeSnippet
+        code={`await client.withdraw(
+  streamPDA,
+  (status) => {
+    console.log(status);
+  }
+);`}
+      />
+
+      <div className="grid grid-cols-3 gap-3 mt-4">
+        <div className="p-3 rounded-lg bg-zinc-950 border border-zinc-800">
+          <span className="font-mono text-cyan-400 text-xs">
+            wallet_approval
+          </span>
+        </div>
+
+        <div className="p-3 rounded-lg bg-zinc-950 border border-zinc-800">
+          <span className="font-mono text-amber-400 text-xs">
+            sending
+          </span>
+        </div>
+
+        <div className="p-3 rounded-lg bg-zinc-950 border border-zinc-800">
+          <span className="font-mono text-emerald-400 text-xs">
+            confirming
+          </span>
+        </div>
+      </div>
+    </div>
+
+  </section>
+)}
             {/* ================================================================
                 TAB 2: REST API
                 ================================================================ */}
@@ -369,7 +572,7 @@ export default function DocsPage() {
               <section className="space-y-8 animate-fadeIn">
                 <div className="p-6 rounded-2xl bg-zinc-900/40 border border-zinc-800/80">
                   <h2 className="text-2xl font-bold flex items-center gap-2 text-zinc-100">
-                    <Globe className="w-5.5 h-5.5 text-indigo-400" />
+                    <Globe className="w-5 h-5 text-indigo-400" />
                     REST API Integration
                   </h2>
                   <p className="mt-3 text-zinc-400 text-sm leading-relaxed">
@@ -405,7 +608,7 @@ export default function DocsPage() {
               <section className="space-y-8 animate-fadeIn">
                 <div className="p-6 rounded-2xl bg-zinc-900/40 border border-zinc-800/80">
                   <h2 className="text-2xl font-bold flex items-center gap-2 text-zinc-100">
-                    <Cpu className="w-5.5 h-5.5 text-indigo-400" />
+                    <Cpu className="w-5 h-5 text-indigo-400" />
                     Model Context Protocol (MCP) Server
                   </h2>
                   <p className="mt-3 text-zinc-400 text-sm leading-relaxed">
@@ -487,23 +690,46 @@ export default function DocsPage() {
               <section className="space-y-8 animate-fadeIn">
                 <div className="p-6 rounded-2xl bg-zinc-900/40 border border-zinc-800/80">
                   <h2 className="text-2xl font-bold flex items-center gap-2 text-zinc-100">
-                    <Terminal className="w-5.5 h-5.5 text-indigo-400" />
+                    <Terminal className="w-5 h-5 text-indigo-400" />
                     CLI & AI Agent Skills
                   </h2>
                   <p className="mt-3 text-zinc-400 text-sm leading-relaxed">
-                    Trigger operations directly in your terminal using the built-in Node CLI wrapper, or verify the agent skill constraints required for AI automated vesting management.
+                    Trigger operations directly in your terminal using the <code className="text-indigo-300">@unifiedflow/cli</code> package. Install globally via npm and configure your wallet and RPC via environment variables.
                   </p>
+                  <div className="mt-4 p-4 rounded-xl bg-zinc-900 border border-zinc-800">
+                    <span className="text-3xs uppercase tracking-wider font-semibold text-zinc-500 block mb-2">Installation</span>
+                    <code className="font-mono text-xs text-emerald-400">npm install -g @unifiedflow/cli</code>
+                  </div>
+                  <div className="mt-3 p-4 rounded-xl bg-zinc-900 border border-zinc-800">
+                    <span className="text-3xs uppercase tracking-wider font-semibold text-zinc-500 block mb-2">Environment Variables (.env)</span>
+                    <pre className="font-mono text-xs text-zinc-300 whitespace-pre-wrap">{`WALLET_PATH=~/.config/solana/id.json   # Path to keypair file
+PROGRAM_ID=8M5yieUh7pxwUi1YBByDF82nqoorZwaKi8dBoMVpurFa
+RPC_URL=https://api.devnet.solana.com`}</pre>
+                  </div>
                 </div>
 
-                {/* CLI CHEAT SHEET */}
+                {/* READ COMMANDS */}
                 <div className="space-y-4">
-                  <h3 className="text-base font-semibold text-zinc-100">CLI Command Reference Cheat Sheet</h3>
+                  <h3 className="text-base font-semibold text-zinc-100 flex items-center gap-2">
+                    <Globe className="w-4 h-4 text-cyan-400" />
+                    Read Commands
+                  </h3>
                   <div className="space-y-3">
-                    {CLI_COMMANDS.map((cmd, idx) => (
-                      <div key={idx} className="p-5 rounded-2xl bg-zinc-900/20 border border-zinc-800">
-                        <p className="text-xs font-medium text-zinc-300">{cmd.desc}</p>
-                        <CodeSnippet code={cmd.cmd} />
-                      </div>
+                    {CLI_READ_COMMANDS.map((cmd, idx) => (
+                      <CliCard key={idx} {...cmd} />
+                    ))}
+                  </div>
+                </div>
+
+                {/* WRITE COMMANDS */}
+                <div className="space-y-4">
+                  <h3 className="text-base font-semibold text-zinc-100 flex items-center gap-2">
+                    <Edit3 className="w-4 h-4 text-amber-400" />
+                    Write / Transaction Commands
+                  </h3>
+                  <div className="space-y-3">
+                    {CLI_WRITE_COMMANDS.map((cmd, idx) => (
+                      <CliCard key={idx} {...cmd} />
                     ))}
                   </div>
                 </div>
@@ -516,13 +742,19 @@ export default function DocsPage() {
                   </h3>
                   <ul className="text-xs text-zinc-400 space-y-2 list-disc list-inside leading-relaxed">
                     <li>
-                      <span className="font-semibold text-zinc-300">Milestones Balance Validation:</span> Sum of milestone allocations **must exactly sum** to the stream total amount.
+                      <span className="font-semibold text-zinc-300">Milestones Balance Validation:</span> Sum of milestone allocations must exactly equal the stream total amount.
                     </li>
                     <li>
                       <span className="font-semibold text-zinc-300">Sequential Milestones Approvals:</span> Milestone index <code className="text-amber-300 font-mono">i</code> must be unlocked before index <code className="text-amber-300 font-mono">i+1</code> can be processed.
                     </li>
                     <li>
                       <span className="font-semibold text-zinc-300">Oracle Staleness Limit:</span> Devnet oracle feed read will block claims if data updates are older than 1 hour.
+                    </li>
+                    <li>
+                      <span className="font-semibold text-zinc-300">Cancel Authorization:</span> Only the stream creator can cancel. Unvested tokens are returned — withdrawn amounts are non-refundable.
+                    </li>
+                    <li>
+                      <span className="font-semibold text-zinc-300">Init Once:</span> The <code className="text-amber-300 font-mono">init</code> command initializes the global config PDA and should only be run once by the protocol admin.
                     </li>
                   </ul>
                 </div>
@@ -531,23 +763,23 @@ export default function DocsPage() {
 
           </main>
 
-          {/* SIDEBAR AD CARD */}
+          {/* SIDEBAR */}
           <aside className="space-y-6">
 
-            {/* PROTOCOL STATS CARD */}
+            {/* PROTOCOL INFO CARD */}
             <div className="p-6 rounded-2xl bg-zinc-900/30 border border-zinc-800 shadow-sm relative overflow-hidden group">
               <div className="absolute -right-4 -bottom-4 w-24 h-24 bg-indigo-500/5 rounded-full blur-xl group-hover:bg-indigo-500/10 transition-colors" />
               <h3 className="text-sm font-semibold text-zinc-100 flex items-center gap-1.5 mb-4">
-                <Coins className="w-4 h-4 text-indigo-400" />
-                Vesting Decimals
+                <Settings className="w-4 h-4 text-indigo-400" />
+                Protocol Info
               </h3>
               <div className="space-y-3.5">
                 <div className="flex justify-between items-center text-xs">
-                  <span className="text-zinc-500">Solana Network</span>
+                  <span className="text-zinc-500">Network</span>
                   <span className="font-mono text-zinc-300 font-semibold">Devnet</span>
                 </div>
                 <div className="flex justify-between items-center text-xs">
-                  <span className="text-zinc-500">Chainlink SOL/USD Feed</span>
+                  <span className="text-zinc-500">Chainlink Feed</span>
                   <span className="font-mono text-zinc-300 text-indigo-400 truncate max-w-[120px]" title="99B2bTijsU6f1GCT73HmdR7HCFFjGMBcPZY6jZ96ynrR">
                     99B2bT...rR
                   </span>
@@ -558,17 +790,41 @@ export default function DocsPage() {
                     8M5yie...Fa
                   </span>
                 </div>
+                <div className="flex justify-between items-center text-xs">
+                  <span className="text-zinc-500">CLI Package</span>
+                  <span className="font-mono text-zinc-300 text-emerald-400">@unifiedflow/cli</span>
+                </div>
               </div>
             </div>
 
-            {/* LAUNCH DOCUMENT CARD */}
+            {/* VESTING TYPES QUICK REF */}
+            <div className="p-6 rounded-2xl bg-zinc-900/30 border border-zinc-800">
+              <h3 className="text-sm font-semibold text-zinc-100 flex items-center gap-1.5 mb-4">
+                <Layers className="w-4 h-4 text-amber-400" />
+                Vesting Type IDs
+              </h3>
+              <div className="space-y-2">
+                {[
+                  { id: "0", label: "Linear", color: "text-cyan-400" },
+                  { id: "1", label: "Cliff", color: "text-violet-400" },
+                  { id: "2", label: "Milestone", color: "text-amber-400" },
+                ].map(t => (
+                  <div key={t.id} className="flex justify-between items-center text-xs">
+                    <span className={`font-mono font-bold ${t.color}`}>Type {t.id}</span>
+                    <span className="text-zinc-400">{t.label}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            {/* AUTONOMOUS AGENTS CARD */}
             <div className="p-6 rounded-2xl bg-gradient-to-br from-indigo-900/20 to-zinc-900 border border-indigo-500/20 text-zinc-100">
               <h3 className="font-bold text-sm flex items-center gap-2">
-                <Sparkles className="w-4.5 h-4.5 text-indigo-400" />
+                <Sparkles className="w-4 h-4 text-indigo-400" />
                 Autonomous Agents
               </h3>
               <p className="mt-2 text-2xs text-zinc-400 leading-relaxed">
-                Our code has native supports for Model Context Protocol. AI Agents can instantly connect and execute complex operations for you securely.
+                Our code has native support for Model Context Protocol. AI Agents can instantly connect and execute complex operations for you securely.
               </p>
               <div className="mt-4">
                 <span className="text-3xs uppercase tracking-wider font-semibold text-indigo-300 block mb-1">Skills Route</span>
@@ -590,3 +846,4 @@ export default function DocsPage() {
     </div>
   );
 }
+

@@ -1,227 +1,275 @@
 # @unifiedflow/unified-flow-sdk
 
-TypeScript SDK for interacting with the **Unified Flow** on-chain token vesting and streaming program on Solana.
+TypeScript SDK for interacting with the **Unified Flow** on-chain token vesting and streaming protocol on Solana.
 
 ---
 
-## Installation
+# Installation
 
 ```bash
 npm install @unifiedflow/unified-flow-sdk
-# or
+```
+
+or
+
+```bash
 yarn add @unifiedflow/unified-flow-sdk
 ```
 
-### Peer Dependencies
+## Peer Dependencies
 
 ```bash
-npm install @coral-xyz/anchor @solana/web3.js @solana/spl-token
+npm install \
+  @coral-xyz/anchor \
+  @solana/web3.js \
+  @solana/spl-token
 ```
-
-> **Version note:** Make sure your project uses the same `@coral-xyz/anchor` version as the SDK to avoid type conflicts. Add to `package.json` if needed:
-> ```json
-> { "overrides": { "@coral-xyz/anchor": "<sdk-anchor-version>" } }
-> ```
 
 ---
 
-## Quick Start
+# Quick Start
 
-### 1. Initialize the Client
+## Initialize Client
 
-```typescript
-import { useAnchorWallet, useConnection } from "@solana/wallet-adapter-react";
-import { AnchorProvider, Program } from "@coral-xyz/anchor";
-import { IDL, UnifiedFlow, UnifiedFlowClient } from "@unifiedflow/unified-flow-sdk";
+```ts
 import { useMemo } from "react";
+import { Program, AnchorProvider } from "@coral-xyz/anchor";
+import { useConnection } from "@solana/wallet-adapter-react";
+
+import {
+  IDL,
+  UnifiedFlowClient,
+  type UnifiedFlow,
+} from "@unifiedflow/unified-flow-sdk";
+
+import { useWalletSession } from "@wallet-standard/react";
 
 export function useUnifiedFlowClient() {
   const { connection } = useConnection();
-  const wallet = useAnchorWallet();
+  const wallet = useWalletSession();
 
   return useMemo(() => {
     if (!wallet) return null;
 
-    const provider = new AnchorProvider(connection, wallet, {
-      commitment: "confirmed",
-    });
+    const provider = new AnchorProvider(
+      connection,
+      {} as any,
+      { commitment: "confirmed" }
+    );
 
-    const program = new Program(IDL, provider) as any;
-    return new UnifiedFlowClient(program);
+    const program = new Program(
+      IDL,
+      provider
+    ) as Program<UnifiedFlow>;
+
+    return new UnifiedFlowClient(
+      program,
+      wallet,
+      connection,
+      "confirmed"
+    );
   }, [wallet, connection]);
 }
 ```
 
-### 2. Use in a Component
+---
 
-```typescript
-const client = useUnifiedFlowClient();
+# Transaction Status Tracking
 
-if (!client) return <p>Connect your wallet</p>;
+All transaction methods support an optional status callback.
+
+```ts
+await client.withdraw(streamPDA, (status) => {
+  switch (status) {
+    case "wallet_approval":
+      console.log("Waiting for wallet approval");
+      break;
+
+    case "sending":
+      console.log("Sending transaction");
+      break;
+
+    case "confirming":
+      console.log("Confirming transaction");
+      break;
+  }
+});
+```
+
+Available phases:
+
+```ts
+type TxProgressPhase =
+  | "wallet_approval"
+  | "sending"
+  | "confirming";
 ```
 
 ---
 
-## Vesting Types
+# Vesting Types
 
-| Value | Type        | Description                                      |
-|-------|-------------|--------------------------------------------------|
-| `0`   | `LINEAR`    | Tokens vest continuously over time               |
-| `1`   | `CLIFF`     | All tokens unlock at a single cliff timestamp    |
-| `2`   | `MILESTONE` | Tokens unlock per milestone, approved by creator |
+| Value | Type      | Description                        |
+| ----- | --------- | ---------------------------------- |
+| 0     | LINEAR    | Continuous linear vesting          |
+| 1     | CLIFF     | Entire allocation unlocks at cliff |
+| 2     | MILESTONE | Unlocks milestone-by-milestone     |
 
 ---
 
-## API Reference
+# API Reference
 
-### `createStream`
+## createStream
 
-Create a new vesting stream.
+Creates a new stream.
 
-```typescript
-const builder = await client.createStream(
-  creator,          // PublicKey — stream creator / funder
-  recipient,        // PublicKey — token recipient
-  mint,             // PublicKey — SPL token mint
-  new BN(1_000_000),// amount — total tokens (in smallest unit)
-  new BN(startTs),  // start timestamp (Unix seconds)
-  new BN(cliffTs),  // cliff timestamp (set equal to startTs if no cliff)
-  new BN(endTs),    // end timestamp
-  0,                // vestingType: 0 = linear, 1 = cliff, 2 = milestone
-  [],               // milestones: MilestoneInput[] (empty for non-milestone)
-  new BN(nonce)     // unique nonce per creator+recipient pair
+```ts
+const result = await client.createStream(
+  recipient,
+  mint,
+  new BN(1_000_000),
+  new BN(startTs),
+  new BN(cliffTs),
+  new BN(endTs),
+  0,
+  [],
+  new BN(nonce)
 );
 
-const txSig = await builder.rpc();
+console.log(result.signature);
 ```
 
-**Milestone stream example:**
+### Milestone Example
 
-```typescript
-const milestones: MilestoneInput[] = [
+```ts
+const milestones = [
   { amount: new BN(250_000) },
   { amount: new BN(250_000) },
   { amount: new BN(500_000) },
 ];
 
-const builder = await client.createStream(
-  creator, recipient, mint,
+await client.createStream(
+  recipient,
+  mint,
   new BN(1_000_000),
-  new BN(startTs), new BN(startTs), new BN(endTs),
-  2,           // MILESTONE
+  new BN(startTs),
+  new BN(startTs),
+  new BN(endTs),
+  2,
   milestones,
   new BN(nonce)
 );
 ```
 
----
+Returns:
 
-### `withdraw`
-
-Withdraw vested/unlocked tokens from a stream. Callable by the recipient.
-
-```typescript
-const builder = await client.withdraw(
-  streamPDA,  // PublicKey — stream account address
-  recipient,  // PublicKey
-  mint        // PublicKey
-);
-
-const txSig = await builder.rpc();
+```ts
+{
+  signature: string;
+}
 ```
 
 ---
 
-### `cancel`
+## withdraw
 
-Cancel an active stream. Returns unvested tokens to the creator. Callable by the creator.
+Withdraw vested tokens.
 
-```typescript
-const builder = await client.cancel(
-  streamPDA,  // PublicKey — stream account address
-  creator,    // PublicKey
-  recipient,  // PublicKey
-  mint        // PublicKey
+```ts
+const result = await client.withdraw(
+  streamPDA
 );
 
-const txSig = await builder.rpc();
+console.log(result.signature);
 ```
+
+The recipient must be the connected wallet.
 
 ---
 
-### `unlockMilestone`
+## cancel
 
-Unlock the next milestone in a milestone vesting stream. Callable by the creator.
+Cancel a stream.
 
-```typescript
-const builder = await client.unlockMilestone(
-  streamPDA,       // PublicKey
-  creator,         // PublicKey
-  milestoneIndex   // number — 0-indexed
+```ts
+const result = await client.cancel(
+  streamPDA
 );
 
-const txSig = await builder.rpc();
+console.log(result.signature);
 ```
+
+The creator must be the connected wallet.
 
 ---
 
-### `editMilestone`
+## unlockMilestone
 
-Change the token amount for a specific milestone (before it is unlocked).
+Unlock a milestone.
 
-```typescript
-const builder = await client.editMilestone(
+```ts
+const result = await client.unlockMilestone(
   streamPDA,
-  creator,
+  0
+);
+
+console.log(result.signature);
+```
+
+---
+
+## editMilestone
+
+Update a milestone allocation.
+
+```ts
+const result = await client.editMilestone(
+  streamPDA,
   mint,
-  milestoneIndex,    // number
-  new BN(newAmount)  // BN
+  milestoneIndex,
+  new BN(newAmount)
 );
 
-const txSig = await builder.rpc();
+console.log(result.signature);
 ```
 
 ---
 
-### `editCliff`
+## editCliff
 
-Update the cliff timestamp on a cliff vesting stream.
+Update the cliff timestamp.
 
-```typescript
-const builder = await client.editCliff(
+```ts
+const result = await client.editCliff(
   streamPDA,
-  creator,
   new BN(newCliffTs)
 );
 
-const txSig = await builder.rpc();
+console.log(result.signature);
 ```
 
 ---
 
-### `editLinear`
+## editLinear
 
-Extend the end timestamp and/or top up tokens on a linear vesting stream. Both operations happen in a single transaction.
+Extend a linear stream and/or deposit additional tokens.
 
-```typescript
-const builder = await client.editLinear(
+```ts
+const result = await client.editLinear(
   streamPDA,
-  creator,
   mint,
-  new BN(newEndTs),    // new end timestamp
-  new BN(topupAmount)  // additional tokens to deposit (0 if no top-up)
+  new BN(newEndTs),
+  new BN(topupAmount)
 );
 
-const txSig = await builder.rpc();
+console.log(result.signature);
 ```
 
 ---
 
-## PDA Helpers
+# PDA Helpers
 
-The SDK exports PDA derivation utilities if you need raw account addresses:
-
-```typescript
+```ts
 import {
   getConfigPDA,
   getStreamPDA,
@@ -229,64 +277,68 @@ import {
   getFeeVaultPDA,
   getVaultATA,
 } from "@unifiedflow/unified-flow-sdk";
+```
 
-const [streamPDA] = getStreamPDA(creator, recipient, nonce, programId);
-const [milestonePDA] = getMilestonePDA(streamPDA, milestoneIndex, programId);
+### Stream PDA
+
+```ts
+const [streamPDA] = getStreamPDA(
+  creator,
+  recipient,
+  nonce,
+  programId
+);
+```
+
+### Milestone PDA
+
+```ts
+const [milestonePDA] = getMilestonePDA(
+  streamPDA,
+  milestoneIndex,
+  programId
+);
 ```
 
 ---
 
-## Chainlink Oracle
+# Chainlink Integration
 
-Withdrawal fees are denominated in USD and calculated on-chain via the Chainlink SOL/USD price feed. The SDK wires this up automatically — no extra configuration needed.
+Withdrawal fees are priced in USD and converted on-chain using Chainlink SOL/USD.
 
-| Constant              | Value                                        |
-|-----------------------|----------------------------------------------|
-| `CHAINLINK_PROGRAM_ID`| `HEvSKofvBgfaexv23kMabbYqxasxU3mQ4ibBMEmJWHny` |
-| `SOL_USD_FEED`        | `99B2bTijsU6f1GCT73HmdR7HCFFjGMBcPZY6jZ96ynrR` |
+```ts
+CHAINLINK_PROGRAM_ID
+= HEvSKofvBgfaexv23kMabbYqxasxU3mQ4ibBMEmJWHny
 
----
-
-## Builder Pattern
-
-All client methods return an **Anchor instruction builder**. You have three options:
-
-```typescript
-const builder = await client.withdraw(streamPDA, recipient, mint);
-
-// Execute and return transaction signature
-const txSig = await builder.rpc();
-
-// Build a Transaction object (e.g. for simulation or custom signing)
-const tx = await builder.transaction();
-
-// Simulate without sending
-const result = await builder.simulate();
+SOL_USD_FEED
+= 99B2bTijsU6f1GCT73HmdR7HCFFjGMBcPZY6jZ96ynrR
 ```
 
----
-
-## Error Reference
-
-| Error                         | Likely Cause                                              |
-|-------------------------------|-----------------------------------------------------------|
-| `AccountDiscriminatorMismatch`| Wrong cluster (e.g. calling devnet PDA on mainnet RPC)    |
-| `AccountNotInitialized`       | Stream or milestone PDA does not exist yet                |
-| `InvalidMilestoneIndex`       | `milestoneIndex` out of range                             |
-| `StreamNotActive`             | Stream already cancelled or fully vested                  |
+The SDK automatically includes these accounts during withdrawals.
 
 ---
 
-## Network Support
+# Error Reference
 
-| Network | Status |
-|---------|--------|
-| Devnet  | ✅ Supported |
-| Mainnet | ✅ Supported |
-| Localnet| ✅ Supported (bankrun / solana-test-validator) |
+| Error                        | Description                           |
+| ---------------------------- | ------------------------------------- |
+| AccountDiscriminatorMismatch | Wrong cluster or incorrect account    |
+| AccountNotInitialized        | PDA account does not exist            |
+| InvalidMilestoneIndex        | Milestone index out of range          |
+| StreamNotActive              | Stream already completed or cancelled |
 
 ---
 
-## License
+# Network Support
+
+| Network  | Status |
+| -------- | ------ |
+| Devnet   | ✅      |
+| Mainnet  | ✅      |
+| Localnet | ✅      |
+
+---
+
+# License
 
 MIT

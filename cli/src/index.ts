@@ -9,7 +9,6 @@ import {
     ASSOCIATED_TOKEN_PROGRAM_ID,
     getAssociatedTokenAddress,
 } from "@solana/spl-token";
-import bs58 from "bs58";
 import fs from "fs";
 import path from "path";
 import dotenv from "dotenv";
@@ -30,7 +29,14 @@ const C_YELLOW = "\x1b[33m";
 const C_RED = "\x1b[31m";
 const C_MAGENTA = "\x1b[35m";
 const C_BOLD = "\x1b[1m";
+const packageJson = JSON.parse(
+    fs.readFileSync(
+        path.resolve(__dirname, "../package.json"),
+        "utf-8"
+    )
+);
 
+const CLI_VERSION = packageJson.version;
 function logSuccess(msg: string) { console.log(`${C_GREEN}${C_BOLD}✔ Success:${C_RESET} ${msg}`); }
 function logInfo(msg: string) { console.log(`${C_BLUE}${C_BOLD}ℹ Info:${C_RESET} ${msg}`); }
 function logWarn(msg: string) { console.log(`${C_YELLOW}${C_BOLD}⚠ Warning:${C_RESET} ${msg}`); }
@@ -88,14 +94,21 @@ ${C_BOLD}WRITE TRANSACTION COMMANDS:${C_RESET}
                                               ${C_BOLD}0${C_RESET} - Linear (args: <durationSecs>)
                                               ${C_BOLD}1${C_RESET} - Cliff  (args: <durationSecs>)
                                               ${C_BOLD}2${C_RESET} - Milestone (args: comma-separated list of milestone amounts)
+
   ${C_GREEN}withdraw <streamAddress>${C_RESET}          Withdraw claimable vested tokens from a stream.
   ${C_GREEN}cancel <streamAddress>${C_RESET}            Cancel an active stream (returns unvested tokens to creator).
   ${C_GREEN}unlock <streamAddress>${C_RESET}            Unlock the next milestone in a milestone stream.
-  ${C_GREEN}edit-milestone <stream> <idx> <amt>${C_RESET}   Modify a locked milestone allocation.
-  ${C_GREEN}edit-cliff <stream> <newCliffTs>${C_RESET}     Edit stream's cliff timestamp.
+  ${C_GREEN}edit-milestone <stream> <idx> <amt>${C_RESET}
+                                            Modify a locked milestone allocation.
+  ${C_GREEN}edit-cliff <stream> <newCliffTs>${C_RESET}
+                                            Edit stream cliff timestamp.
+
+${C_BOLD}UTILITY COMMANDS:${C_RESET}
+  ${C_GREEN}version${C_RESET}                           Print CLI version information.
+  ${C_GREEN}-v${C_RESET}                                Print CLI version information.
+  ${C_GREEN}--version${C_RESET}                         Print CLI version information.
 `);
 }
-
 export async function main() {
     const args = process.argv.slice(2);
     if (args.length === 0 || args[0] === "--help" || args[0] === "-h") {
@@ -468,7 +481,19 @@ ${C_BLUE}${C_BOLD}🌊 Vesting Stream Details:${C_RESET}
                 logInfo(`Tx Explorer link: https://explorer.solana.com/tx/${tx}?cluster=devnet`);
                 break;
             }
+            case "version":
+            case "-v":
+            case "--version": {
+                console.log(`
+${C_CYAN}${C_BOLD}🌌 Unified Flow CLI${C_RESET}
 
+  Version:     ${C_GREEN}${CLI_VERSION}${C_RESET}
+  Program ID:  ${PROGRAM_ID.toBase58()}
+  RPC:         ${connection.rpcEndpoint}
+
+`);
+                break;
+            }
             default:
                 logError(`Unknown command: ${command}`);
                 printHelp();
@@ -484,4 +509,4 @@ ${C_BLUE}${C_BOLD}🌊 Vesting Stream Details:${C_RESET}
     }
 }
 
-main();
+

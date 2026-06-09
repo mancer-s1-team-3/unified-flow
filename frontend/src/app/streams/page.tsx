@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useRef, useCallback } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { useWalletConnection } from "@solana/react-hooks";
+import { useWalletConnection, useClusterState } from "@solana/react-hooks";
 import { api } from "@/lib/api";
 import { DashboardHeader } from "@/components/dashboard/dashboard-header";
 import { DashboardStreamsPanel } from "@/components/dashboard/dashboard-streams-panel";
@@ -14,6 +14,7 @@ export default function StreamsPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const { wallet, connected } = useWalletConnection();
+  const { endpoint } = useClusterState();
 
   const [streams, setStreams] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
@@ -166,6 +167,7 @@ export default function StreamsPage() {
           setSelectedStream={setSelectedStream}
           connectedWalletAddress={connectedWalletAddress}
           currentTimeTs={nowTs}
+          endpoint={endpoint}
         />
 
       </main>
