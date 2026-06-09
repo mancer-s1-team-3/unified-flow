@@ -325,7 +325,7 @@ export const StreamDetailsDrawer = memo(function StreamDetailsDrawer({
               {isCreatorWallet && selectedStream.isCsvCreated ? (
                    <>
                 {selectedStream.vestingType === 2 && (
-      isCancelled ? (
+      isCancelled|| isEnded ? (
         <div className="sm:col-span-2 flex items-center justify-center gap-1.5 bg-zinc-900 text-zinc-500 border border-zinc-800 py-2.5 rounded-xl text-center">
           <Unlock className="w-3.5 h-3.5" />
           Unlock Disabled
@@ -337,7 +337,7 @@ export const StreamDetailsDrawer = memo(function StreamDetailsDrawer({
         </button>
       )
     )}
-     {isCancelled ? (
+     {isCancelled || isEnded ? (
       <div className="sm:col-span-2 flex items-center justify-center gap-1.5 bg-zinc-900 text-zinc-500 border border-zinc-800 py-2.5 rounded-xl text-center">
         <FileText className="w-3.5 h-3.5" />
         Edit Disabled
@@ -387,7 +387,7 @@ export const StreamDetailsDrawer = memo(function StreamDetailsDrawer({
              ) : isCreatorWallet ? (
   <>
     {selectedStream.vestingType === 2 && (
-      isCancelled ? (
+      isCancelled || isEnded ? (
         <div className="sm:col-span-2 flex items-center justify-center gap-1.5 bg-zinc-900 text-zinc-500 border border-zinc-800 py-2.5 rounded-xl text-center">
           <Unlock className="w-3.5 h-3.5" />
           Unlock Disabled
@@ -400,7 +400,7 @@ export const StreamDetailsDrawer = memo(function StreamDetailsDrawer({
       )
     )}
 
-    {isCancelled ? (
+    {isCancelled || isEnded ? (
       <div className="sm:col-span-2 flex items-center justify-center gap-1.5 bg-zinc-900 text-zinc-500 border border-zinc-800 py-2.5 rounded-xl text-center">
         <Settings className="w-3.5 h-3.5" />
         Modify Disabled
