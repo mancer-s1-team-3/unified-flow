@@ -123,6 +123,11 @@ const CLI_READ_COMMANDS = [
   {
     cmd: "unifiedflow config",
     desc: "Print global protocol config — fees, admin authority, paused state, and allowed mints."
+  },
+  {
+    cmd: "unifiedflow version",
+    desc: "Print CLI version, connected program ID, and active RPC endpoint.",
+    example: "unifiedflow version"
   }
 ];
 
@@ -147,6 +152,11 @@ const CLI_WRITE_COMMANDS = [
     example: "unifiedflow create <recipient> <mint> 1000000000 2 250000000,250000000,250000000,250000000"
   },
   {
+    cmd: "unifiedflow create-batch <csvPath>",
+    desc: "Create multiple streams in one command from a CSV file. Supports all three vesting types. CSV columns: recipient, mint, amount, type, duration, cliffDuration, milestones (semicolon-separated for type 2).",
+    example: "unifiedflow create-batch ./streams.csv"
+  },
+  {
     cmd: "unifiedflow withdraw <streamAddress>",
     desc: "Withdraw claimable vested tokens as the stream recipient. SOL fee is calculated dynamically via Chainlink oracle.",
     example: "unifiedflow withdraw 7xKXtg2CW87d97TXJSDpbD5jBkheTqA83TZRuJosgAsU"
@@ -167,10 +177,20 @@ const CLI_WRITE_COMMANDS = [
     example: "unifiedflow edit-milestone 7xKXtg2CW87d97TXJSDpbD5jBkheTqA83TZRuJosgAsU 2 300000000"
   },
   {
-    cmd: "unifiedflow edit-cliff <streamAddress> <newCliffTs>",
-    desc: "Edit the cliff timestamp of an existing stream. Accepts a Unix timestamp (seconds).",
-    example: "unifiedflow edit-cliff 7xKXtg2CW87d97TXJSDpbD5jBkheTqA83TZRuJosgAsU 1800000000"
-  }
+    cmd: "unifiedflow edit-linear <streamAddress> <newDurationSecs> [topupAmount]",
+    desc: "Extend a linear stream's end time and/or top up its total allocation. newDurationSecs is measured from the original startTs. topupAmount is optional — omit if only extending duration.",
+    example: "unifiedflow edit-linear 7xKXtg2CW87d97TXJSDpbD5jBkheTqA83TZRuJosgAsU 63072000 500000000"
+  },
+  {
+    cmd: "unifiedflow edit-cliff <streamAddress> <newCliffDurationSecs>",
+    desc: "Edit the cliff of an existing stream. Accepts duration in seconds from the stream's original startTs — the contract derives the absolute cliff timestamp internally.",
+    example: "unifiedflow edit-cliff 7xKXtg2CW87d97TXJSDpbD5jBkheTqA83TZRuJosgAsU 7776000"
+  },
+  {
+    cmd: "unifiedflow edit-batch <csvPath>",
+    desc: "Bulk edit multiple streams from a CSV file. Routes each row to the correct edit instruction based on vesting type. CSV columns: id (stream address), duration, amount (linear), cliffDuration (cliff), milestones (milestone, semicolon-separated).",
+    example: "unifiedflow edit-batch ./edits.csv"
+  },
 ];
 
 const SDK_METHODS = [
