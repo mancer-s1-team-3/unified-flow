@@ -580,6 +580,15 @@ export default function Home({ initialStreams = [] }: Props) {
     return cliffTs > 0 && nowTs >= cliffTs;
   };
 
+  // True when a milestone-type stream has already had at least one milestone
+  // unlocked — the program rejects edit_milestone on an unlocked milestone
+  // (MilestoneAlreadyUnlocked), so the edit-milestone button is disabled.
+  const isMilestoneUnlocked = (streamId: string) => {
+    const stream = streams.find((s) => String(s?.id || "") === streamId);
+    if (!stream || Number(stream.vestingType) !== 2) return false;
+    return Number(stream.unlockedAmount || 0) > 0;
+  };
+
   // ── handleAction ──────────────────────────────────────────────────────────
   const handleAction = async (actionName: string, data: any) => {
 
@@ -891,6 +900,7 @@ export default function Home({ initialStreams = [] }: Props) {
                 editCliffForm={editCliffForm} setEditCliffForm={setEditCliffForm}
                 isStreamCsvCreated={isStreamCsvCreated}
                 isCliffPassed={isCliffPassed}
+                isMilestoneUnlocked={isMilestoneUnlocked}
                 activeTxAction={activeTxAction} activeTxPhase={activeTxPhase}
                 connected={!!connected}
               />

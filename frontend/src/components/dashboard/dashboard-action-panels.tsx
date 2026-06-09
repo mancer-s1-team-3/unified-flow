@@ -308,6 +308,7 @@ type Props = {
   setEditCliffForm: (value: any) => void;
   isStreamCsvCreated: (id: string) => boolean;
   isCliffPassed: (id: string) => boolean;
+  isMilestoneUnlocked: (id: string) => boolean;
   activeTxAction: string | null;
   activeTxPhase: "wallet_approval" | "sending" | "confirming" | null;
   connected: boolean;
@@ -359,6 +360,7 @@ export function DashboardActionPanels(props: Props) {
     setEditCliffForm,
     isStreamCsvCreated,
     isCliffPassed,
+    isMilestoneUnlocked,
     activeTxAction,
     activeTxPhase,
     connected,
@@ -530,8 +532,10 @@ const createCsvDisabled = !csvCreateText?.trim()
 const editCsvDisabled = !csvEditText?.trim() 
   || activeTxAction === "edit_stream_csv"
   || csvEditMilestoneValidation.hasErrors;  // ← tambah ini
+  const editMilestoneAlreadyUnlocked = isMilestoneUnlocked(editMilestoneForm.streamId);
   const editMilestoneDisabled =
     isStreamCsvCreated(editMilestoneForm.streamId) ||
+    editMilestoneAlreadyUnlocked ||
     !editMilestoneForm.streamId?.trim() ||
     editMilestoneAmounts.length === 0 ||
     editMilestoneHasInvalidAmounts ||
@@ -1536,6 +1540,15 @@ const editCsvDisabled = !csvEditText?.trim()
     isMatch={editMilestoneMatchesTotal}
   />
 </div>
+            </div>
+          )}
+          {editMilestoneAlreadyUnlocked && !isStreamCsvCreated(editMilestoneForm.streamId) && (
+            <div className="bg-amber-950/40 border border-amber-500/30 rounded-2xl p-4 text-amber-300 flex items-start gap-3 mt-6">
+              <Lock className="w-5 h-5 text-amber-400 shrink-0 mt-0.5" />
+              <div>
+                <h4 className="text-sm font-extrabold">Milestone Already Unlocked</h4>
+                <p className="text-xs text-amber-400/80 mt-1 leading-relaxed">At least one milestone on this stream has already been unlocked, so its milestone structure can no longer be edited.</p>
+              </div>
             </div>
           )}
           <button
