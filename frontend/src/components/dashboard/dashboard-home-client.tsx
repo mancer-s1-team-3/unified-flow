@@ -571,6 +571,24 @@ export default function Home({ initialStreams = [] }: Props) {
     return stream ? stream.isCsvCreated : false;
   };
 
+  // True when a cliff-type stream's cliff timestamp has already elapsed — the
+  // cliff can no longer be edited on-chain, so the edit-cliff button is disabled.
+  const isCliffPassed = (streamId: string) => {
+    const stream = streams.find((s) => String(s?.id || "") === streamId);
+    if (!stream || Number(stream.vestingType) !== 1) return false;
+    const cliffTs = Number(stream.cliffTs || 0);
+    return cliffTs > 0 && nowTs >= cliffTs;
+  };
+
+  // True when a milestone-type stream has already had at least one milestone
+  // unlocked — the program rejects edit_milestone on an unlocked milestone
+  // (MilestoneAlreadyUnlocked), so the edit-milestone button is disabled.
+  const isMilestoneUnlocked = (streamId: string) => {
+    const stream = streams.find((s) => String(s?.id || "") === streamId);
+    if (!stream || Number(stream.vestingType) !== 2) return false;
+    return Number(stream.unlockedAmount || 0) > 0;
+  };
+
   // ── handleAction ──────────────────────────────────────────────────────────
   const handleAction = async (actionName: string, data: any) => {
 
@@ -727,6 +745,7 @@ export default function Home({ initialStreams = [] }: Props) {
         const batchEditResult = await editStreamBatchOnChain({
           wallet, endpoint,
           inputs: parsedItems.map((item: any) => ({ id: String(item.id || ""), amount: item.amount, duration: item.duration, cliffDuration: item.cliffDuration, milestones: item.milestones })),
+          onStatus: setTxStatus,
         });
         if (batchEditResult.signatures.length === 0) throw new Error("No editable rows found. Provide duration, cliff_duration, or milestones columns for CSV-created streams.");
         await api.post("/csv/upload", { content: csvEditText, filename: `bulk_edit_v${csvVersions.length + 1}.csv`, uploader: connectedWalletAddress || "Anonymous" });
@@ -881,6 +900,8 @@ export default function Home({ initialStreams = [] }: Props) {
                 editLinearForm={editLinearForm} setEditLinearForm={setEditLinearForm}
                 editCliffForm={editCliffForm} setEditCliffForm={setEditCliffForm}
                 isStreamCsvCreated={isStreamCsvCreated}
+                isCliffPassed={isCliffPassed}
+                isMilestoneUnlocked={isMilestoneUnlocked}
                 activeTxAction={activeTxAction} activeTxPhase={activeTxPhase}
                 connected={!!connected}
               />
@@ -892,6 +913,7 @@ export default function Home({ initialStreams = [] }: Props) {
               prefillAction={prefillAction} setActiveTab={setActiveTab}
               setCsvEditText={setCsvEditText} setSelectedStream={setSelectedStream}
               connectedWalletAddress={connectedWalletAddress} currentTimeTs={nowTs}
+              endpoint={endpoint}
             />
 
           </div>

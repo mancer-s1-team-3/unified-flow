@@ -18,11 +18,31 @@ import path from "node:path";
 import prisma from "../db/prisma";
 import { connection } from "../services/rpc";
 import { parseCsvText, computeCsvDiff, mapCsvRowsToStreams } from "../services/csvDiff";
+import { streamChat, isConfigured as isAiConfigured, type ChatContext } from "../services/aiChat";
 import idl from "../idl/unified_flow.json";
 
 const app = express();
 
-app.use(cors());
+// Restrict browser cross-origin access to known frontends. Configure via the
+// CORS_ORIGINS env (comma-separated); falls back to local dev ports. Requests
+// without an Origin header (curl, server-to-server, health checks) are allowed
+// through — CORS is a browser-enforced control, not a substitute for auth.
+const allowedOrigins = (process.env.CORS_ORIGINS || "http://localhost:3000,http://localhost:3001")
+    .split(",")
+    .map((origin) => origin.trim())
+    .filter(Boolean);
+
+app.use(
+    cors({
+        origin(origin, callback) {
+            if (!origin || allowedOrigins.includes(origin)) {
+                callback(null, true);
+            } else {
+                callback(new Error(`Origin ${origin} is not allowed by CORS`));
+            }
+        },
+    }),
+);
 app.use(express.json());
 
 // =====================================================
@@ -781,6 +801,49 @@ app.post("/streams/:id/unlock-milestone", async (req, res) => {
         }, bigintReplacer));
     } catch (err: any) {
         res.status(400).send({ error: err.message });
+    }
+});
+
+// =====================================================
+// AI CHAT (ASI:One proxy)
+// =====================================================
+
+// Reports whether the AI service is configured server-side, so the frontend can
+// show the right status without ever seeing the API key.
+app.get("/ai/status", (_req, res) => {
+    res.send({ configured: isAiConfigured() });
+});
+
+// Streams a chat completion as Server-Sent Events. Each event is a normalized
+// chunk: { content, done, toolCall? }. The API key, system prompt, and tool
+// definitions all live on the server.
+app.post("/ai/chat", async (req, res) => {
+    const { userMessage, context } = req.body as {
+        userMessage?: string;
+        context?: ChatContext;
+    };
+
+    if (!userMessage || typeof userMessage !== "string") {
+        return res.status(400).send({ error: "userMessage is required." });
+    }
+
+    res.setHeader("Content-Type", "text/event-stream");
+    res.setHeader("Cache-Control", "no-cache, no-transform");
+    res.setHeader("Connection", "keep-alive");
+    res.flushHeaders();
+
+    const send = (chunk: unknown) => res.write(`data: ${JSON.stringify(chunk)}\n\n`);
+
+    try {
+        for await (const chunk of streamChat(userMessage, context ?? {})) {
+            send(chunk);
+        }
+    } catch (err: any) {
+        // Surface a terminal error chunk; the frontend falls back gracefully.
+        send({ content: "", done: true, error: err?.message ?? "AI service error" });
+    } finally {
+        res.write("data: [DONE]\n\n");
+        res.end();
     }
 });
 

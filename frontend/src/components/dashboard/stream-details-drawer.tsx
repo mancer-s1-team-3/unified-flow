@@ -4,6 +4,7 @@ import { memo, useEffect } from "react";
 import { createPortal } from "react-dom";
 import { ArrowDownRight, ArrowUpRight, Calendar, Check, Copy, FileText, History, Settings, Unlock, XCircle } from "lucide-react";
 import { formatDate, formatTokenAmount, getAmountUnitLabel, getMilestoneAllocations, shorten } from "./utils";
+import { getExplorerClusterParam } from "@/lib/solana/network-config";
 
 export const StreamDetailsDrawer = memo(function StreamDetailsDrawer({
   selectedStream,
@@ -16,6 +17,7 @@ export const StreamDetailsDrawer = memo(function StreamDetailsDrawer({
   setSelectedStream,
   connectedWalletAddress,
   currentTimeTs,
+  endpoint,
 }: {
   selectedStream: any;
   loadingDetails: boolean;
@@ -27,6 +29,7 @@ export const StreamDetailsDrawer = memo(function StreamDetailsDrawer({
   setSelectedStream: (value: any) => void;
   connectedWalletAddress: string | null;
   currentTimeTs: number;
+  endpoint: string;
 }) {
   useEffect(() => {
     if (!selectedStream) return;
@@ -283,7 +286,7 @@ const hasClaimable = selectedStream.vestingType === 2
                           <span className="text-[9px] text-zinc-500 font-mono block">Slot: {tx.slot}</span>
                         </div>
 
-                        <a href={`https://solscan.io/tx/${tx.signature}?cluster=devnet`} target="_blank" rel="noopener noreferrer" className="text-indigo-400 hover:text-indigo-300 flex items-center gap-0.5 font-bold transition-all shrink-0">
+                        <a href={`https://solscan.io/tx/${tx.signature}?cluster=${getExplorerClusterParam(endpoint)}`} target="_blank" rel="noopener noreferrer" className="text-indigo-400 hover:text-indigo-300 flex items-center gap-0.5 font-bold transition-all shrink-0">
                           Solscan <ArrowUpRight className="w-3 h-3" />
                         </a>
                       </div>
@@ -299,24 +302,19 @@ const hasClaimable = selectedStream.vestingType === 2
           <div className="border-t border-zinc-900 pt-4 flex flex-col gap-2 min-w-0">
             <div className="text-[10px] text-zinc-500 font-bold uppercase tracking-widest">Instant Action Shortcuts</div>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs font-semibold min-w-0">
-       {isRecipientWallet && !isCancelled && (
-  selectedStream.vestingType === 2 && unlocked === 0 ? (
-    <div className="flex items-center justify-center gap-1.5 bg-zinc-900 text-zinc-500 border border-zinc-800 py-2.5 rounded-xl text-center">
-      <ArrowDownRight className="w-3.5 h-3.5" />
-      Claim Disabled
-    </div>
-  ) : !hasClaimable ? (
-    <div className="flex items-center justify-center gap-1.5 bg-zinc-900 text-zinc-500 border border-zinc-800 py-2.5 rounded-xl text-center">
-      <ArrowDownRight className="w-3.5 h-3.5" />
-      Claim Disabled
-    </div>
-  ) : (
-    <button onClick={() => prefillAction("withdraw", selectedStream.id)} className="flex items-center justify-center gap-1.5 bg-indigo-600 hover:bg-indigo-700 text-zinc-50 py-2.5 rounded-xl transition-all">
-      <ArrowDownRight className="w-3.5 h-3.5" />
-      Claim Tokens
-    </button>
-  )
-)}
+              {isRecipientWallet && (
+                isCancelled || isFullyClaimed || (selectedStream.vestingType === 2 && unlocked === 0) || !hasClaimable ? (
+                  <div className="flex items-center justify-center gap-1.5 bg-zinc-900 text-zinc-500 border border-zinc-800 py-2.5 rounded-xl text-center">
+                    <ArrowDownRight className="w-3.5 h-3.5" />
+                    Claim Disabled
+                  </div>
+                ) : (
+                  <button onClick={() => prefillAction("withdraw", selectedStream.id)} className="flex items-center justify-center gap-1.5 bg-indigo-600 hover:bg-indigo-700 text-zinc-50 py-2.5 rounded-xl transition-all">
+                    <ArrowDownRight className="w-3.5 h-3.5" />
+                    Claim Tokens
+                  </button>
+                )
+              )}
               {isCreatorWallet && selectedStream.cancelable && !cancelDisabled && (
                 <button onClick={() => prefillAction("cancel", selectedStream.id)} className="flex items-center justify-center gap-1.5 bg-zinc-900 hover:bg-zinc-800 text-red-400 hover:text-red-300 border border-zinc-800 hover:border-zinc-700 py-2.5 rounded-xl transition-all">
                   <XCircle className="w-3.5 h-3.5" />
