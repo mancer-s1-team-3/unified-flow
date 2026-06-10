@@ -60,19 +60,36 @@ Technical details:
 - Works with any Solana-compatible wallet`;
 
 const TOOLS = [
+  // ─── Existing (fixed) ────────────────────────────────────────────────────
   {
     type: "function",
     function: {
       name: "create_stream",
-      description: "Create a new vesting stream (linear, cliff, or milestone)",
+      description: "Create a new vesting stream. vesting_type: 0=linear, 1=cliff, 2=milestone. For milestone type, provide milestones array.",
       parameters: {
         type: "object",
         properties: {
-          recipient: { type: "string", description: "The public key of the recipient" },
-          amount: { type: "number", description: "Total token amount" },
-          vesting_type: { type: "number", description: "0 for linear, 1 for cliff, 2 for milestone" },
+          recipient: { type: "string", description: "Recipient wallet public key" },
+          mint: { type: "string", description: "Token mint public key" },
+          amount: { type: "number", description: "Total token amount in base units" },
+          start_ts: { type: "number", description: "Stream start timestamp (Unix seconds)" },
+          cliff_ts: { type: "number", description: "Cliff timestamp (Unix seconds); 0 if no cliff" },
+          end_ts: { type: "number", description: "Stream end/expiry timestamp (Unix seconds)" },
+          vesting_type: { type: "number", enum: [0, 1, 2], description: "0=linear, 1=cliff, 2=milestone" },
+          milestones: {
+            type: "array",
+            description: "Required when vesting_type=2",
+            items: {
+              type: "object",
+              properties: {
+                amount: { type: "number", description: "Token amount for this milestone" },
+              },
+              required: ["amount"],
+            },
+          },
+          nonce: { type: "number", description: "Unique nonce to derive stream PDA" },
         },
-        required: ["recipient", "amount"],
+        required: ["recipient", "mint", "amount", "start_ts", "cliff_ts", "end_ts", "vesting_type", "nonce"],
       },
     },
   },
@@ -80,11 +97,11 @@ const TOOLS = [
     type: "function",
     function: {
       name: "withdraw_stream",
-      description: "Withdraw/claim tokens from a stream",
+      description: "Withdraw/claim vested tokens from a stream. Caller must be the recipient.",
       parameters: {
         type: "object",
         properties: {
-          stream_pda: { type: "string", description: "The stream PDA public key" },
+          stream_pda: { type: "string", description: "Stream account PDA public key" },
         },
         required: ["stream_pda"],
       },
@@ -94,13 +111,79 @@ const TOOLS = [
     type: "function",
     function: {
       name: "cancel_stream",
-      description: "Cancel an active vesting stream",
+      description: "Cancel an active vesting stream. Caller must be the creator. Unvested tokens return to creator.",
       parameters: {
         type: "object",
         properties: {
-          stream_pda: { type: "string", description: "The stream PDA public key" },
+          stream_pda: { type: "string", description: "Stream account PDA public key" },
         },
         required: ["stream_pda"],
+      },
+    },
+  },
+
+  // ─── Missing — added ──────────────────────────────────────────────────────
+  {
+    type: "function",
+    function: {
+      name: "unlock_milestone",
+      description: "Unlock a specific milestone in a milestone-type stream. Caller must be the creator.",
+      parameters: {
+        type: "object",
+        properties: {
+          stream_pda: { type: "string", description: "Stream account PDA public key" },
+          milestone_index: { type: "number", description: "0-based index of the milestone to unlock" },
+        },
+        required: ["stream_pda", "milestone_index"],
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "edit_milestone",
+      description: "Edit the token amount of a specific milestone. Adjusts vault balance accordingly.",
+      parameters: {
+        type: "object",
+        properties: {
+          stream_pda: { type: "string", description: "Stream account PDA public key" },
+          mint: { type: "string", description: "Token mint public key" },
+          milestone_index: { type: "number", description: "0-based index of the milestone to edit" },
+          new_amount: { type: "number", description: "New token amount in base units" },
+        },
+        required: ["stream_pda", "mint", "milestone_index", "new_amount"],
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "edit_cliff",
+      description: "Update the cliff timestamp of a cliff-type stream.",
+      parameters: {
+        type: "object",
+        properties: {
+          stream_pda: { type: "string", description: "Stream account PDA public key" },
+          new_cliff_ts: { type: "number", description: "New cliff timestamp (Unix seconds)" },
+        },
+        required: ["stream_pda", "new_cliff_ts"],
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "edit_linear",
+      description: "Extend end date and/or top-up token amount for a linear stream in a single transaction.",
+      parameters: {
+        type: "object",
+        properties: {
+          stream_pda: { type: "string", description: "Stream account PDA public key" },
+          mint: { type: "string", description: "Token mint public key" },
+          new_end_ts: { type: "number", description: "New end timestamp (Unix seconds)" },
+          topup_amount: { type: "number", description: "Additional tokens to deposit into vault (0 if only extending)" },
+        },
+        required: ["stream_pda", "mint", "new_end_ts", "topup_amount"],
       },
     },
   },
