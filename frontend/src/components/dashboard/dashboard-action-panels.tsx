@@ -1825,7 +1825,10 @@ function useCsvEditTotalByMint(csvText: string): Record<string, number> {
       const values = line.split(",").map((v) => v.trim());
 
       // ── Resolve mint ──────────────────────────────────────────────────
-      const mint = mintIdx !== -1 ? (values[mintIdx] ?? "unknown") : "unknown";
+      // Di dalam loop useCsvEditTotalByMint, ganti resolve mint:
+const mint = mintIdx !== -1
+  ? (values[mintIdx] ?? "unknown")
+  : "__wallet_mint__"; // sentinel kalau tidak ada kolom mint
 
       // ── Detect action/type ────────────────────────────────────────────
       // Priority: explicit "action" col → fallback ke "type" col → infer dari kolom yang ada
@@ -1972,14 +1975,16 @@ const effectiveTotalByMint = editMode && editTotalByMint
   ? editTotalByMint
   : totalByMint;
 
+// Ganti effectiveTotalByMint lookup
+const csvTotalForMint = walletMint
+  ? ((effectiveTotalByMint[walletMint] ?? 0) +
+     (effectiveTotalByMint["__wallet_mint__"] ?? 0))  // ← merge sentinel
+  : 0;
+
 const mintExceedsBalance =
   walletMint &&
   walletBalance !== null &&
-  (effectiveTotalByMint[walletMint] ?? 0) > walletBalance;
-
-const csvTotalForMint = walletMint
-  ? (effectiveTotalByMint[walletMint] ?? 0)
-  : 0;
+  csvTotalForMint > walletBalance;
 
   const hasAnyError = hasErrors || !!mintExceedsBalance;
 
