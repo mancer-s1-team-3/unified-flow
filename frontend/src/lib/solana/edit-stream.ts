@@ -560,11 +560,7 @@ export async function editStreamBatchOnChain({
 
       const startTs = new anchor.BN(String(streamState.startTs || "0"));
       const currentEndTs = new anchor.BN(String(streamState.endTs || "0"));
-      const currentTotalAmount = new anchor.BN(String(streamState.totalAmount || "0"));
-      const targetTotalAmount = hasAmount ? new anchor.BN(amountRaw) : currentTotalAmount;
-      const topupAmount = targetTotalAmount.gt(currentTotalAmount)
-        ? targetTotalAmount.sub(currentTotalAmount).toString()
-        : "0";
+      const topupAmount = hasAmount ? amountRaw : "0";
       const targetEndTs = hasDuration
         ? startTs.add(new anchor.BN(durationRaw))
         : currentEndTs;
@@ -582,7 +578,7 @@ export async function editStreamBatchOnChain({
           streamAddress,
           newEndDuration: hasDuration ? durationRaw : undefined,
           topupAmount,
-        },
+        }
       });
       signatures.push(linearResult.signature);
       streamAddresses.push(streamAddress);
