@@ -1,13 +1,15 @@
 // hooks/use-token-balance.ts
+"use client";
+
 import { useEffect, useState, useCallback, useRef } from "react";
 import { Connection, PublicKey, LAMPORTS_PER_SOL } from "@solana/web3.js";
-import { useWallet } from "@solana/wallet-adapter-react";
+import { useWalletConnection } from "@solana/react-hooks";
 
-const SOL_MINT = "So11111111111111111111111111111111111111112"; // wrapped SOL sentinel
+const SOL_MINT = "So11111111111111111111111111111111111111112";
 
 export interface TokenBalanceResult {
-    balance: number | null;    // in human-readable token units
-    rawBalance: bigint | null; // in base units
+    balance: number | null;
+    rawBalance: bigint | null;
     decimals: number | null;
     loading: boolean;
     error: string | null;
@@ -19,7 +21,12 @@ export function useTokenBalance(
     endpoint: string,
     decimals?: number
 ): TokenBalanceResult {
-    const { publicKey } = useWallet();
+    const { wallet, connected } = useWalletConnection();
+    const walletAddress =
+        connected && wallet?.account.address
+            ? String(wallet.account.address)
+            : null;
+
     const [balance, setBalance] = useState<number | null>(null);
     const [rawBalance, setRawBalance] = useState<bigint | null>(null);
     const [resolvedDecimals, setResolvedDecimals] = useState<number | null>(null);
@@ -28,7 +35,7 @@ export function useTokenBalance(
     const abortRef = useRef<AbortController | null>(null);
 
     const fetchBalance = useCallback(async () => {
-        if (!publicKey || !mint?.trim()) {
+        if (!walletAddress || !mint?.trim()) {
             setBalance(null);
             setRawBalance(null);
             setResolvedDecimals(null);
@@ -48,12 +55,11 @@ export function useTokenBalance(
 
             // ── SOL (native) ──────────────────────────────────────────────────────
             if (mint === SOL_MINT) {
-                const lamports = await connection.getBalance(publicKey);
+                const pubkey = new PublicKey(walletAddress);
+                const lamports = await connection.getBalance(pubkey);
                 if (controller.signal.aborted) return;
-                const dec = 9;
-                const raw = BigInt(lamports);
-                setRawBalance(raw);
-                setResolvedDecimals(dec);
+                setRawBalance(BigInt(lamports));
+                setResolvedDecimals(9);
                 setBalance(lamports / LAMPORTS_PER_SOL);
                 return;
             }
@@ -69,13 +75,15 @@ export function useTokenBalance(
                 return;
             }
 
-            const accounts = await connection.getParsedTokenAccountsByOwner(publicKey, {
+            const wallet = new PublicKey(walletAddress);
+            const accounts = await connection.getParsedTokenAccountsByOwner(wallet, {
                 mint: mintPubkey,
             });
 
             if (controller.signal.aborted) return;
 
             if (accounts.value.length === 0) {
+                // ATA belum exist = balance 0, bukan error
                 setBalance(0);
                 setRawBalance(BigInt(0));
                 setResolvedDecimals(decimals ?? null);
@@ -84,29 +92,24 @@ export function useTokenBalance(
 
             const info = accounts.value[0].account.data.parsed.info;
             const tokenAmount = info.tokenAmount;
-            const dec = tokenAmount.decimals as number;
-            const rawAmt = BigInt(tokenAmount.amount as string);
-
-            setRawBalance(rawAmt);
-            setResolvedDecimals(dec);
+            setRawBalance(BigInt(tokenAmount.amount as string));
+            setResolvedDecimals(tokenAmount.decimals as number);
             setBalance(tokenAmount.uiAmount as number);
-        } catch (err: unknown) {
+        } catch {
             if (controller.signal.aborted) return;
-            const msg = err instanceof Error ? err.message : "Failed to fetch balance";
-            setError(msg);
+            setError("Failed to fetch balance");
             setBalance(null);
             setRawBalance(null);
         } finally {
             if (!controller.signal.aborted) setLoading(false);
         }
-    }, [publicKey, mint, endpoint, decimals]);
+    }, [walletAddress, mint, endpoint, decimals]);
 
     useEffect(() => {
         fetchBalance();
         return () => abortRef.current?.abort();
     }, [fetchBalance]);
 
-    // Re-fetch every 30s while mounted
     useEffect(() => {
         const interval = setInterval(fetchBalance, 30_000);
         return () => clearInterval(interval);
