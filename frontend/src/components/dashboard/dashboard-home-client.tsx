@@ -753,48 +753,45 @@ export default function Home({ initialStreams = [] }: Props) {
    if (actionName === "edit_stream_csv") {
   if (!wallet) { showNotification("error", "Connect the creator wallet before bulk editing streams."); return; }
   try {
-    const parsedItems = parseCsv(csvEditText);
+    const parsedItems = parseCsv(csvEditText, "edit");
     if (parsedItems.length === 0) { showNotification("error", "CSV format invalid. Please provide correct headers."); return; }
 
     const inputs = parsedItems.map((item: any) => {
-      const streamId = String(item.id || "");
+  const streamId = String(item.id || "");
+  
+  // item.topupAmount sudah ter-set dari parseCsv("edit") mode
+  // tapi kita override dengan delta calculation
+  let resolvedTopup: string | undefined = undefined;
 
-      // ── Hitung topup delta untuk edit_linear ──────────────────────────
-      let resolvedAmount = item.amount;
+  const rawAmount = item.topupAmount ?? item.amount; // fallback kalau mode tidak di-pass
 
-      if (item.amount !== undefined && item.amount !== "" && item.amount !== null) {
-        const currentStream = streams.find((s) => String(s?.id || "") === streamId);
+  if (rawAmount !== undefined && rawAmount !== "" && rawAmount !== null) {
+    const currentStream = streams.find((s) => String(s?.id || "") === streamId);
 
-        if (currentStream && Number(currentStream.vestingType) === 0) {
-          // Linear stream: amount di CSV = total baru, topup = selisih
-          const decimals = typeof currentStream.mintDecimals === "number"
-            ? currentStream.mintDecimals
-            : 6;
-          const currentTotal = Number(
-            formatBaseUnitsToTokenAmount(parseBaseUnits(currentStream.totalAmount), decimals)
-          );
-          const newTotal = parseFloat(String(item.amount)) || 0;
-          const delta = newTotal - currentTotal;
+    if (currentStream && Number(currentStream.vestingType) === 0) {
+      const decimals = typeof currentStream.mintDecimals === "number"
+        ? currentStream.mintDecimals : 6;
+      const currentTotal = Number(
+        formatBaseUnitsToTokenAmount(parseBaseUnits(currentStream.totalAmount), decimals)
+      );
+      const newTotal = parseFloat(String(rawAmount)) || 0;
+      const delta = newTotal - currentTotal;
 
-          if (delta <= 0) {
-            // Tidak ada topup atau amount lebih kecil — skip amount, pure extend
-            resolvedAmount = undefined;
-          } else {
-            resolvedAmount = String(delta);
-          }
-        }
-        // Milestone stream: amount tidak relevan untuk topup, handled by milestones col
-        // Cliff stream: tidak ada topup
+      if (delta > 0) {
+        resolvedTopup = String(delta);
       }
+      // delta <= 0 → pure extend, tidak perlu topup
+    }
+  }
 
-      return {
-        id:            streamId,
-        amount:        resolvedAmount,
-        duration:      item.duration,
-        cliffDuration: item.cliffDuration,
-        milestones:    item.milestones,
-      };
-    });
+  return {
+    id:            streamId,
+    amount:        resolvedTopup,   // ← topup delta, undefined kalau pure extend
+    duration:      item.duration,
+    cliffDuration: item.cliffDuration,
+    milestones:    item.milestones,
+  };
+});
 
     const batchEditResult = await editStreamBatchOnChain({
       wallet,
