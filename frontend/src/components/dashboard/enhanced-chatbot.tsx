@@ -218,7 +218,36 @@ case "cancel_stream": {
           );
           return { success: true, message: `Milestone ${milestone_index} unlocked! Tx: ${result.signature}` };
         }
+case "edit_milestone": {
+  const { stream_pda, mint, milestone_index, new_amount } = parsedArgs;
+  const result = await client.editMilestone(
+    new PublicKey(stream_pda),
+    new PublicKey(mint),
+    Number(milestone_index),
+    new BN(new_amount)
+  );
+  return { success: true, message: `Milestone ${milestone_index} updated! Tx: ${result.signature}` };
+}
 
+case "edit_cliff": {
+  const { stream_pda, new_cliff_ts } = parsedArgs;
+  const result = await client.editCliff(
+    new PublicKey(stream_pda),
+    new BN(new_cliff_ts)
+  );
+  return { success: true, message: `Cliff updated! Tx: ${result.signature}` };
+}
+
+case "edit_linear": {
+  const { stream_pda, mint, new_end_ts, topup_amount } = parsedArgs;
+  const result = await client.editLinear(
+    new PublicKey(stream_pda),
+    new PublicKey(mint),
+    new BN(new_end_ts),
+    new BN(topup_amount)
+  );
+  return { success: true, message: `Stream extended! Tx: ${result.signature}` };
+}
         default:
           return { success: false, message: `Unknown tool: ${toolName}` };
       }
@@ -312,6 +341,9 @@ case "cancel_stream": {
       withdraw_stream:  { label: "Withdraw Tokens",   icon: "💰", color: "bg-emerald-600" },
       cancel_stream:    { label: "Cancel Stream",     icon: "⚠️", color: "bg-red-600" },
       unlock_milestone: { label: "Unlock Milestone",  icon: "🔓", color: "bg-yellow-600" },
+      edit_milestone: { label: "Edit Milestone",  icon: "✏️", color: "bg-blue-600" },
+edit_cliff:     { label: "Edit Cliff Date",  icon: "📅", color: "bg-purple-600" },
+edit_linear:    { label: "Extend Stream",    icon: "📈", color: "bg-teal-600" },
     };
     const info = toolLabels[toolCall.name] || { label: toolCall.name, icon: "⚡", color: "bg-zinc-600" };
     return { ...info, args: toolCall.arguments };
