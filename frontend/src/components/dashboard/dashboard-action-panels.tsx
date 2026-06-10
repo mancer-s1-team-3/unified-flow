@@ -1810,13 +1810,12 @@ function useCsvEditTotalByMint(csvText: string): Record<string, number> {
     if (lines.length < 2) return {};
 
     const headers = lines[0].split(",").map((h) => h.trim().toLowerCase());
-    const actionIdx = headers.indexOf("action");       // "edit_milestone" | "edit_linear" | "edit_cliff"
     const mintIdx = headers.indexOf("mint");
-    const topupIdx = headers.indexOf("topup_amount");  // edit_linear topup
-    const milestonesIdx = headers.indexOf("milestones"); // edit_milestone new amounts
-
-    // kalau tidak ada kolom action, tidak bisa determine — skip
-    if (actionIdx === -1 || mintIdx === -1) return {};
+    const amountIdx = headers.indexOf("amount");
+    const topupIdx = headers.indexOf("topup_amount");
+    const milestonesIdx = headers.indexOf("milestones");
+    const actionIdx = headers.indexOf("action");
+    const typeIdx = headers.indexOf("type");
 
     const totals: Record<string, number> = {};
 
@@ -1825,31 +1824,63 @@ function useCsvEditTotalByMint(csvText: string): Record<string, number> {
       if (!line) continue;
       const values = line.split(",").map((v) => v.trim());
 
-      const action = values[actionIdx]?.toLowerCase() ?? "";
-      const mint = values[mintIdx] ?? "unknown";
+      // ── Resolve mint ──────────────────────────────────────────────────
+      const mint = mintIdx !== -1 ? (values[mintIdx] ?? "unknown") : "unknown";
 
-      if (action === "edit_linear") {
-        // topup_amount = berapa token ditambahkan ke stream
-        const topup = parseFloat(values[topupIdx] ?? "0") || 0;
-        if (topup > 0) {
-          totals[mint] = (totals[mint] ?? 0) + topup;
-        }
-      } else if (action === "edit_milestone") {
-        // sum semua milestone amounts baru di row ini
-        if (milestonesIdx !== -1) {
-          const raw = values.slice(milestonesIdx).join(";");
-          const milestones = raw
-            .split(/[;,]/)
-            .map((v) => v.trim())
-            .filter(Boolean)
-            .map((v) => parseFloat(v) || 0);
-          const total = milestones.reduce((a, b) => a + b, 0);
-          if (total > 0) {
-            totals[mint] = (totals[mint] ?? 0) + total;
-          }
-        }
-      }
+      // ── Detect action/type ────────────────────────────────────────────
+      // Priority: explicit "action" col → fallback ke "type" col → infer dari kolom yang ada
+      const explicitAction = actionIdx !== -1
+        ? values[actionIdx]?.toLowerCase() ?? ""
+        : "";
+      const explicitType = typeIdx !== -1
+        ? values[typeIdx]?.toLowerCase() ?? ""
+        : "";
+
+      const isEditCliff =
+        explicitAction === "edit_cliff" ||
+        explicitType === "edit_cliff" ||
+        // Infer: punya cliff_duration tapi tidak punya milestones dan tidak punya topup
+        (headers.includes("cliff_duration") &&
+          milestonesIdx === -1 &&
+          topupIdx === -1 &&
+          !explicitAction &&
+          !explicitType);
+
       // edit_cliff → skip, tidak ada token transfer
+      if (isEditCliff) continue;
+
+      const isEditLinear =
+        explicitAction === "edit_linear" ||
+        explicitType === "edit_linear" ||
+        topupIdx !== -1;
+
+      const isEditMilestone =
+        explicitAction === "edit_milestone" ||
+        explicitType === "edit_milestone" ||
+        milestonesIdx !== -1;
+
+      if (isEditLinear && topupIdx !== -1) {
+        // Hanya topup yang menarik token dari wallet
+        const topup = parseFloat(values[topupIdx] ?? "0") || 0;
+        if (topup > 0) totals[mint] = (totals[mint] ?? 0) + topup;
+
+      } else if (isEditMilestone && milestonesIdx !== -1) {
+        // Sum semua milestone values di row ini
+        const raw = values.slice(milestonesIdx).join(";");
+        const milestones = raw
+          .split(/[;,]/)
+          .map((v) => v.trim())
+          .filter(Boolean)
+          .map((v) => parseFloat(v) || 0);
+        const total = milestones.reduce((a, b) => a + b, 0);
+        if (total > 0) totals[mint] = (totals[mint] ?? 0) + total;
+
+      } else if (amountIdx !== -1 && !isEditCliff) {
+        // Fallback: kalau tidak bisa determine tipe tapi ada kolom amount,
+        // dan bukan edit_cliff — treat sebagai token-consuming edit
+        const amount = parseFloat(values[amountIdx] ?? "0") || 0;
+        if (amount > 0) totals[mint] = (totals[mint] ?? 0) + amount;
+      }
     }
 
     return totals;
