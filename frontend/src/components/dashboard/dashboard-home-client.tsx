@@ -501,25 +501,38 @@ export default function Home({ initialStreams = [] }: Props) {
   // ── CSV helpers ───────────────────────────────────────────────────────────
   const shorten = (address: string) => address ? `${address.slice(0, 6)}...${address.slice(-6)}` : "";
 
-  const parseCsv = (csvText: string) => {
-    const lines = csvText.trim().split("\n");
-    if (lines.length < 2) return [];
-    const headers = lines[0].split(",").map((h) => h.trim().toLowerCase());
-    return lines.slice(1).map((line) => {
-      const values = line.split(",").map((v) => v.trim());
-      const obj: any = {};
-      headers.forEach((header, index) => {
-        if (values[index] === undefined) return;
-        const rawValue = values[index];
-        const parsedValue = rawValue === "true" ? true : rawValue === "false" ? false : rawValue;
-        if (header === "cliff_duration" || header === "cliffduration") { obj.cliffDuration = parsedValue; return; }
-        if (header === "milestone_count" || header === "milestonecount") { obj.milestoneCount = parsedValue; return; }
-        if (header === "milestones") { obj.milestones = values.slice(index).map((v) => v.trim()).filter(Boolean).join(";"); return; }
-        obj[header] = parsedValue;
-      });
-      return obj;
+ const parseCsv = (csvText: string, mode: "create" | "edit" = "create") => {
+  const lines = csvText.trim().split("\n");
+  if (lines.length < 2) return [];
+  const headers = lines[0].split(",").map((h) => h.trim().toLowerCase());
+  return lines.slice(1).map((line) => {
+    const values = line.split(",").map((v) => v.trim());
+    const obj: any = {};
+    headers.forEach((header, index) => {
+      if (values[index] === undefined) return;
+      const rawValue = values[index];
+      const parsedValue = rawValue === "true" ? true
+        : rawValue === "false" ? false
+        : rawValue;
+
+      if (header === "cliff_duration" || header === "cliffduration") {
+        obj.cliffDuration = parsedValue; return;
+      }
+      if (header === "milestone_count" || header === "milestonecount") {
+        obj.milestoneCount = parsedValue; return;
+      }
+      if (header === "milestones") {
+        obj.milestones = values.slice(index).map((v) => v.trim()).filter(Boolean).join(";"); return;
+      }
+      // ← Khusus edit mode: kolom "amount" = topup delta, bukan total baru
+      if (mode === "edit" && header === "amount") {
+        obj.topupAmount = parsedValue; return;
+      }
+      obj[header] = parsedValue;
     });
-  };
+    return obj;
+  });
+};
 
   const buildCsvCreateInput = (item: any, index: number) => {
     const milestones = String(item.milestones || "").split(";").map((v: string) => v.trim()).filter(Boolean);
@@ -708,7 +721,7 @@ export default function Home({ initialStreams = [] }: Props) {
     if (actionName === "create_stream_csv") {
       if (!wallet) { showNotification("error", "Connect a Solana wallet before bulk creating streams."); return; }
       try {
-        const parsedItems = parseCsv(csvCreateText);
+       const parsedItems = parseCsv(csvCreateText, "create");
         if (parsedItems.length === 0) { showNotification("error", "CSV format invalid. Please provide correct headers."); return; }
         const normalizedItems = parsedItems.map((item, index) => {
           if (!item.recipient) throw new Error(`CSV Row #${index + 1}: recipient is required.`);
@@ -740,7 +753,7 @@ export default function Home({ initialStreams = [] }: Props) {
     if (actionName === "edit_stream_csv") {
       if (!wallet) { showNotification("error", "Connect the creator wallet before bulk editing streams."); return; }
       try {
-        const parsedItems = parseCsv(csvEditText);
+        const parsedItems = parseCsv(csvEditText, "edit");
         if (parsedItems.length === 0) { showNotification("error", "CSV format invalid. Please provide correct headers."); return; }
         const batchEditResult = await editStreamBatchOnChain({
           wallet, endpoint,
