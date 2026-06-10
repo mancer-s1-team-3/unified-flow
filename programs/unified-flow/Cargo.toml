@@ -27,6 +27,9 @@ test-utils = []
 anchor-lang = "0.32.1"
 anchor-spl = { version = "0.32.1", features = ["token_2022"] }
 
+[[bench]]
+name = "compute_units"
+harness = false
 
 [dev-dependencies]
 mollusk-svm = "0.5.1"
@@ -38,6 +41,8 @@ solana-program = "=2.2.1"
 spl-associated-token-account = "7.0.0"
 spl-token = "8.0.0"
 spl-token-2022 = "8.0.1"
+solana-logger = "=1.18.26"
+mollusk-svm-bencher = "=0.5.1"
 
 
 [lints.rust]
