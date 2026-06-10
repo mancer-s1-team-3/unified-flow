@@ -538,9 +538,17 @@ const createDisabled =
   activeTxAction === "create_stream";
   const withdrawDisabled = !withdrawForm.streamId?.trim() || activeTxAction === "withdraw";
   const unlockDisabled = !unlockForm.streamId?.trim() || activeTxAction === "unlock_milestone";
-const createCsvDisabled = !csvCreateText?.trim() 
-  || activeTxAction === "create_stream_csv"
-  || csvMilestoneValidation.hasErrors;  // ← tambah ini
+const csvTotalByMint = useCsvTotalByMint(csvCreateText);
+const csvExceedsBalance =
+  !!createForm.mint &&
+  tokenBalance.balance !== null &&
+  (csvTotalByMint[createForm.mint] ?? 0) > tokenBalance.balance;
+
+const createCsvDisabled =
+  !csvCreateText?.trim() ||
+  activeTxAction === "create_stream_csv" ||
+  csvMilestoneValidation.hasErrors ||
+  csvExceedsBalance; // ← tambah ini
 const editCsvDisabled = !csvEditText?.trim() 
   || activeTxAction === "edit_stream_csv"
   || csvEditMilestoneValidation.hasErrors;  // ← tambah ini
@@ -1280,7 +1288,13 @@ const editCsvDisabled = !csvEditText?.trim()
                 <textarea rows={8} value={csvCreateText} onChange={(e) => setCsvCreateText(e.target.value)} className="w-full bg-zinc-950 border border-zinc-800 rounded-xl px-4 py-3 text-xs focus:outline-none focus:border-indigo-500 font-mono" />
               </div>
               {/* ─── Milestone Validation ─── */}
-              <CsvMilestoneValidationPanel csvText={csvCreateText} />
+           <CsvValidationPanel
+  csvText={csvCreateText}
+  walletBalance={tokenBalance.balance}
+  walletMint={createForm.mint}
+  walletMintLabel={selectedMintPreset?.label}
+  walletDecimals={tokenBalance.decimals ?? selectedMintPreset?.decimals ?? 6}
+/>
               <CsvDiffPanel csvDiffResult={csvDiffResult} compareVersionSelected={compareVersionSelected} onClose={() => setCsvDiffResult(null)} />
 
               <button
@@ -1394,7 +1408,13 @@ const editCsvDisabled = !csvEditText?.trim()
               />
             </div>
             {/* ─── Milestone Validation ─── */}
-            <CsvMilestoneValidationPanel csvText={csvEditText} />
+            <CsvValidationPanel
+  csvText={csvEditText}
+  walletBalance={null}
+  walletMint={null}
+  walletMintLabel={undefined}
+  walletDecimals={6}
+/>
             <CsvDiffPanel
               csvDiffResult={csvDiffResult}
               compareVersionSelected={compareVersionSelected}
@@ -1833,85 +1853,226 @@ function useCsvMilestoneValidation(csvText: string) {
   }, [csvText]);
 }
 
-function CsvMilestoneValidationPanel({ csvText }: { csvText: string }) {
+function CsvValidationPanel({
+  csvText,
+  walletBalance,
+  walletMint,
+  walletMintLabel,
+  walletDecimals,
+}: {
+  csvText: string;
+  walletBalance: number | null;
+  walletMint: string | null;
+  walletMintLabel?: string;
+  walletDecimals: number;
+}) {
   const { rows, hasErrors } = useCsvMilestoneValidation(csvText);
-  if (rows.length === 0) return null;
+  const totalByMint = useCsvTotalByMint(csvText);
 
-  const allGood = !hasErrors;
+  // ── Per-mint balance check ─────────────────────────────────────────────
+  const mintExceedsBalance =
+    walletMint &&
+    walletBalance !== null &&
+    (totalByMint[walletMint] ?? 0) > walletBalance;
+
+  const csvTotalForMint = walletMint ? (totalByMint[walletMint] ?? 0) : 0;
+
+  const hasAnyError = hasErrors || !!mintExceedsBalance;
+
+  if (rows.length === 0 && !mintExceedsBalance) return null;
+
+  const allGood = !hasAnyError;
 
   return (
     <div className={`rounded-2xl border overflow-hidden transition-all duration-300 ${
-      allGood ? "border-emerald-500/30" : "border-amber-500/30"
+      allGood ? "border-emerald-500/30" : "border-rose-500/30"
     }`}>
+      {/* Header */}
       <div className={`flex items-center justify-between px-4 py-3 border-b ${
-        allGood ? "border-emerald-500/20 bg-emerald-950/10" : "border-amber-500/20 bg-amber-950/10"
+        allGood
+          ? "border-emerald-500/20 bg-emerald-950/10"
+          : "border-rose-500/20 bg-rose-950/10"
       }`}>
         <div className="flex items-center gap-2">
-          <span className={`w-1.5 h-1.5 rounded-full ${allGood ? "bg-emerald-400" : "bg-amber-400 animate-pulse"}`} />
+          <span className={`w-1.5 h-1.5 rounded-full ${allGood ? "bg-emerald-400" : "bg-rose-400 animate-pulse"}`} />
           <span className="text-[10px] font-black uppercase tracking-widest text-zinc-400">
-            Milestone Rows ({rows.length})
+            CSV Validation
+            {rows.length > 0 && ` · ${rows.length} milestone row${rows.length > 1 ? "s" : ""}`}
           </span>
         </div>
-        <span className={`text-[10px] font-bold ${allGood ? "text-emerald-400" : "text-amber-400"}`}>
-          {allGood ? "All balanced" : `${rows.filter((r) => !r.isMatch || r.hasInvalid).length} unbalanced`}
+        <span className={`text-[10px] font-bold ${allGood ? "text-emerald-400" : "text-rose-400"}`}>
+          {allGood
+            ? "All checks passed"
+            : [
+                mintExceedsBalance && "insufficient balance",
+                hasErrors && `${rows.filter((r) => !r.isMatch || r.hasInvalid).length} unbalanced`,
+              ]
+                .filter(Boolean)
+                .join(" · ")}
         </span>
       </div>
 
-      <div className="divide-y divide-zinc-900/60">
-        {rows.map((row) => {
-          const barColor = row.hasInvalid ? "bg-rose-500" : row.isMatch ? "bg-emerald-500" : row.pct > 100 ? "bg-rose-500" : "bg-amber-400";
-          const statusColor = row.hasInvalid ? "text-rose-400" : row.isMatch ? "text-emerald-400" : "text-amber-400";
-          const shortRecipient = row.recipient ? `${row.recipient.slice(0, 6)}…${row.recipient.slice(-4)}` : `Row #${row.rowNum}`;
-
-          return (
-            <div key={row.rowNum} className="px-4 py-3 bg-zinc-950/40">
-              <div className="flex items-center justify-between mb-2">
-                <span className="font-mono text-[10px] text-zinc-500">{shortRecipient}</span>
-                <span className={`text-[10px] font-black font-mono ${statusColor}`}>{row.pct.toFixed(1)}%</span>
-              </div>
-              <div className="relative h-1.5 w-full rounded-full bg-zinc-900 overflow-hidden mb-2">
-                <div className={`absolute left-0 top-0 h-full rounded-full transition-all duration-500 ${barColor}`}
-                  style={{ width: `${Math.min(row.pct, 100)}%` }} />
-              </div>
-              <div className="grid grid-cols-3 gap-2 text-[10px] font-mono mb-2">
-                <div><div className="text-zinc-600 text-[9px] uppercase">Allocated</div><div className={statusColor}>{row.milestoneSum.toLocaleString()}</div></div>
-                <div><div className="text-zinc-600 text-[9px] uppercase">Total</div><div className="text-zinc-300">{row.totalAmount.toLocaleString()}</div></div>
-                <div>
-                  <div className="text-zinc-600 text-[9px] uppercase">{row.remaining < 0 ? "Excess" : "Remaining"}</div>
-                  <div className={row.remaining < 0 ? "text-rose-400" : row.remaining === 0 ? "text-emerald-400" : "text-amber-400"}>
-                    {Math.abs(row.remaining).toLocaleString()}
-                  </div>
+      {/* ── Balance exceed banner ────────────────────────────────────────── */}
+      {mintExceedsBalance && walletBalance !== null && (
+        <div className="px-4 py-3 bg-rose-950/20 border-b border-rose-500/20 flex items-start gap-3">
+          <AlertTriangle className="w-4 h-4 text-rose-400 shrink-0 mt-0.5" />
+          <div className="flex-1 min-w-0">
+            <div className="text-[11px] font-bold text-rose-300 mb-1">
+              Insufficient balance for {walletMintLabel ?? "selected mint"}
+            </div>
+            <div className="grid grid-cols-3 gap-3 text-[10px] font-mono">
+              <div>
+                <div className="text-zinc-600 text-[9px] uppercase mb-0.5">CSV Total</div>
+                <div className="text-rose-400 font-black">
+                  {csvTotalForMint.toLocaleString(undefined, { maximumFractionDigits: walletDecimals })}
                 </div>
               </div>
-              <div className="flex flex-wrap gap-1 mb-1.5">
-                {row.milestones.map((m, idx) => (
-                  <span key={idx} className={`px-1.5 py-0.5 rounded-md text-[9px] font-mono font-bold border ${
-                    m <= 0 ? "border-rose-500/40 bg-rose-950/20 text-rose-400" : "border-zinc-800 bg-zinc-900/50 text-zinc-400"
-                  }`}>#{idx}: {m}</span>
-                ))}
+              <div>
+                <div className="text-zinc-600 text-[9px] uppercase mb-0.5">Wallet Balance</div>
+                <div className="text-zinc-300 font-black">
+                  {walletBalance.toLocaleString(undefined, { maximumFractionDigits: walletDecimals })}
+                </div>
               </div>
-              <div className={`text-[9px] font-semibold ${statusColor}`}>
-                {row.hasInvalid ? "⚠ Missing or zero milestone values"
-                  : row.isMatch ? "✓ Allocations balanced"
-                  : row.remaining > 0 ? `${row.remaining.toLocaleString()} tokens unallocated`
-                  : `Over-allocated by ${Math.abs(row.remaining).toLocaleString()}`}
+              <div>
+                <div className="text-zinc-600 text-[9px] uppercase mb-0.5">Shortfall</div>
+                <div className="text-rose-400 font-black">
+                  {(csvTotalForMint - walletBalance).toLocaleString(undefined, {
+                    maximumFractionDigits: walletDecimals,
+                  })}
+                </div>
               </div>
             </div>
-          );
-        })}
-      </div>
+          </div>
+        </div>
+      )}
 
-      {!allGood && (
-        <div className="px-4 py-3 border-t border-amber-500/20 bg-amber-950/10 flex items-start gap-2">
-          <span className="text-amber-400 text-[10px]">⚠</span>
-          <p className="text-[10px] text-amber-300/80 leading-relaxed">
-            Fix milestone allocations before deploying. Each milestone row requires{" "}
-            <strong className="text-amber-300">allocations that sum exactly to total amount</strong>.
+      {/* ── Milestone rows ───────────────────────────────────────────────── */}
+      {rows.length > 0 && (
+        <div className="divide-y divide-zinc-900/60">
+          {rows.map((row) => {
+            const barColor = row.hasInvalid
+              ? "bg-rose-500"
+              : row.isMatch
+              ? "bg-emerald-500"
+              : row.pct > 100
+              ? "bg-rose-500"
+              : "bg-amber-400";
+            const statusColor = row.hasInvalid
+              ? "text-rose-400"
+              : row.isMatch
+              ? "text-emerald-400"
+              : "text-amber-400";
+            const shortRecipient = row.recipient
+              ? `${row.recipient.slice(0, 6)}…${row.recipient.slice(-4)}`
+              : `Row #${row.rowNum}`;
+
+            return (
+              <div key={row.rowNum} className="px-4 py-3 bg-zinc-950/40">
+                <div className="flex items-center justify-between mb-2">
+                  <span className="font-mono text-[10px] text-zinc-500">{shortRecipient}</span>
+                  <span className={`text-[10px] font-black font-mono ${statusColor}`}>
+                    {row.pct.toFixed(1)}%
+                  </span>
+                </div>
+                <div className="relative h-1.5 w-full rounded-full bg-zinc-900 overflow-hidden mb-2">
+                  <div
+                    className={`absolute left-0 top-0 h-full rounded-full transition-all duration-500 ${barColor}`}
+                    style={{ width: `${Math.min(row.pct, 100)}%` }}
+                  />
+                </div>
+                <div className="grid grid-cols-3 gap-2 text-[10px] font-mono mb-2">
+                  <div>
+                    <div className="text-zinc-600 text-[9px] uppercase">Allocated</div>
+                    <div className={statusColor}>{row.milestoneSum.toLocaleString()}</div>
+                  </div>
+                  <div>
+                    <div className="text-zinc-600 text-[9px] uppercase">Total</div>
+                    <div className="text-zinc-300">{row.totalAmount.toLocaleString()}</div>
+                  </div>
+                  <div>
+                    <div className="text-zinc-600 text-[9px] uppercase">
+                      {row.remaining < 0 ? "Excess" : "Remaining"}
+                    </div>
+                    <div
+                      className={
+                        row.remaining < 0
+                          ? "text-rose-400"
+                          : row.remaining === 0
+                          ? "text-emerald-400"
+                          : "text-amber-400"
+                      }
+                    >
+                      {Math.abs(row.remaining).toLocaleString()}
+                    </div>
+                  </div>
+                </div>
+                <div className="flex flex-wrap gap-1 mb-1.5">
+                  {row.milestones.map((m, idx) => (
+                    <span
+                      key={idx}
+                      className={`px-1.5 py-0.5 rounded-md text-[9px] font-mono font-bold border ${
+                        m <= 0
+                          ? "border-rose-500/40 bg-rose-950/20 text-rose-400"
+                          : "border-zinc-800 bg-zinc-900/50 text-zinc-400"
+                      }`}
+                    >
+                      #{idx}: {m}
+                    </span>
+                  ))}
+                </div>
+                <div className={`text-[9px] font-semibold ${statusColor}`}>
+                  {row.hasInvalid
+                    ? "⚠ Missing or zero milestone values"
+                    : row.isMatch
+                    ? "✓ Allocations balanced"
+                    : row.remaining > 0
+                    ? `${row.remaining.toLocaleString()} tokens unallocated`
+                    : `Over-allocated by ${Math.abs(row.remaining).toLocaleString()}`}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
+
+      {/* Footer */}
+      {hasAnyError && (
+        <div className="px-4 py-3 border-t border-rose-500/20 bg-rose-950/10 flex items-start gap-2">
+          <span className="text-rose-400 text-[10px]">⚠</span>
+          <p className="text-[10px] text-rose-300/80 leading-relaxed">
+            {mintExceedsBalance && hasErrors
+              ? "Fix balance shortfall and milestone allocations before deploying."
+              : mintExceedsBalance
+              ? "Top up your wallet or reduce total CSV amounts before deploying."
+              : "Fix milestone allocations before deploying. Each milestone row requires allocations that sum exactly to total amount."}
           </p>
         </div>
       )}
     </div>
   );
+}
+function useCsvTotalByMint(csvText: string): Record<string, number> {
+  return useMemo(() => {
+    if (!csvText?.trim()) return {};
+    const lines = csvText.trim().split("\n");
+    if (lines.length < 2) return {};
+
+    const headers = lines[0].split(",").map((h) => h.trim().toLowerCase());
+    const amountIdx = headers.indexOf("amount");
+    const mintIdx = headers.indexOf("mint");
+    if (amountIdx === -1) return {};
+
+    const totals: Record<string, number> = {};
+    for (let i = 1; i < lines.length; i++) {
+      const line = lines[i].trim();
+      if (!line) continue;
+      const values = line.split(",").map((v) => v.trim());
+      const amount = parseFloat(values[amountIdx] ?? "0") || 0;
+      const mint = mintIdx !== -1 ? (values[mintIdx] ?? "unknown") : "unknown";
+      totals[mint] = (totals[mint] ?? 0) + amount;
+    }
+    return totals;
+  }, [csvText]);
 }
 // ──────────────────────────────────────────────────────────────────────────
 // ─── MilestoneAllocationCounter ──────────────────────────────────────────
