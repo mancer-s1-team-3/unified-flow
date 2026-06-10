@@ -549,9 +549,17 @@ const createCsvDisabled =
   activeTxAction === "create_stream_csv" ||
   csvMilestoneValidation.hasErrors ||
   csvExceedsBalance; // ← tambah ini
-const editCsvDisabled = !csvEditText?.trim() 
-  || activeTxAction === "edit_stream_csv"
-  || csvEditMilestoneValidation.hasErrors;  // ← tambah ini
+const csvEditTotalByMint = useCsvEditTotalByMint(csvEditText);
+const csvEditExceedsBalance =
+  !!createForm.mint &&
+  tokenBalance.balance !== null &&
+  (csvEditTotalByMint[createForm.mint] ?? 0) > tokenBalance.balance;
+
+const editCsvDisabled =
+  !csvEditText?.trim() ||
+  activeTxAction === "edit_stream_csv" ||
+  csvEditMilestoneValidation.hasErrors ||
+  csvEditExceedsBalance; // ← tambah ini
   const editMilestoneAlreadyUnlocked = isMilestoneUnlocked(editMilestoneForm.streamId);
   const editMilestoneDisabled =
     isStreamCsvCreated(editMilestoneForm.streamId) ||
@@ -1408,12 +1416,14 @@ const editCsvDisabled = !csvEditText?.trim()
               />
             </div>
             {/* ─── Milestone Validation ─── */}
-            <CsvValidationPanel
+<CsvValidationPanel
   csvText={csvEditText}
-  walletBalance={null}
-  walletMint={null}
-  walletMintLabel={undefined}
-  walletDecimals={6}
+  walletBalance={tokenBalance.balance}
+  walletMint={createForm.mint}
+  walletMintLabel={selectedMintPreset?.label}
+  walletDecimals={tokenBalance.decimals ?? selectedMintPreset?.decimals ?? 6}
+  editMode={true}              // ← flag supaya label lebih relevan
+  editTotalByMint={csvEditTotalByMint}
 />
             <CsvDiffPanel
               csvDiffResult={csvDiffResult}
@@ -1793,7 +1803,58 @@ function useFeeEstimate() {
 
   return { solPrice, solCost, loading, error, refetch: fetchPrice };
 }
+function useCsvEditTotalByMint(csvText: string): Record<string, number> {
+  return useMemo(() => {
+    if (!csvText?.trim()) return {};
+    const lines = csvText.trim().split("\n");
+    if (lines.length < 2) return {};
 
+    const headers = lines[0].split(",").map((h) => h.trim().toLowerCase());
+    const actionIdx = headers.indexOf("action");       // "edit_milestone" | "edit_linear" | "edit_cliff"
+    const mintIdx = headers.indexOf("mint");
+    const topupIdx = headers.indexOf("topup_amount");  // edit_linear topup
+    const milestonesIdx = headers.indexOf("milestones"); // edit_milestone new amounts
+
+    // kalau tidak ada kolom action, tidak bisa determine — skip
+    if (actionIdx === -1 || mintIdx === -1) return {};
+
+    const totals: Record<string, number> = {};
+
+    for (let i = 1; i < lines.length; i++) {
+      const line = lines[i].trim();
+      if (!line) continue;
+      const values = line.split(",").map((v) => v.trim());
+
+      const action = values[actionIdx]?.toLowerCase() ?? "";
+      const mint = values[mintIdx] ?? "unknown";
+
+      if (action === "edit_linear") {
+        // topup_amount = berapa token ditambahkan ke stream
+        const topup = parseFloat(values[topupIdx] ?? "0") || 0;
+        if (topup > 0) {
+          totals[mint] = (totals[mint] ?? 0) + topup;
+        }
+      } else if (action === "edit_milestone") {
+        // sum semua milestone amounts baru di row ini
+        if (milestonesIdx !== -1) {
+          const raw = values.slice(milestonesIdx).join(";");
+          const milestones = raw
+            .split(/[;,]/)
+            .map((v) => v.trim())
+            .filter(Boolean)
+            .map((v) => parseFloat(v) || 0);
+          const total = milestones.reduce((a, b) => a + b, 0);
+          if (total > 0) {
+            totals[mint] = (totals[mint] ?? 0) + total;
+          }
+        }
+      }
+      // edit_cliff → skip, tidak ada token transfer
+    }
+
+    return totals;
+  }, [csvText]);
+}
 function useCsvMilestoneValidation(csvText: string) {
   return useMemo(() => {
     if (!csvText?.trim()) return { rows: [], hasErrors: false };
@@ -1859,23 +1920,35 @@ function CsvValidationPanel({
   walletMint,
   walletMintLabel,
   walletDecimals,
+  editMode,
+  editTotalByMint,
 }: {
   csvText: string;
   walletBalance: number | null;
   walletMint: string | null;
   walletMintLabel?: string;
   walletDecimals: number;
+  editMode?: boolean;           // ← baru
+  editTotalByMint?: Record<string, number>; // ← baru, override total calculation
 }) {
   const { rows, hasErrors } = useCsvMilestoneValidation(csvText);
   const totalByMint = useCsvTotalByMint(csvText);
 
   // ── Per-mint balance check ─────────────────────────────────────────────
-  const mintExceedsBalance =
-    walletMint &&
-    walletBalance !== null &&
-    (totalByMint[walletMint] ?? 0) > walletBalance;
+ // Kalau editMode, pakai editTotalByMint (hanya milestone + topup linear)
+// Kalau create mode, pakai totalByMint biasa dari CSV amount column
+const effectiveTotalByMint = editMode && editTotalByMint
+  ? editTotalByMint
+  : totalByMint;
 
-  const csvTotalForMint = walletMint ? (totalByMint[walletMint] ?? 0) : 0;
+const mintExceedsBalance =
+  walletMint &&
+  walletBalance !== null &&
+  (effectiveTotalByMint[walletMint] ?? 0) > walletBalance;
+
+const csvTotalForMint = walletMint
+  ? (effectiveTotalByMint[walletMint] ?? 0)
+  : 0;
 
   const hasAnyError = hasErrors || !!mintExceedsBalance;
 
@@ -1917,9 +1990,11 @@ function CsvValidationPanel({
         <div className="px-4 py-3 bg-rose-950/20 border-b border-rose-500/20 flex items-start gap-3">
           <AlertTriangle className="w-4 h-4 text-rose-400 shrink-0 mt-0.5" />
           <div className="flex-1 min-w-0">
-            <div className="text-[11px] font-bold text-rose-300 mb-1">
-              Insufficient balance for {walletMintLabel ?? "selected mint"}
-            </div>
+         <div className="text-[11px] font-bold text-rose-300 mb-1">
+  {editMode
+    ? `Insufficient balance for ${walletMintLabel ?? "selected mint"} (milestone + topup)`
+    : `Insufficient balance for ${walletMintLabel ?? "selected mint"}`}
+</div>
             <div className="grid grid-cols-3 gap-3 text-[10px] font-mono">
               <div>
                 <div className="text-zinc-600 text-[9px] uppercase mb-0.5">CSV Total</div>
@@ -2035,19 +2110,23 @@ function CsvValidationPanel({
         </div>
       )}
 
-      {/* Footer */}
-      {hasAnyError && (
-        <div className="px-4 py-3 border-t border-rose-500/20 bg-rose-950/10 flex items-start gap-2">
-          <span className="text-rose-400 text-[10px]">⚠</span>
-          <p className="text-[10px] text-rose-300/80 leading-relaxed">
-            {mintExceedsBalance && hasErrors
-              ? "Fix balance shortfall and milestone allocations before deploying."
-              : mintExceedsBalance
-              ? "Top up your wallet or reduce total CSV amounts before deploying."
-              : "Fix milestone allocations before deploying. Each milestone row requires allocations that sum exactly to total amount."}
-          </p>
-        </div>
-      )}
+     {/* Footer */}
+{hasAnyError && (
+  <div className="px-4 py-3 border-t border-rose-500/20 bg-rose-950/10 flex items-start gap-2">
+    <span className="text-rose-400 text-[10px]">⚠</span>
+    <p className="text-[10px] text-rose-300/80 leading-relaxed">
+      {mintExceedsBalance && hasErrors
+        ? editMode
+          ? "Fix balance shortfall (milestone + topup amounts) and milestone allocations before applying."
+          : "Fix balance shortfall and milestone allocations before deploying."
+        : mintExceedsBalance
+        ? editMode
+          ? "Top up your wallet or reduce topup/milestone amounts. edit_cliff rows are excluded from this check."
+          : "Top up your wallet or reduce total CSV amounts before deploying."
+        : "Fix milestone allocations before deploying. Each milestone row requires allocations that sum exactly to total amount."}
+    </p>
+  </div>
+)}
     </div>
   );
 }
