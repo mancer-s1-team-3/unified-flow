@@ -33,7 +33,7 @@ export type TxProgressPhase = "wallet_approval" | "sending" | "confirming";
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
-function getAnchorWallet(session: WalletSession) {
+export function getAnchorWallet(session: WalletSession) {
   return {
     publicKey: new PublicKey(session.account.address.toString()),
     signTransaction: async <T extends anchor.web3.Transaction | anchor.web3.VersionedTransaction>(
