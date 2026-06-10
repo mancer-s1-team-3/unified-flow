@@ -750,26 +750,80 @@ export default function Home({ initialStreams = [] }: Props) {
     }
 
     // ── edit_stream_csv ─────────────────────────────────────────────────────
-    if (actionName === "edit_stream_csv") {
-      if (!wallet) { showNotification("error", "Connect the creator wallet before bulk editing streams."); return; }
-      try {
-        const parsedItems = parseCsv(csvEditText, "edit");
-        if (parsedItems.length === 0) { showNotification("error", "CSV format invalid. Please provide correct headers."); return; }
-        const batchEditResult = await editStreamBatchOnChain({
-          wallet, endpoint,
-          inputs: parsedItems.map((item: any) => ({ id: String(item.id || ""), amount: item.amount, duration: item.duration, cliffDuration: item.cliffDuration, milestones: item.milestones })),
-          onStatus: setTxStatus,
-        });
-        if (batchEditResult.signatures.length === 0) throw new Error("No editable rows found. Provide duration, cliff_duration, or milestones columns for CSV-created streams.");
-        await api.post("/csv/upload", { content: csvEditText, filename: `bulk_edit_v${csvVersions.length + 1}.csv`, uploader: connectedWalletAddress || "Anonymous" });
-        addNotification({ type: "success", event: "csv_edited", title: "CSV Edited", message: `v${csvVersions.length + 1} — ${batchEditResult.streamAddresses.length} streams updated in ${batchEditResult.signatures.length} tx(s).` });
-        setCsvDiffResult(null); fetchCsvVersions(); fetchStreams(); setActiveTab("streams");
-      } catch (err: any) {
-        clearTxStatus();
-        showParsedTxError(err, "Bulk edit failed.");
-      } finally { clearTxStatus(); }
-      return;
-    }
+   if (actionName === "edit_stream_csv") {
+  if (!wallet) { showNotification("error", "Connect the creator wallet before bulk editing streams."); return; }
+  try {
+    const parsedItems = parseCsv(csvEditText);
+    if (parsedItems.length === 0) { showNotification("error", "CSV format invalid. Please provide correct headers."); return; }
+
+    const inputs = parsedItems.map((item: any) => {
+      const streamId = String(item.id || "");
+
+      // ── Hitung topup delta untuk edit_linear ──────────────────────────
+      let resolvedAmount = item.amount;
+
+      if (item.amount !== undefined && item.amount !== "" && item.amount !== null) {
+        const currentStream = streams.find((s) => String(s?.id || "") === streamId);
+
+        if (currentStream && Number(currentStream.vestingType) === 0) {
+          // Linear stream: amount di CSV = total baru, topup = selisih
+          const decimals = typeof currentStream.mintDecimals === "number"
+            ? currentStream.mintDecimals
+            : 6;
+          const currentTotal = Number(
+            formatBaseUnitsToTokenAmount(parseBaseUnits(currentStream.totalAmount), decimals)
+          );
+          const newTotal = parseFloat(String(item.amount)) || 0;
+          const delta = newTotal - currentTotal;
+
+          if (delta <= 0) {
+            // Tidak ada topup atau amount lebih kecil — skip amount, pure extend
+            resolvedAmount = undefined;
+          } else {
+            resolvedAmount = String(delta);
+          }
+        }
+        // Milestone stream: amount tidak relevan untuk topup, handled by milestones col
+        // Cliff stream: tidak ada topup
+      }
+
+      return {
+        id:            streamId,
+        amount:        resolvedAmount,
+        duration:      item.duration,
+        cliffDuration: item.cliffDuration,
+        milestones:    item.milestones,
+      };
+    });
+
+    const batchEditResult = await editStreamBatchOnChain({
+      wallet,
+      endpoint,
+      inputs,
+      onStatus: setTxStatus,
+    });
+
+    if (batchEditResult.signatures.length === 0)
+      throw new Error("No editable rows found. Provide duration, cliff_duration, or milestones columns for CSV-created streams.");
+
+    await api.post("/csv/upload", {
+      content: csvEditText,
+      filename: `bulk_edit_v${csvVersions.length + 1}.csv`,
+      uploader: connectedWalletAddress || "Anonymous"
+    });
+
+    addNotification({
+      type: "success", event: "csv_edited", title: "CSV Edited",
+      message: `v${csvVersions.length + 1} — ${batchEditResult.streamAddresses.length} streams updated in ${batchEditResult.signatures.length} tx(s).`
+    });
+
+    setCsvDiffResult(null); fetchCsvVersions(); fetchStreams(); setActiveTab("streams");
+  } catch (err: any) {
+    clearTxStatus();
+    showParsedTxError(err, "Bulk edit failed.");
+  } finally { clearTxStatus(); }
+  return;
+}
 
     // ── edit_linear ─────────────────────────────────────────────────────────
     if (actionName === "edit_linear") {
