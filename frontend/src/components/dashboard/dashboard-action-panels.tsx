@@ -8,6 +8,7 @@ import { AlertTriangle, Check, ChevronDown, Shield, Download, Layers, Lock, Refr
 import { CsvDiffPanel } from "@/components/dashboard/csv-diff-panel";
 import type { MintPreset } from "@/components/dashboard/token-mints";
 import { PreflightChecklist } from "./preflight-checklist";
+import { useTokenBalance } from "@/lib/use-token-balance";
 const QUICK_DURATIONS = [
   { label: "1M", value: 60 * 60 * 24 * 30 },
   { label: "3M", value: 60 * 60 * 24 * 90 },
@@ -500,6 +501,16 @@ export function DashboardActionPanels(props: Props) {
   const editMilestoneMatchesTotal = editMilestoneHasTargetTotal ? editMilestoneSum === editMilestoneTargetTotal : true;
 
   const selectedMintPreset = mintPresets.find((preset) => preset.mint === createForm.mint) ?? null;
+  const tokenBalance = useTokenBalance(
+  createForm.mint,
+  endpoint,
+  selectedMintPreset?.decimals
+);
+
+const exceedsBalance =
+  tokenBalance.balance !== null &&
+  Boolean(createForm.amount?.trim()) &&
+  Number(createForm.amount) > tokenBalance.balance;
   const mobileNarrowFormClass = "mx-auto w-full max-w-[22rem] sm:max-w-none sm:mx-0";
   const getTxLabel = (action: string, idleLabel: string) => {
     if (activeTxAction !== action || !activeTxPhase) return idleLabel;
@@ -515,15 +526,16 @@ export function DashboardActionPanels(props: Props) {
     (createForm.type === "2" || Boolean(createForm.startDate?.trim())) &&
     (createForm.type === "2" ? Boolean(createForm.milestoneCount?.trim()) : Boolean(createForm.duration?.trim())) &&
     (createForm.type !== "1" || Boolean(createForm.cliffDuration?.trim()));
-  const createDisabled =
-    !connected ||
-    !createRequiredValid ||
-    startDateInPast ||
-    cliffExceedsDuration ||
-    cliffDateInPast ||
-    endDateInPast ||
-    (createForm.type === "2" && (hasInvalidMilestones || !milestonesMatchTotal)) ||
-    activeTxAction === "create_stream";
+const createDisabled =
+  !connected ||
+  !createRequiredValid ||
+  startDateInPast ||
+  cliffExceedsDuration ||
+  cliffDateInPast ||
+  endDateInPast ||
+  exceedsBalance ||   // ← add this
+  (createForm.type === "2" && (hasInvalidMilestones || !milestonesMatchTotal)) ||
+  activeTxAction === "create_stream";
   const withdrawDisabled = !withdrawForm.streamId?.trim() || activeTxAction === "withdraw";
   const unlockDisabled = !unlockForm.streamId?.trim() || activeTxAction === "unlock_milestone";
 const createCsvDisabled = !csvCreateText?.trim() 
@@ -631,17 +643,84 @@ const editCsvDisabled = !csvEditText?.trim()
                 <label className="block text-[10px] sm:text-xs font-semibold text-zinc-400 uppercase tracking-wider mb-1.5">Recipient</label>
                 <input type="text" value={createForm.recipient} onChange={(e) => setCreateForm({ ...createForm, recipient: e.target.value })} className="block w-full max-w-full min-w-0 bg-zinc-950 border border-zinc-800 rounded-xl px-3.5 py-2.5 sm:px-4 sm:py-3 text-sm focus:outline-none focus:border-indigo-500 font-mono" />
               </div>
-              <div className="min-w-0 max-w-full">
-                <label className="block text-[10px] sm:text-xs font-semibold text-zinc-400 uppercase tracking-wider mb-1.5">Amount</label>
-                <input
-                  type="text"
-                  inputMode="decimal"
-                  lang="en"
-                  value={createForm.amount}
-                  onChange={(e) => setCreateForm({ ...createForm, amount: normalizeDecimalInput(e.target.value) })}
-                  className="block w-full max-w-full min-w-0 bg-zinc-950 border border-zinc-800 rounded-xl px-3.5 py-2.5 sm:px-4 sm:py-3 text-sm focus:outline-none focus:border-indigo-500"
-                />
-              </div>
+             <div className="min-w-0 max-w-full">
+  <label className="block text-[10px] sm:text-xs font-semibold text-zinc-400 uppercase tracking-wider mb-1.5">
+    Amount
+  </label>
+  <div className="relative">
+    <input
+      type="text"
+      inputMode="decimal"
+      lang="en"
+      value={createForm.amount}
+      onChange={(e) =>
+        setCreateForm({
+          ...createForm,
+          amount: normalizeDecimalInput(e.target.value),
+        })
+      }
+      className={`block w-full max-w-full min-w-0 bg-zinc-950 border rounded-xl px-3.5 py-2.5 sm:px-4 sm:py-3 text-sm focus:outline-none font-mono transition-colors ${
+        exceedsBalance
+          ? "border-rose-500/60 focus:border-rose-500"
+          : "border-zinc-800 focus:border-indigo-500"
+      }`}
+    />
+    {/* Max button */}
+    {tokenBalance.balance !== null && tokenBalance.balance > 0 && (
+      <button
+        type="button"
+       onClick={() => {
+  if (tokenBalance.balance === null) return;
+  // Format to avoid 0.9999999... floating point artifacts
+  const dec = tokenBalance.decimals ?? selectedMintPreset?.decimals ?? 6;
+  const formatted = tokenBalance.balance.toFixed(dec).replace(/\.?0+$/, "");
+  setCreateForm({ ...createForm, amount: formatted });
+}}
+        className="absolute inset-y-0 right-3 flex items-center px-2 text-[10px] font-black uppercase tracking-wider text-indigo-400 hover:text-indigo-300 transition-colors"
+      >
+        MAX
+      </button>
+    )}
+  </div>
+
+  {/* Balance row */}
+  <div className="mt-1.5 flex items-center gap-2">
+    {tokenBalance.loading ? (
+      <span className="text-[10px] font-mono text-zinc-600 animate-pulse">
+        fetching balance…
+      </span>
+    ) : tokenBalance.error ? (
+      <span className="text-[10px] font-mono text-zinc-600">
+        balance unavailable
+      </span>
+    ) : tokenBalance.balance !== null ? (
+      <span
+        className={`text-[10px] font-mono ${
+          exceedsBalance ? "text-rose-400" : "text-zinc-500"
+        }`}
+      >
+        Balance: {tokenBalance.balance.toLocaleString(undefined, {
+          maximumFractionDigits: tokenBalance.decimals ?? 6,
+        })}{" "}
+        {selectedMintPreset?.label ?? ""}
+      </span>
+    ) : connected && createForm.mint?.trim() ? (
+      <span className="text-[10px] font-mono text-zinc-600">
+        No token account found
+      </span>
+    ) : null}
+  </div>
+
+  {exceedsBalance && (
+    <div className="mt-1 text-[10px] font-semibold text-rose-400">
+      Amount exceeds your wallet balance of{" "}
+      {tokenBalance.balance!.toLocaleString(undefined, {
+        maximumFractionDigits: tokenBalance.decimals ?? 6,
+      })}{" "}
+      {selectedMintPreset?.label ?? "tokens"}.
+    </div>
+  )}
+</div>
               <div className="min-w-0 max-w-full">
                 <label className="block text-[10px] sm:text-xs font-semibold text-zinc-400 uppercase tracking-wider mb-1.5">Mint</label>
                 <div ref={mintPickerRef} className="relative min-w-0 max-w-full overflow-visible">
