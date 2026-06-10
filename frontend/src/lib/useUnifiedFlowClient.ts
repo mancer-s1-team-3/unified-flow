@@ -4,30 +4,11 @@
 import { useMemo } from "react";
 import { useWalletConnection, useClusterState } from "@solana/react-hooks";
 import { AnchorProvider, Program } from "@coral-xyz/anchor";
-import { IDL, UnifiedFlowClient } from "@unifiedflow/unified-flow-sdk";
+import { IDL, UnifiedFlowClient, getAnchorWallet } from "@unifiedflow/unified-flow-sdk";
 import { Connection } from "@solana/web3.js";
 import type { WalletSession } from "@solana/client";
 
-// Definisikan sendiri — tidak di-export dari SDK
-function getAnchorWallet(session: WalletSession) {
-  return {
-    publicKey: new (require("@solana/web3.js").PublicKey)(session.account.address.toString()),
-    signTransaction: async <T extends any>(transaction: T): Promise<T> => {
-      if (session.signTransaction) {
-        return (await session.signTransaction(transaction as never)) as unknown as T;
-      }
-      return transaction;
-    },
-    signAllTransactions: async <T extends any>(transactions: T[]): Promise<T[]> => {
-      if (session.signTransaction) {
-        return (await Promise.all(
-          transactions.map((tx) => session.signTransaction!(tx as never))
-        )) as unknown as T[];
-      }
-      return transactions;
-    },
-  };
-}
+
 
 export function useUnifiedFlowClient() {
   const { wallet, connected } = useWalletConnection();
