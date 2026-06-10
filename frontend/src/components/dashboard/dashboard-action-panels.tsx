@@ -683,33 +683,29 @@ const editCsvDisabled = !csvEditText?.trim()
     )}
   </div>
 
-  {/* Balance row */}
-  <div className="mt-1.5 flex items-center gap-2">
-    {tokenBalance.loading ? (
-      <span className="text-[10px] font-mono text-zinc-600 animate-pulse">
-        fetching balance…
-      </span>
-    ) : tokenBalance.error ? (
-      <span className="text-[10px] font-mono text-zinc-600">
-        balance unavailable
-      </span>
-    ) : tokenBalance.balance !== null ? (
-      <span
-        className={`text-[10px] font-mono ${
-          exceedsBalance ? "text-rose-400" : "text-zinc-500"
-        }`}
-      >
-        Balance: {tokenBalance.balance.toLocaleString(undefined, {
-          maximumFractionDigits: tokenBalance.decimals ?? 6,
-        })}{" "}
-        {selectedMintPreset?.label ?? ""}
-      </span>
-    ) : connected && createForm.mint?.trim() ? (
-      <span className="text-[10px] font-mono text-zinc-600">
-        No token account found
-      </span>
-    ) : null}
-  </div>
+ {/* Balance row */}
+<div className="mt-1.5 flex items-center gap-2">
+  {!connected ? null
+  : tokenBalance.loading ? (
+    <span className="text-[10px] font-mono text-zinc-600 animate-pulse">
+      fetching balance…
+    </span>
+  ) : tokenBalance.error ? (
+    <span className="text-[10px] font-mono text-zinc-600">
+      balance unavailable
+    </span>
+  ) : !createForm.mint?.trim() ? null
+  : tokenBalance.balance !== null ? (
+    // ← covers both 0 (no ATA) and >0
+    <span className={`text-[10px] font-mono ${exceedsBalance ? "text-rose-400" : "text-zinc-500"}`}>
+      Balance:{" "}
+      {tokenBalance.balance.toLocaleString(undefined, {
+        maximumFractionDigits: tokenBalance.decimals ?? selectedMintPreset?.decimals ?? 6,
+      })}{" "}
+      {selectedMintPreset?.label ?? ""}
+    </span>
+  ) : null}
+</div>
 
   {exceedsBalance && (
     <div className="mt-1 text-[10px] font-semibold text-rose-400">
