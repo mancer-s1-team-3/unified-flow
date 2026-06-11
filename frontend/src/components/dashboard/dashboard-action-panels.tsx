@@ -402,6 +402,15 @@ const editMilestoneBalanceDecimals = typeof editMilestoneStream?.mintDecimals ==
 const editLinearBalance = useTokenBalance(editLinearMint, endpoint, editLinearDecimals);
 const editMilestoneBalance = useTokenBalance(editMilestoneMint, endpoint, editMilestoneBalanceDecimals);
 
+// Asset code shown next to balances. Prefer the preset label; fall back to a
+// shortened mint address so the unit is never ambiguous for custom tokens.
+const shortenMint = (mint: string) =>
+  mint ? `${mint.slice(0, 4)}…${mint.slice(-4)}` : "";
+const editLinearSymbol =
+  mintPresets.find((p) => p.mint === editLinearMint)?.label ?? shortenMint(editLinearMint);
+const editMilestoneSymbol =
+  mintPresets.find((p) => p.mint === editMilestoneMint)?.label ?? shortenMint(editMilestoneMint);
+
 // ── Validasi topup linear ─────────────────────────────────────────────────
 const editLinearTopupNum = parseFloat(String(editLinearForm.topupAmount ?? "")) || 0;
 const editLinearExceedsBalance =
@@ -1697,7 +1706,7 @@ const editCsvDisabled =
       <span className="text-[10px] font-mono text-zinc-500">
         Wallet Balance: {editMilestoneBalance.balance.toLocaleString(undefined, {
           maximumFractionDigits: editMilestoneBalanceDecimals,
-        })}
+        })}{editMilestoneSymbol ? ` ${editMilestoneSymbol}` : ""}
       </span>
     </div>
   ) : null}
@@ -1786,14 +1795,14 @@ const editCsvDisabled =
             ) : !editLinearMint ? null
             : editLinearBalance.balance !== null ? (
               <span className={`text-[10px] font-mono ${editLinearExceedsBalance ? "text-rose-400" : "text-zinc-500"}`}>
-                Balance: {editLinearBalance.balance.toLocaleString(undefined, { maximumFractionDigits: editLinearDecimals })}
+                Balance: {editLinearBalance.balance.toLocaleString(undefined, { maximumFractionDigits: editLinearDecimals })}{editLinearSymbol ? ` ${editLinearSymbol}` : ""}
               </span>
             ) : null}
           </div>
           {editLinearExceedsBalance && (
             <div className="mt-1 text-[10px] font-semibold text-rose-400">
               Top-up amount exceeds wallet balance of{" "}
-              {editLinearBalance.balance!.toLocaleString(undefined, { maximumFractionDigits: editLinearDecimals })} tokens.
+              {editLinearBalance.balance!.toLocaleString(undefined, { maximumFractionDigits: editLinearDecimals })}{editLinearSymbol ? ` ${editLinearSymbol}` : ""}.
             </div>
           )}
         </div>
@@ -2164,13 +2173,13 @@ const mintExceedsBalance =
               <div>
                 <div className="text-zinc-600 text-[9px] uppercase mb-0.5">CSV Total</div>
                 <div className="text-rose-400 font-black">
-                  {csvTotalForMint.toLocaleString(undefined, { maximumFractionDigits: walletDecimals })}
+                  {csvTotalForMint.toLocaleString(undefined, { maximumFractionDigits: walletDecimals })}{walletMintLabel ? ` ${walletMintLabel}` : ""}
                 </div>
               </div>
               <div>
                 <div className="text-zinc-600 text-[9px] uppercase mb-0.5">Wallet Balance</div>
                 <div className="text-zinc-300 font-black">
-                  {walletBalance.toLocaleString(undefined, { maximumFractionDigits: walletDecimals })}
+                  {walletBalance.toLocaleString(undefined, { maximumFractionDigits: walletDecimals })}{walletMintLabel ? ` ${walletMintLabel}` : ""}
                 </div>
               </div>
               <div>
@@ -2178,7 +2187,7 @@ const mintExceedsBalance =
                 <div className="text-rose-400 font-black">
                   {(csvTotalForMint - walletBalance).toLocaleString(undefined, {
                     maximumFractionDigits: walletDecimals,
-                  })}
+                  })}{walletMintLabel ? ` ${walletMintLabel}` : ""}
                 </div>
               </div>
             </div>
