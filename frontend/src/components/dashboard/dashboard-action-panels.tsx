@@ -373,6 +373,7 @@ export function DashboardActionPanels(props: Props) {
 
   const recipientHistory = useAddressHistory("recipient");
   const mintHistory = useAddressHistory("mint");
+  const [editTotalDraft, setEditTotalDraft] = useState<string | null>(null);
 
   const mintPickerRef = useRef<HTMLDivElement | null>(null);
   const [mintMenuOpen, setMintMenuOpen] = useState(false);
@@ -545,6 +546,41 @@ const editLinearExceedsBalance =
     [editMilestoneAmounts]
   );
   const editMilestoneMatchesTotal = editMilestoneHasTargetTotal ? editMilestoneSum === editMilestoneTargetTotal : true;
+
+  // Total amount yang sedang ditampilkan = jumlah seluruh milestone (display units)
+  const editMilestoneTotalDisplay = formatBaseUnitsToTokenAmount(editMilestoneSum, editMilestoneDecimals);
+  const editTotalValue = editTotalDraft ?? editMilestoneTotalDisplay;
+
+  // Skala ulang tiap milestone secara proporsional agar total = nilai baru.
+  // Dihitung dalam base units; sisa pembulatan diserap milestone terakhir agar sum tepat.
+  const rescaleMilestonesToTotal = (totalStr: string) => {
+    const decimals = editMilestoneDecimals;
+    const newTotalBase = parseTokenAmountToBaseUnits(totalStr || "0", decimals);
+    const oldBase = editMilestoneAmounts.map((v: string) =>
+      parseTokenAmountToBaseUnits(String(v || "0"), decimals)
+    );
+    if (oldBase.length === 0) return;
+    const oldTotalBase = oldBase.reduce((sum: bigint, b: bigint) => sum + b, BigInt(0));
+
+    let nextBase: bigint[];
+    if (oldTotalBase === BigInt(0)) {
+      // Tidak ada rasio lama -> bagi rata
+      const n = BigInt(oldBase.length);
+      const each = newTotalBase / n;
+      nextBase = oldBase.map(() => each);
+    } else {
+      nextBase = oldBase.map((b: bigint) => (b * newTotalBase) / oldTotalBase);
+    }
+
+    const assigned = nextBase.reduce((sum: bigint, b: bigint) => sum + b, BigInt(0));
+    const remainder = newTotalBase - assigned;
+    const lastIdx = nextBase.length - 1;
+    const adjustedLast = nextBase[lastIdx] + remainder;
+    nextBase[lastIdx] = adjustedLast < BigInt(0) ? BigInt(0) : adjustedLast;
+
+    const nextDisplay = nextBase.map((b: bigint) => formatBaseUnitsToTokenAmount(b, decimals));
+    setEditMilestoneForm({ ...editMilestoneForm, amounts: nextDisplay });
+  };
 
   const selectedMintPreset = mintPresets.find((preset) => preset.mint === createForm.mint) ?? null;
   const tokenBalance = useTokenBalance(
@@ -1676,6 +1712,29 @@ const editCsvDisabled =
                 />
               </div>
 
+              {(Array.isArray(editMilestoneForm.amounts) ? editMilestoneForm.amounts : []).length > 0 && (
+                <div className="sm:col-span-2">
+                  <label className="block text-xs font-semibold text-zinc-400 uppercase tracking-wider mb-1.5">Total Amount</label>
+                  <input
+                    type="text"
+                    inputMode="decimal"
+                    lang="en"
+                    value={editTotalValue}
+                    onChange={(e) => {
+                      const normalized = normalizeDecimalInput(e.target.value);
+                      setEditTotalDraft(normalized);
+                      rescaleMilestonesToTotal(normalized === "" ? "0" : normalized);
+                    }}
+                    onBlur={() => setEditTotalDraft(null)}
+                    className="w-full bg-zinc-950 border border-indigo-500/40 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:border-indigo-500 font-mono"
+                    placeholder="0"
+                  />
+                  <p className="mt-1.5 text-[10px] text-zinc-500 leading-relaxed">
+                    Mengubah total akan menskalakan tiap milestone secara proporsional (rasio antar milestone tetap).
+                  </p>
+                </div>
+              )}
+
               {(Array.isArray(editMilestoneForm.amounts) ? editMilestoneForm.amounts : []).map((amount: string, index: number) => (
                 <div key={index}>
                   <label className="block text-xs font-semibold text-zinc-400 uppercase tracking-wider mb-1.5">Milestone #{index} Amount</label>
@@ -1688,6 +1747,7 @@ const editCsvDisabled =
                       const next = [...(Array.isArray(editMilestoneForm.amounts) ? editMilestoneForm.amounts : [])];
                       const normalized = normalizeDecimalInput(e.target.value);
                       next[index] = normalized === "" ? "0" : normalized;
+                      setEditTotalDraft(null);
                       setEditMilestoneForm({ ...editMilestoneForm, amounts: next });
                     }}
                     className="w-full bg-zinc-950 border border-zinc-800 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:border-indigo-500 font-mono"
