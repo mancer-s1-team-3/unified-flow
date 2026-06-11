@@ -547,6 +547,17 @@ const editLinearExceedsBalance =
   );
   const editMilestoneMatchesTotal = editMilestoneHasTargetTotal ? editMilestoneSum === editMilestoneTargetTotal : true;
 
+  // Edit-total: kalau total baru > total awal, butuh top-up dari wallet creator.
+  // Pastikan saldo cukup; kalau total turun (refund) tidak butuh saldo.
+  const editMilestoneTopupNeeded =
+    editMilestoneSum > editMilestoneTargetTotal ? editMilestoneSum - editMilestoneTargetTotal : BigInt(0);
+  const editMilestoneWalletBase =
+    editMilestoneBalance.balance !== null
+      ? parseTokenAmountToBaseUnits(String(editMilestoneBalance.balance), editMilestoneDecimals)
+      : null;
+  const editMilestoneExceedsBalance =
+    editMilestoneWalletBase !== null && editMilestoneTopupNeeded > editMilestoneWalletBase;
+
   // Total amount yang sedang ditampilkan = jumlah seluruh milestone (display units)
   const editMilestoneTotalDisplay = formatBaseUnitsToTokenAmount(editMilestoneSum, editMilestoneDecimals);
   const editTotalValue = editTotalDraft ?? editMilestoneTotalDisplay;
@@ -649,7 +660,7 @@ const editCsvDisabled =
     !editMilestoneForm.streamId?.trim() ||
     editMilestoneAmounts.length === 0 ||
     editMilestoneHasInvalidAmounts ||
-    (editMilestoneHasTargetTotal && !editMilestoneMatchesTotal) ||
+    editMilestoneExceedsBalance ||
     activeTxAction === "edit_milestone";
  const editLinearDisabled =
   isStreamCsvCreated(editLinearForm.streamId) ||
@@ -1730,7 +1741,7 @@ const editCsvDisabled =
                     placeholder="0"
                   />
                   <p className="mt-1.5 text-[10px] text-zinc-500 leading-relaxed">
-                    Mengubah total akan menskalakan tiap milestone secara proporsional (rasio antar milestone tetap).
+                    Changing the total scales every milestone proportionally, keeping the ratio between milestones intact.
                   </p>
                 </div>
               )}
