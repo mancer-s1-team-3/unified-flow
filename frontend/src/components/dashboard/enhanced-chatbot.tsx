@@ -436,7 +436,19 @@ edit_linear:    { label: "Extend Stream",    icon: "📈", color: "bg-teal-600" 
                             : "bg-zinc-900 border border-zinc-800 text-zinc-100 rounded-bl-md"
                         }`}
                       >
-                        {message.role === "assistant" ? renderMarkdown(message.text) : message.text}
+                        {message.role === "assistant" ? (
+                          message.isStreaming && !message.text ? (
+                            <div className="flex gap-1">
+                              <span className="w-1.5 h-1.5 rounded-full bg-indigo-400 animate-bounce" />
+                              <span className="w-1.5 h-1.5 rounded-full bg-indigo-400 animate-bounce" style={{ animationDelay: "120ms" }} />
+                              <span className="w-1.5 h-1.5 rounded-full bg-indigo-400 animate-bounce" style={{ animationDelay: "240ms" }} />
+                            </div>
+                          ) : (
+                            renderMarkdown(message.text)
+                          )
+                        ) : (
+                          message.text
+                        )}
                       </div>
 
                       {/* Tool Call Action Button */}
@@ -477,21 +489,6 @@ edit_linear:    { label: "Extend Stream",    icon: "📈", color: "bg-teal-600" 
                     )}
                   </div>
                 ))}
-
-                {loading && (
-                  <div className="flex gap-3 justify-start">
-                    <div className="shrink-0 w-8 h-8 rounded-lg bg-gradient-to-br from-indigo-600 to-purple-600 flex items-center justify-center">
-                      <Bot className="w-4 h-4 text-white" />
-                    </div>
-                    <div className="px-3 py-2.5 rounded-2xl rounded-bl-md bg-zinc-900 border border-zinc-800">
-                      <div className="flex gap-1">
-                        <span className="w-1.5 h-1.5 rounded-full bg-indigo-400 animate-bounce" />
-                        <span className="w-1.5 h-1.5 rounded-full bg-indigo-400 animate-bounce" style={{ animationDelay: "120ms" }} />
-                        <span className="w-1.5 h-1.5 rounded-full bg-indigo-400 animate-bounce" style={{ animationDelay: "240ms" }} />
-                      </div>
-                    </div>
-                  </div>
-                )}
 
                 {/* Suggestions */}
                 {showSuggestions && !loading && messages.length > 0 && (
