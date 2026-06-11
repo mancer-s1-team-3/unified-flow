@@ -842,12 +842,11 @@ export default function Home({ initialStreams = [] }: Props) {
       try {
         const amounts = Array.isArray(data.amounts) ? data.amounts : [];
         if (amounts.length === 0) throw new Error("Milestone amounts are required.");
-        const stream = streams.find((s) => String(s?.id || "") === String(data.streamId || ""));
-        if (stream) {
-          const mintDecimals = typeof stream.mintDecimals === "number" ? stream.mintDecimals : 0;
-          const currentTotal = parseBaseUnits(stream.totalAmount);
-          const editedTotal  = amounts.reduce((sum: bigint, amt: any) => sum + parseTokenAmountToBaseUnits(String(amt ?? "0"), mintDecimals), BigInt(0));
-          if (editedTotal !== currentTotal) throw new Error(`Milestone allocations must sum to ${formatBaseUnitsToTokenAmount(currentTotal, mintDecimals)}.`);
+        // Changing the total is allowed: the program tops up (total increase) or
+        // refunds (total decrease) the difference per milestone on-chain. We only
+        // reject non-positive amounts, which edit_milestone rejects anyway.
+        if (amounts.some((amt: any) => !(Number(amt) > 0))) {
+          throw new Error("Each milestone amount must be greater than zero.");
         }
         for (let i = 0; i < amounts.length; i++) {
           await editMilestoneOnChain({ wallet, endpoint, input: { streamAddress: data.streamId, milestoneIndex: i, newAmount: amounts[i] } });

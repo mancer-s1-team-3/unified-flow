@@ -9,6 +9,7 @@ import { CsvDiffPanel } from "@/components/dashboard/csv-diff-panel";
 import type { MintPreset } from "@/components/dashboard/token-mints";
 import { PreflightChecklist } from "./preflight-checklist";
 import { useTokenBalance } from "@/lib/use-token-balance";
+import { useAddressHistory } from "@/lib/use-address-history";
 const QUICK_DURATIONS = [
   { label: "1M", value: 60 * 60 * 24 * 30 },
   { label: "3M", value: 60 * 60 * 24 * 90 },
@@ -370,6 +371,10 @@ export function DashboardActionPanels(props: Props) {
     streams,
   } = props;
 
+  const recipientHistory = useAddressHistory("recipient");
+  const mintHistory = useAddressHistory("mint");
+  const [editTotalDraft, setEditTotalDraft] = useState<string | null>(null);
+
   const mintPickerRef = useRef<HTMLDivElement | null>(null);
   const [mintMenuOpen, setMintMenuOpen] = useState(false);
   const [cliffInputMode, setCliffInputMode] = useState<"duration" | "date">("duration");
@@ -397,6 +402,15 @@ const editMilestoneBalanceDecimals = typeof editMilestoneStream?.mintDecimals ==
 
 const editLinearBalance = useTokenBalance(editLinearMint, endpoint, editLinearDecimals);
 const editMilestoneBalance = useTokenBalance(editMilestoneMint, endpoint, editMilestoneBalanceDecimals);
+
+// Asset code shown next to balances. Prefer the preset label; fall back to a
+// shortened mint address so the unit is never ambiguous for custom tokens.
+const shortenMint = (mint: string) =>
+  mint ? `${mint.slice(0, 4)}…${mint.slice(-4)}` : "";
+const editLinearSymbol =
+  mintPresets.find((p) => p.mint === editLinearMint)?.label ?? shortenMint(editLinearMint);
+const editMilestoneSymbol =
+  mintPresets.find((p) => p.mint === editMilestoneMint)?.label ?? shortenMint(editMilestoneMint);
 
 // ── Validasi topup linear ─────────────────────────────────────────────────
 const editLinearTopupNum = parseFloat(String(editLinearForm.topupAmount ?? "")) || 0;
@@ -533,6 +547,52 @@ const editLinearExceedsBalance =
   );
   const editMilestoneMatchesTotal = editMilestoneHasTargetTotal ? editMilestoneSum === editMilestoneTargetTotal : true;
 
+  // Edit-total: kalau total baru > total awal, butuh top-up dari wallet creator.
+  // Pastikan saldo cukup; kalau total turun (refund) tidak butuh saldo.
+  const editMilestoneTopupNeeded =
+    editMilestoneSum > editMilestoneTargetTotal ? editMilestoneSum - editMilestoneTargetTotal : BigInt(0);
+  const editMilestoneWalletBase =
+    editMilestoneBalance.balance !== null
+      ? parseTokenAmountToBaseUnits(String(editMilestoneBalance.balance), editMilestoneDecimals)
+      : null;
+  const editMilestoneExceedsBalance =
+    editMilestoneWalletBase !== null && editMilestoneTopupNeeded > editMilestoneWalletBase;
+
+  // Total amount yang sedang ditampilkan = jumlah seluruh milestone (display units)
+  const editMilestoneTotalDisplay = formatBaseUnitsToTokenAmount(editMilestoneSum, editMilestoneDecimals);
+  const editTotalValue = editTotalDraft ?? editMilestoneTotalDisplay;
+
+  // Skala ulang tiap milestone secara proporsional agar total = nilai baru.
+  // Dihitung dalam base units; sisa pembulatan diserap milestone terakhir agar sum tepat.
+  const rescaleMilestonesToTotal = (totalStr: string) => {
+    const decimals = editMilestoneDecimals;
+    const newTotalBase = parseTokenAmountToBaseUnits(totalStr || "0", decimals);
+    const oldBase = editMilestoneAmounts.map((v: string) =>
+      parseTokenAmountToBaseUnits(String(v || "0"), decimals)
+    );
+    if (oldBase.length === 0) return;
+    const oldTotalBase = oldBase.reduce((sum: bigint, b: bigint) => sum + b, BigInt(0));
+
+    let nextBase: bigint[];
+    if (oldTotalBase === BigInt(0)) {
+      // Tidak ada rasio lama -> bagi rata
+      const n = BigInt(oldBase.length);
+      const each = newTotalBase / n;
+      nextBase = oldBase.map(() => each);
+    } else {
+      nextBase = oldBase.map((b: bigint) => (b * newTotalBase) / oldTotalBase);
+    }
+
+    const assigned = nextBase.reduce((sum: bigint, b: bigint) => sum + b, BigInt(0));
+    const remainder = newTotalBase - assigned;
+    const lastIdx = nextBase.length - 1;
+    const adjustedLast = nextBase[lastIdx] + remainder;
+    nextBase[lastIdx] = adjustedLast < BigInt(0) ? BigInt(0) : adjustedLast;
+
+    const nextDisplay = nextBase.map((b: bigint) => formatBaseUnitsToTokenAmount(b, decimals));
+    setEditMilestoneForm({ ...editMilestoneForm, amounts: nextDisplay });
+  };
+
   const selectedMintPreset = mintPresets.find((preset) => preset.mint === createForm.mint) ?? null;
   const tokenBalance = useTokenBalance(
   createForm.mint,
@@ -600,7 +660,7 @@ const editCsvDisabled =
     !editMilestoneForm.streamId?.trim() ||
     editMilestoneAmounts.length === 0 ||
     editMilestoneHasInvalidAmounts ||
-    (editMilestoneHasTargetTotal && !editMilestoneMatchesTotal) ||
+    editMilestoneExceedsBalance ||
     activeTxAction === "edit_milestone";
  const editLinearDisabled =
   isStreamCsvCreated(editLinearForm.streamId) ||
@@ -691,7 +751,12 @@ const editCsvDisabled =
             <div className={`grid min-w-0 gap-4 md:grid-cols-2 max-w-full ${mobileNarrowFormClass}`}>
               <div className="md:col-span-2 min-w-0 max-w-full">
                 <label className="block text-[10px] sm:text-xs font-semibold text-zinc-400 uppercase tracking-wider mb-1.5">Recipient</label>
-                <input type="text" value={createForm.recipient} onChange={(e) => setCreateForm({ ...createForm, recipient: e.target.value })} className="block w-full max-w-full min-w-0 bg-zinc-950 border border-zinc-800 rounded-xl px-3.5 py-2.5 sm:px-4 sm:py-3 text-sm focus:outline-none focus:border-indigo-500 font-mono" />
+                <input type="text" list="uf-recipient-history" autoComplete="off" value={createForm.recipient} onChange={(e) => setCreateForm({ ...createForm, recipient: e.target.value })} onBlur={(e) => recipientHistory.remember(e.target.value)} className="block w-full max-w-full min-w-0 bg-zinc-950 border border-zinc-800 rounded-xl px-3.5 py-2.5 sm:px-4 sm:py-3 text-sm focus:outline-none focus:border-indigo-500 font-mono" />
+                <datalist id="uf-recipient-history">
+                  {recipientHistory.addresses.map((addr) => (
+                    <option key={addr} value={addr} />
+                  ))}
+                </datalist>
               </div>
              <div className="min-w-0 max-w-full">
   <label className="block text-[10px] sm:text-xs font-semibold text-zinc-400 uppercase tracking-wider mb-1.5">
@@ -858,11 +923,19 @@ const editCsvDisabled =
                           <div className="text-[10px] font-black uppercase tracking-[0.24em] text-zinc-500 mb-2 px-2">Custom mint</div>
                           <input
                             type="text"
+                            list="uf-mint-history"
+                            autoComplete="off"
                             value={createForm.mint}
                             onChange={(e) => setCreateForm({ ...createForm, mint: e.target.value })}
+                            onBlur={(e) => mintHistory.remember(e.target.value)}
                             placeholder="Paste a mint address"
                             className="block w-full max-w-full min-w-0 bg-zinc-950 border border-zinc-800 rounded-xl px-3 py-2.5 text-xs focus:outline-none focus:border-indigo-500 font-mono"
                           />
+                          <datalist id="uf-mint-history">
+                            {mintHistory.addresses.map((addr) => (
+                              <option key={addr} value={addr} />
+                            ))}
+                          </datalist>
                         </div>
                       </div>
                     </div>
@@ -1288,7 +1361,11 @@ const editCsvDisabled =
 </div>
               <button
                 disabled={createDisabled}
-                onClick={() => handleAction("create_stream", createForm)}
+                onClick={() => {
+                  recipientHistory.remember(createForm.recipient);
+                  mintHistory.remember(createForm.mint);
+                  handleAction("create_stream", createForm);
+                }}
                 className={`md:col-span-2 w-full mt-4 text-white font-bold text-xs py-3 rounded-xl transition-all shadow-lg flex items-center justify-center gap-2 ${createDisabled ? "bg-zinc-800 text-zinc-500 cursor-not-allowed shadow-none" : "bg-indigo-600 hover:bg-indigo-700 hover:shadow-indigo-500/20"}`}
               >
                 {activeTxAction === "create_stream" && activeTxPhase ? <RefreshCw className="w-4 h-4 animate-spin" /> : null}
@@ -1646,6 +1723,29 @@ const editCsvDisabled =
                 />
               </div>
 
+              {(Array.isArray(editMilestoneForm.amounts) ? editMilestoneForm.amounts : []).length > 0 && (
+                <div className="sm:col-span-2">
+                  <label className="block text-xs font-semibold text-zinc-400 uppercase tracking-wider mb-1.5">Total Amount</label>
+                  <input
+                    type="text"
+                    inputMode="decimal"
+                    lang="en"
+                    value={editTotalValue}
+                    onChange={(e) => {
+                      const normalized = normalizeDecimalInput(e.target.value);
+                      setEditTotalDraft(normalized);
+                      rescaleMilestonesToTotal(normalized === "" ? "0" : normalized);
+                    }}
+                    onBlur={() => setEditTotalDraft(null)}
+                    className="w-full bg-zinc-950 border border-indigo-500/40 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:border-indigo-500 font-mono"
+                    placeholder="0"
+                  />
+                  <p className="mt-1.5 text-[10px] text-zinc-500 leading-relaxed">
+                    Changing the total scales every milestone proportionally, keeping the ratio between milestones intact.
+                  </p>
+                </div>
+              )}
+
               {(Array.isArray(editMilestoneForm.amounts) ? editMilestoneForm.amounts : []).map((amount: string, index: number) => (
                 <div key={index}>
                   <label className="block text-xs font-semibold text-zinc-400 uppercase tracking-wider mb-1.5">Milestone #{index} Amount</label>
@@ -1658,6 +1758,7 @@ const editCsvDisabled =
                       const next = [...(Array.isArray(editMilestoneForm.amounts) ? editMilestoneForm.amounts : [])];
                       const normalized = normalizeDecimalInput(e.target.value);
                       next[index] = normalized === "" ? "0" : normalized;
+                      setEditTotalDraft(null);
                       setEditMilestoneForm({ ...editMilestoneForm, amounts: next });
                     }}
                     className="w-full bg-zinc-950 border border-zinc-800 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:border-indigo-500 font-mono"
@@ -1676,7 +1777,7 @@ const editCsvDisabled =
       <span className="text-[10px] font-mono text-zinc-500">
         Wallet Balance: {editMilestoneBalance.balance.toLocaleString(undefined, {
           maximumFractionDigits: editMilestoneBalanceDecimals,
-        })}
+        })}{editMilestoneSymbol ? ` ${editMilestoneSymbol}` : ""}
       </span>
     </div>
   ) : null}
@@ -1765,14 +1866,14 @@ const editCsvDisabled =
             ) : !editLinearMint ? null
             : editLinearBalance.balance !== null ? (
               <span className={`text-[10px] font-mono ${editLinearExceedsBalance ? "text-rose-400" : "text-zinc-500"}`}>
-                Balance: {editLinearBalance.balance.toLocaleString(undefined, { maximumFractionDigits: editLinearDecimals })}
+                Balance: {editLinearBalance.balance.toLocaleString(undefined, { maximumFractionDigits: editLinearDecimals })}{editLinearSymbol ? ` ${editLinearSymbol}` : ""}
               </span>
             ) : null}
           </div>
           {editLinearExceedsBalance && (
             <div className="mt-1 text-[10px] font-semibold text-rose-400">
               Top-up amount exceeds wallet balance of{" "}
-              {editLinearBalance.balance!.toLocaleString(undefined, { maximumFractionDigits: editLinearDecimals })} tokens.
+              {editLinearBalance.balance!.toLocaleString(undefined, { maximumFractionDigits: editLinearDecimals })}{editLinearSymbol ? ` ${editLinearSymbol}` : ""}.
             </div>
           )}
         </div>
@@ -2143,13 +2244,13 @@ const mintExceedsBalance =
               <div>
                 <div className="text-zinc-600 text-[9px] uppercase mb-0.5">CSV Total</div>
                 <div className="text-rose-400 font-black">
-                  {csvTotalForMint.toLocaleString(undefined, { maximumFractionDigits: walletDecimals })}
+                  {csvTotalForMint.toLocaleString(undefined, { maximumFractionDigits: walletDecimals })}{walletMintLabel ? ` ${walletMintLabel}` : ""}
                 </div>
               </div>
               <div>
                 <div className="text-zinc-600 text-[9px] uppercase mb-0.5">Wallet Balance</div>
                 <div className="text-zinc-300 font-black">
-                  {walletBalance.toLocaleString(undefined, { maximumFractionDigits: walletDecimals })}
+                  {walletBalance.toLocaleString(undefined, { maximumFractionDigits: walletDecimals })}{walletMintLabel ? ` ${walletMintLabel}` : ""}
                 </div>
               </div>
               <div>
@@ -2157,7 +2258,7 @@ const mintExceedsBalance =
                 <div className="text-rose-400 font-black">
                   {(csvTotalForMint - walletBalance).toLocaleString(undefined, {
                     maximumFractionDigits: walletDecimals,
-                  })}
+                  })}{walletMintLabel ? ` ${walletMintLabel}` : ""}
                 </div>
               </div>
             </div>
