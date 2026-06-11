@@ -430,7 +430,7 @@ edit_linear:    { label: "Extend Stream",    icon: "📈", color: "bg-teal-600" 
                     )}
                     <div className={`max-w-[280px] ${message.role === "user" ? "order-1" : ""}`}>
                       <div
-                        className={`px-3 py-2.5 rounded-2xl text-[12px] leading-relaxed ${
+                        className={`px-3 py-2.5 rounded-2xl text-[12px] leading-relaxed break-words overflow-hidden ${
                           message.role === "user"
                             ? "bg-indigo-600 text-white rounded-br-md"
                             : "bg-zinc-900 border border-zinc-800 text-zinc-100 rounded-bl-md"
