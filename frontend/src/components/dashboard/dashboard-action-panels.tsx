@@ -9,6 +9,7 @@ import { CsvDiffPanel } from "@/components/dashboard/csv-diff-panel";
 import type { MintPreset } from "@/components/dashboard/token-mints";
 import { PreflightChecklist } from "./preflight-checklist";
 import { useTokenBalance } from "@/lib/use-token-balance";
+import { useAddressHistory } from "@/lib/use-address-history";
 const QUICK_DURATIONS = [
   { label: "1M", value: 60 * 60 * 24 * 30 },
   { label: "3M", value: 60 * 60 * 24 * 90 },
@@ -370,6 +371,9 @@ export function DashboardActionPanels(props: Props) {
     streams,
   } = props;
 
+  const recipientHistory = useAddressHistory("recipient");
+  const mintHistory = useAddressHistory("mint");
+
   const mintPickerRef = useRef<HTMLDivElement | null>(null);
   const [mintMenuOpen, setMintMenuOpen] = useState(false);
   const [cliffInputMode, setCliffInputMode] = useState<"duration" | "date">("duration");
@@ -691,7 +695,12 @@ const editCsvDisabled =
             <div className={`grid min-w-0 gap-4 md:grid-cols-2 max-w-full ${mobileNarrowFormClass}`}>
               <div className="md:col-span-2 min-w-0 max-w-full">
                 <label className="block text-[10px] sm:text-xs font-semibold text-zinc-400 uppercase tracking-wider mb-1.5">Recipient</label>
-                <input type="text" value={createForm.recipient} onChange={(e) => setCreateForm({ ...createForm, recipient: e.target.value })} className="block w-full max-w-full min-w-0 bg-zinc-950 border border-zinc-800 rounded-xl px-3.5 py-2.5 sm:px-4 sm:py-3 text-sm focus:outline-none focus:border-indigo-500 font-mono" />
+                <input type="text" list="uf-recipient-history" autoComplete="off" value={createForm.recipient} onChange={(e) => setCreateForm({ ...createForm, recipient: e.target.value })} onBlur={(e) => recipientHistory.remember(e.target.value)} className="block w-full max-w-full min-w-0 bg-zinc-950 border border-zinc-800 rounded-xl px-3.5 py-2.5 sm:px-4 sm:py-3 text-sm focus:outline-none focus:border-indigo-500 font-mono" />
+                <datalist id="uf-recipient-history">
+                  {recipientHistory.addresses.map((addr) => (
+                    <option key={addr} value={addr} />
+                  ))}
+                </datalist>
               </div>
              <div className="min-w-0 max-w-full">
   <label className="block text-[10px] sm:text-xs font-semibold text-zinc-400 uppercase tracking-wider mb-1.5">
@@ -858,11 +867,19 @@ const editCsvDisabled =
                           <div className="text-[10px] font-black uppercase tracking-[0.24em] text-zinc-500 mb-2 px-2">Custom mint</div>
                           <input
                             type="text"
+                            list="uf-mint-history"
+                            autoComplete="off"
                             value={createForm.mint}
                             onChange={(e) => setCreateForm({ ...createForm, mint: e.target.value })}
+                            onBlur={(e) => mintHistory.remember(e.target.value)}
                             placeholder="Paste a mint address"
                             className="block w-full max-w-full min-w-0 bg-zinc-950 border border-zinc-800 rounded-xl px-3 py-2.5 text-xs focus:outline-none focus:border-indigo-500 font-mono"
                           />
+                          <datalist id="uf-mint-history">
+                            {mintHistory.addresses.map((addr) => (
+                              <option key={addr} value={addr} />
+                            ))}
+                          </datalist>
                         </div>
                       </div>
                     </div>
@@ -1288,7 +1305,11 @@ const editCsvDisabled =
 </div>
               <button
                 disabled={createDisabled}
-                onClick={() => handleAction("create_stream", createForm)}
+                onClick={() => {
+                  recipientHistory.remember(createForm.recipient);
+                  mintHistory.remember(createForm.mint);
+                  handleAction("create_stream", createForm);
+                }}
                 className={`md:col-span-2 w-full mt-4 text-white font-bold text-xs py-3 rounded-xl transition-all shadow-lg flex items-center justify-center gap-2 ${createDisabled ? "bg-zinc-800 text-zinc-500 cursor-not-allowed shadow-none" : "bg-indigo-600 hover:bg-indigo-700 hover:shadow-indigo-500/20"}`}
               >
                 {activeTxAction === "create_stream" && activeTxPhase ? <RefreshCw className="w-4 h-4 animate-spin" /> : null}
