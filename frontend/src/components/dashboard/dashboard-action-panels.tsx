@@ -314,6 +314,7 @@ type Props = {
   activeTxPhase: "wallet_approval" | "sending" | "confirming" | null;
   connected: boolean;
   endpoint: string;
+  streams: any[];
 };
 
 export function DashboardActionPanels(props: Props) {
@@ -366,6 +367,7 @@ export function DashboardActionPanels(props: Props) {
     activeTxPhase,
     connected,
     endpoint,
+    streams,
   } = props;
 
   const mintPickerRef = useRef<HTMLDivElement | null>(null);
@@ -375,6 +377,37 @@ export function DashboardActionPanels(props: Props) {
   const feeEstimate = useFeeEstimate();
   const csvMilestoneValidation = useCsvMilestoneValidation(csvCreateText);
   const csvEditMilestoneValidation = useCsvMilestoneValidation(csvEditText);
+  // ── Resolve mint dari stream yang sedang diedit ───────────────────────────
+const editLinearStream = useMemo(
+  () => streams.find((s) => String(s?.id || "") === editLinearForm.streamId) ?? null,
+  [streams, editLinearForm.streamId]
+);
+const editMilestoneStream = useMemo(
+  () => streams.find((s) => String(s?.id || "") === editMilestoneForm.streamId) ?? null,
+  [streams, editMilestoneForm.streamId]
+);
+
+const editLinearMint = editLinearStream?.mint ?? "";
+const editMilestoneMint = editMilestoneStream?.mint ?? "";
+
+const editLinearDecimals = typeof editLinearStream?.mintDecimals === "number"
+  ? editLinearStream.mintDecimals : 6;
+const editMilestoneBalanceDecimals = typeof editMilestoneStream?.mintDecimals === "number"
+  ? editMilestoneStream.mintDecimals : 6;
+
+const editLinearBalance = useTokenBalance(editLinearMint, endpoint, editLinearDecimals);
+const editMilestoneBalance = useTokenBalance(editMilestoneMint, endpoint, editMilestoneBalanceDecimals);
+
+// ── Validasi topup linear ─────────────────────────────────────────────────
+const editLinearTopupNum = parseFloat(String(editLinearForm.topupAmount ?? "")) || 0;
+const editLinearExceedsBalance =
+  editLinearBalance.balance !== null &&
+  editLinearTopupNum > 0 &&
+  editLinearTopupNum > editLinearBalance.balance;
+
+
+// edit_milestone tidak transfer token baru (redistribute saja)
+// jadi tidak perlu balance check untuk milestone edit
   const withdrawFeeUsd =
   feeEstimate.solCost && feeEstimate.solPrice
     ? feeEstimate.solCost * feeEstimate.solPrice
@@ -569,12 +602,13 @@ const editCsvDisabled =
     editMilestoneHasInvalidAmounts ||
     (editMilestoneHasTargetTotal && !editMilestoneMatchesTotal) ||
     activeTxAction === "edit_milestone";
-  const editLinearDisabled =
-    isStreamCsvCreated(editLinearForm.streamId) ||
-    !editLinearForm.streamId?.trim() ||
-    !String(editLinearForm.newEndDuration ?? "").trim() ||
-    !String(editLinearForm.topupAmount ?? "").trim() ||
-    activeTxAction === "edit_linear";
+ const editLinearDisabled =
+  isStreamCsvCreated(editLinearForm.streamId) ||
+  !editLinearForm.streamId?.trim() ||
+  !String(editLinearForm.newEndDuration ?? "").trim() ||
+  !String(editLinearForm.topupAmount ?? "").trim() ||
+  editLinearExceedsBalance ||   // ← tambah ini
+  activeTxAction === "edit_linear";
   const editCliffPeriodOver = isCliffPassed(editCliffForm.streamId);
   const editCliffDisabled =
     isStreamCsvCreated(editCliffForm.streamId) ||
@@ -1631,7 +1665,22 @@ const editCsvDisabled =
                   />
                 </div>
               ))}
-
+{/* Balance info */}
+<div className="sm:col-span-2">
+  {editMilestoneBalance.loading ? (
+    <span className="text-[10px] font-mono text-zinc-600 animate-pulse">fetching balance…</span>
+  ) : editMilestoneBalance.error ? (
+    <span className="text-[10px] font-mono text-zinc-600">balance unavailable</span>
+  ) : editMilestoneMint && editMilestoneBalance.balance !== null ? (
+    <div className="flex items-center gap-2 px-1 mb-2">
+      <span className="text-[10px] font-mono text-zinc-500">
+        Wallet Balance: {editMilestoneBalance.balance.toLocaleString(undefined, {
+          maximumFractionDigits: editMilestoneBalanceDecimals,
+        })}
+      </span>
+    </div>
+  ) : null}
+</div>
              <div className="sm:col-span-2">
   <MilestoneAllocationCounter
     amounts={editMilestoneAmounts.map((v: string) =>
@@ -1668,13 +1717,72 @@ const editCsvDisabled =
         </div>
       )}
 
-      {activeTab === "edit_linear" && (
-        <div className="animate-in fade-in-30 duration-200">
-          <div className="border-b border-zinc-900 pb-4 mb-6"><h2 className="text-2xl font-extrabold tracking-tight">Edit Linear Timeline</h2><p className="text-xs text-zinc-400">Modify linear timelines or extend stream end thresholds</p></div>
-          {isStreamCsvCreated(editLinearForm.streamId) ? <div className="bg-red-950/45 border border-red-500/30 rounded-2xl p-5 text-red-300 flex items-start gap-4 mb-6"><Lock className="w-6 h-6 text-red-400 shrink-0 mt-0.5" /><div><h4 className="text-sm font-extrabold">Manual Edit Locked!</h4><p className="text-xs text-red-400/80 mt-1 leading-relaxed">This stream was created via CSV Import. To comply with consistency requirements, CSV-created streams must be edited exclusively using the Bulk Edit CSV console.</p></div></div> : <div className="grid gap-4"><div><label className="block text-xs font-semibold text-zinc-400 uppercase tracking-wider mb-1.5">Stream ID (PDA Address)</label><input type="text" value={editLinearForm.streamId} onChange={(e) => setEditLinearForm({ ...editLinearForm, streamId: e.target.value })} className="w-full bg-zinc-950 border border-zinc-800 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:border-indigo-500 font-mono" /></div><div><label className="block text-xs font-semibold text-zinc-400 uppercase tracking-wider mb-1.5">New Stream Duration (Seconds from Start)</label><input type="number" value={editLinearForm.newEndDuration} onChange={(e) => setEditLinearForm({ ...editLinearForm, newEndDuration: e.target.value })} className="w-full bg-zinc-950 border border-zinc-800 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:border-indigo-500 font-mono" /></div><div><label className="block text-xs font-semibold text-zinc-400 uppercase tracking-wider mb-1.5">Top-up Amount (Tokens to Add)</label><input type="number" value={editLinearForm.topupAmount} onChange={(e) => setEditLinearForm({ ...editLinearForm, topupAmount: e.target.value })} className="w-full bg-zinc-950 border border-zinc-800 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:border-indigo-500 font-mono" /></div></div>}
-          <button disabled={editLinearDisabled} onClick={() => handleAction("edit_linear", editLinearForm)} className={`w-full mt-6 text-white font-bold text-xs py-3 rounded-xl transition-all shadow-lg ${editLinearDisabled ? "bg-zinc-850 border border-zinc-800 text-zinc-550 cursor-not-allowed opacity-50" : "bg-indigo-600 hover:bg-indigo-700 hover:shadow-indigo-500/20"}`}>Update End Timeline & Top-up Stream</button>
+     {activeTab === "edit_linear" && (
+  <div className="animate-in fade-in-30 duration-200">
+    <div className="border-b border-zinc-900 pb-4 mb-6">
+      <h2 className="text-2xl font-extrabold tracking-tight">Edit Linear Timeline</h2>
+      <p className="text-xs text-zinc-400">Modify linear timelines or extend stream end thresholds</p>
+    </div>
+    {isStreamCsvCreated(editLinearForm.streamId) ? (
+      <div className="bg-red-950/45 border border-red-500/30 rounded-2xl p-5 text-red-300 flex items-start gap-4 mb-6">
+        <Lock className="w-6 h-6 text-red-400 shrink-0 mt-0.5" />
+        <div>
+          <h4 className="text-sm font-extrabold">Manual Edit Locked!</h4>
+          <p className="text-xs text-red-400/80 mt-1 leading-relaxed">This stream was created via CSV Import. To comply with consistency requirements, CSV-created streams must be edited exclusively using the Bulk Edit CSV console.</p>
         </div>
-      )}
+      </div>
+    ) : (
+      <div className="grid gap-4">
+        <div>
+          <label className="block text-xs font-semibold text-zinc-400 uppercase tracking-wider mb-1.5">Stream ID (PDA Address)</label>
+          <input type="text" value={editLinearForm.streamId} onChange={(e) => setEditLinearForm({ ...editLinearForm, streamId: e.target.value })} className="w-full bg-zinc-950 border border-zinc-800 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:border-indigo-500 font-mono" />
+        </div>
+        <div>
+          <label className="block text-xs font-semibold text-zinc-400 uppercase tracking-wider mb-1.5">New Stream Duration (Seconds from Start)</label>
+          <input type="number" value={editLinearForm.newEndDuration} onChange={(e) => setEditLinearForm({ ...editLinearForm, newEndDuration: e.target.value })} className="w-full bg-zinc-950 border border-zinc-800 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:border-indigo-500 font-mono" />
+        </div>
+        <div>
+          <label className="block text-xs font-semibold text-zinc-400 uppercase tracking-wider mb-1.5">
+            Top-up Amount (Tokens to Add)
+          </label>
+          <input
+            type="number"
+            value={editLinearForm.topupAmount}
+            onChange={(e) => setEditLinearForm({ ...editLinearForm, topupAmount: e.target.value })}
+            className={`w-full bg-zinc-950 border rounded-xl px-4 py-2.5 text-sm focus:outline-none font-mono transition-colors ${
+              editLinearExceedsBalance
+                ? "border-rose-500/60 focus:border-rose-500"
+                : "border-zinc-800 focus:border-indigo-500"
+            }`}
+          />
+          {/* Balance row */}
+          <div className="mt-1.5 flex items-center gap-2">
+            {!connected ? null
+            : editLinearBalance.loading ? (
+              <span className="text-[10px] font-mono text-zinc-600 animate-pulse">fetching balance…</span>
+            ) : editLinearBalance.error ? (
+              <span className="text-[10px] font-mono text-zinc-600">balance unavailable</span>
+            ) : !editLinearMint ? null
+            : editLinearBalance.balance !== null ? (
+              <span className={`text-[10px] font-mono ${editLinearExceedsBalance ? "text-rose-400" : "text-zinc-500"}`}>
+                Balance: {editLinearBalance.balance.toLocaleString(undefined, { maximumFractionDigits: editLinearDecimals })}
+              </span>
+            ) : null}
+          </div>
+          {editLinearExceedsBalance && (
+            <div className="mt-1 text-[10px] font-semibold text-rose-400">
+              Top-up amount exceeds wallet balance of{" "}
+              {editLinearBalance.balance!.toLocaleString(undefined, { maximumFractionDigits: editLinearDecimals })} tokens.
+            </div>
+          )}
+        </div>
+      </div>
+    )}
+    <button disabled={editLinearDisabled} onClick={() => handleAction("edit_linear", editLinearForm)} className={`w-full mt-6 text-white font-bold text-xs py-3 rounded-xl transition-all shadow-lg ${editLinearDisabled ? "bg-zinc-850 border border-zinc-800 text-zinc-550 cursor-not-allowed opacity-50" : "bg-indigo-600 hover:bg-indigo-700 hover:shadow-indigo-500/20"}`}>
+      Update End Timeline & Top-up Stream
+    </button>
+  </div>
+)}
 
       {activeTab === "edit_cliff" && (
         <div className="animate-in fade-in-30 duration-200">
