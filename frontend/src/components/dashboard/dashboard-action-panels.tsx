@@ -404,6 +404,7 @@ export function DashboardActionPanels(props: Props) {
   const feeEstimate = useFeeEstimate();
   const csvMilestoneValidation = useCsvMilestoneValidation(csvCreateText);
   const csvEditMilestoneValidation = useCsvMilestoneValidation(csvEditText);
+  const csvEditIdValidation = useCsvIdValidation(csvEditText, streams, true);
   // ── Resolve mint dari stream yang sedang diedit ───────────────────────────
 const editLinearStream = useMemo(
   () => streams.find((s) => String(s?.id || "") === editLinearForm.streamId) ?? null,
@@ -729,6 +730,7 @@ const editCsvDisabled =
   !csvEditText?.trim() ||
   activeTxAction === "edit_stream_csv" ||
   csvEditMilestoneValidation.hasErrors ||
+  csvEditIdValidation.hasErrors || // ← blok apply kalau ada id ngawur
   csvEditExceedsBalance; // ← tambah ini
   const editMilestoneAlreadyUnlocked = isMilestoneUnlocked(editMilestoneForm.streamId);
   const editMilestoneDisabled =
@@ -1618,6 +1620,7 @@ const editCsvDisabled =
   walletDecimals={tokenBalance.decimals ?? selectedMintPreset?.decimals ?? 6}
   editMode={true}              // ← flag supaya label lebih relevan
   editTotalByMint={csvEditTotalByMint}
+  editStreams={streams}        // ← live DB untuk validasi kolom id
 />
             <CsvDiffPanel
               csvDiffResult={csvDiffResult}
@@ -2312,6 +2315,61 @@ function useCsvMilestoneValidation(csvText: string) {
   }, [csvText]);
 }
 
+// Validasi kolom `id` khusus mode edit. Mirror cek backend di
+// /streams/edit-csv (server.ts): id harus ada di DB dan stream harus CSV-created.
+// Tanpa ini, baris dengan id ngawur (mis. "xxx") tampil "valid" karena
+// useCsvMilestoneValidation tidak pernah melihat kolom id.
+function useCsvIdValidation(
+  csvText: string,
+  knownStreams: any[] | undefined,
+  enabled: boolean
+) {
+  return useMemo(() => {
+    if (!enabled || !csvText?.trim()) return { issues: [], hasErrors: false };
+
+    const lines = csvText.trim().split("\n");
+    if (lines.length < 2) return { issues: [], hasErrors: false };
+
+    const headers = lines[0].split(",").map((h) => h.trim().toLowerCase());
+    const idIdx = headers.indexOf("id");
+    // Tanpa kolom id, edit memakai identity-match (recipient+mint+type),
+    // jadi tidak ada id yang bisa divalidasi di sini.
+    if (idIdx === -1) return { issues: [], hasErrors: false };
+
+    const knownById = new Map<string, any>();
+    (knownStreams ?? []).forEach((s) => {
+      const sid = String(s?.id ?? "").trim();
+      if (sid) knownById.set(sid, s);
+    });
+
+    const issues: { rowNum: number; id: string; reason: string }[] = [];
+
+    for (let i = 1; i < lines.length; i++) {
+      const line = lines[i].trim();
+      if (!line) continue;
+      const values = line.split(",").map((v) => v.trim());
+      const id = (values[idIdx] ?? "").trim();
+      // Baris tanpa id sengaja memakai identity-match — bukan error.
+      if (!id) continue;
+
+      const match = knownById.get(id);
+      if (!match) {
+        issues.push({ rowNum: i, id, reason: "ID not found in database" });
+        continue;
+      }
+      if (!match.isCsvCreated) {
+        issues.push({
+          rowNum: i,
+          id,
+          reason: "Manually-created stream — cannot be edited via CSV",
+        });
+      }
+    }
+
+    return { issues, hasErrors: issues.length > 0 };
+  }, [csvText, knownStreams, enabled]);
+}
+
 function CsvValidationPanel({
   csvText,
   walletBalance,
@@ -2320,6 +2378,7 @@ function CsvValidationPanel({
   walletDecimals,
   editMode,
   editTotalByMint,
+  editStreams,
 }: {
   csvText: string;
   walletBalance: number | null;
@@ -2328,8 +2387,14 @@ function CsvValidationPanel({
   walletDecimals: number;
   editMode?: boolean;           // ← baru
   editTotalByMint?: Record<string, number>; // ← baru, override total calculation
+  editStreams?: any[];          // ← baru, daftar stream live DB untuk validasi id
 }) {
   const { rows, hasErrors } = useCsvMilestoneValidation(csvText);
+  const { issues: idIssues, hasErrors: hasIdErrors } = useCsvIdValidation(
+    csvText,
+    editStreams,
+    !!editMode
+  );
   const totalByMint = useCsvTotalByMint(csvText);
 
   // ── Per-mint balance check ─────────────────────────────────────────────
@@ -2350,9 +2415,9 @@ const mintExceedsBalance =
   walletBalance !== null &&
   csvTotalForMint > walletBalance;
 
-  const hasAnyError = hasErrors || !!mintExceedsBalance;
+  const hasAnyError = hasErrors || !!mintExceedsBalance || hasIdErrors;
 
-  if (rows.length === 0 && !mintExceedsBalance) return null;
+  if (rows.length === 0 && !mintExceedsBalance && idIssues.length === 0) return null;
 
   const allGood = !hasAnyError;
 
@@ -2378,6 +2443,7 @@ const mintExceedsBalance =
             ? "All checks passed"
             : [
                 mintExceedsBalance && "insufficient balance",
+                hasIdErrors && `${idIssues.length} invalid id${idIssues.length > 1 ? "s" : ""}`,
                 hasErrors && `${rows.filter((r) => !r.isMatch || r.hasInvalid).length} unbalanced`,
               ]
                 .filter(Boolean)
@@ -2418,6 +2484,29 @@ const mintExceedsBalance =
               </div>
             </div>
           </div>
+        </div>
+      )}
+
+      {/* ── Invalid id rows (edit mode) ──────────────────────────────────── */}
+      {idIssues.length > 0 && (
+        <div className="border-b border-rose-500/20">
+          {idIssues.map((issue) => (
+            <div
+              key={issue.rowNum}
+              className="px-4 py-3 bg-rose-950/20 flex items-start gap-3 border-b border-rose-500/10 last:border-b-0"
+            >
+              <AlertTriangle className="w-4 h-4 text-rose-400 shrink-0 mt-0.5" />
+              <div className="flex-1 min-w-0">
+                <div className="text-[11px] font-bold text-rose-300 mb-0.5">
+                  Row #{issue.rowNum} · invalid id
+                </div>
+                <div className="text-[10px] font-mono text-rose-400/80 break-all mb-0.5">
+                  {issue.id}
+                </div>
+                <div className="text-[10px] text-rose-300/70">{issue.reason}</div>
+              </div>
+            </div>
+          ))}
         </div>
       )}
 
@@ -2515,7 +2604,9 @@ const mintExceedsBalance =
   <div className="px-4 py-3 border-t border-rose-500/20 bg-rose-950/10 flex items-start gap-2">
     <span className="text-rose-400 text-[10px]">⚠</span>
     <p className="text-[10px] text-rose-300/80 leading-relaxed">
-      {mintExceedsBalance && hasErrors
+      {hasIdErrors
+        ? "Fix the invalid id column before applying. Each edit row must reference an existing CSV-created stream id, or leave id blank to match by recipient."
+        : mintExceedsBalance && hasErrors
         ? editMode
           ? "Fix balance shortfall (milestone + topup amounts) and milestone allocations before applying."
           : "Fix balance shortfall and milestone allocations before deploying."
