@@ -1776,9 +1776,10 @@ const editCsvDisabled =
           <button
             disabled={unlockDisabled}
             onClick={() => handleAction("unlock_milestone", unlockForm)}
-            className={`w-full mt-6 text-white font-bold text-xs py-3 rounded-xl transition-all shadow-lg ${unlockDisabled ? "bg-zinc-800 text-zinc-500 cursor-not-allowed shadow-none" : "bg-indigo-600 hover:bg-indigo-700 hover:shadow-indigo-500/20"}`}
+            className={`w-full mt-6 text-white font-bold text-xs py-3 rounded-xl transition-all shadow-lg flex items-center justify-center gap-2 ${unlockDisabled ? "bg-zinc-800 text-zinc-500 cursor-not-allowed shadow-none" : "bg-indigo-600 hover:bg-indigo-700 hover:shadow-indigo-500/20"}`}
           >
-            Unlock Milestone
+            {activeTxAction === "unlock_milestone" && activeTxPhase ? <RefreshCw className="w-4 h-4 animate-spin" /> : null}
+            {getTxLabel("unlock_milestone", "Unlock Milestone")}
           </button>
         </div>
       )}
@@ -1894,9 +1895,10 @@ const editCsvDisabled =
           <button
             disabled={editMilestoneDisabled}
             onClick={() => handleAction("edit_milestone", editMilestoneForm)}
-            className={`w-full mt-6 text-white font-bold text-xs py-3 rounded-xl transition-all shadow-lg ${editMilestoneDisabled ? "bg-zinc-850 border border-zinc-800 text-zinc-550 cursor-not-allowed opacity-50" : "bg-indigo-600 hover:bg-indigo-700 hover:shadow-indigo-500/20"}`}
+            className={`w-full mt-6 text-white font-bold text-xs py-3 rounded-xl transition-all shadow-lg flex items-center justify-center gap-2 ${editMilestoneDisabled ? "bg-zinc-850 border border-zinc-800 text-zinc-550 cursor-not-allowed opacity-50" : "bg-indigo-600 hover:bg-indigo-700 hover:shadow-indigo-500/20"}`}
           >
-            Apply All Milestone Edits
+            {activeTxAction === "edit_milestone" && activeTxPhase ? <RefreshCw className="w-4 h-4 animate-spin" /> : null}
+            {getTxLabel("edit_milestone", "Apply All Milestone Edits")}
           </button>
         </div>
       )}
@@ -1962,8 +1964,9 @@ const editCsvDisabled =
         </div>
       </div>
     )}
-    <button disabled={editLinearDisabled} onClick={() => handleAction("edit_linear", editLinearForm)} className={`w-full mt-6 text-white font-bold text-xs py-3 rounded-xl transition-all shadow-lg ${editLinearDisabled ? "bg-zinc-850 border border-zinc-800 text-zinc-550 cursor-not-allowed opacity-50" : "bg-indigo-600 hover:bg-indigo-700 hover:shadow-indigo-500/20"}`}>
-      Update End Timeline & Top-up Stream
+    <button disabled={editLinearDisabled} onClick={() => handleAction("edit_linear", editLinearForm)} className={`w-full mt-6 text-white font-bold text-xs py-3 rounded-xl transition-all shadow-lg flex items-center justify-center gap-2 ${editLinearDisabled ? "bg-zinc-850 border border-zinc-800 text-zinc-550 cursor-not-allowed opacity-50" : "bg-indigo-600 hover:bg-indigo-700 hover:shadow-indigo-500/20"}`}>
+      {activeTxAction === "edit_linear" && activeTxPhase ? <RefreshCw className="w-4 h-4 animate-spin" /> : null}
+      {getTxLabel("edit_linear", "Update End Timeline & Top-up Stream")}
     </button>
   </div>
 )}
@@ -2047,7 +2050,7 @@ const editCsvDisabled =
               </div>
             </div>
           )}
-          <button disabled={editCliffDisabled} onClick={() => handleAction("edit_cliff", editCliffForm)} className={`w-full mt-6 text-white font-bold text-xs py-3 rounded-xl transition-all shadow-lg ${editCliffDisabled ? "bg-zinc-850 border border-zinc-800 text-zinc-550 cursor-not-allowed opacity-50" : "bg-indigo-600 hover:bg-indigo-700 hover:shadow-indigo-500/20"}`}>{getTxLabel("edit_cliff", "Apply Cliff & Top-up")}</button>
+          <button disabled={editCliffDisabled} onClick={() => handleAction("edit_cliff", editCliffForm)} className={`w-full mt-6 text-white font-bold text-xs py-3 rounded-xl transition-all shadow-lg flex items-center justify-center gap-2 ${editCliffDisabled ? "bg-zinc-850 border border-zinc-800 text-zinc-550 cursor-not-allowed opacity-50" : "bg-indigo-600 hover:bg-indigo-700 hover:shadow-indigo-500/20"}`}>{activeTxAction === "edit_cliff" && activeTxPhase ? <RefreshCw className="w-4 h-4 animate-spin" /> : null}{getTxLabel("edit_cliff", "Apply Cliff & Top-up")}</button>
         </div>
       )}
 
