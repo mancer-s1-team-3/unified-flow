@@ -309,7 +309,7 @@ export default function Home({ initialStreams = [] }: Props) {
     totalAmount: "", mintDecimals: null as number | null,
   });
   const [editLinearForm, setEditLinearForm] = useState({ streamId: "", newEndDuration: "", topupAmount: "" });
-  const [editCliffForm,  setEditCliffForm]  = useState({ streamId: "", newCliffDuration: "" });
+  const [editCliffForm,  setEditCliffForm]  = useState({ streamId: "", newCliffDuration: "", topupAmount: "" });
 
   // ── Notifications ─────────────────────────────────────────────────────────
   const { addNotification } = useNotifications();
@@ -826,7 +826,7 @@ export default function Home({ initialStreams = [] }: Props) {
     if (actionName === "edit_linear") {
       if (!wallet) { showNotification("error", "Connect the creator wallet before editing a linear stream."); return; }
       try {
-        await editLinearOnChain({ wallet, endpoint, input: { streamAddress: data.streamId, newEndDuration: data.newEndDuration, topupAmount: data.topupAmount } });
+        await editLinearOnChain({ wallet, endpoint, input: { streamAddress: data.streamId, newEndDuration: data.newEndDuration, topupAmount: data.topupAmount }, onStatus: setTxStatus });
         addNotification({ type: "success", event: "stream_edited", title: "Linear Stream Updated", message: "Stream timeline extended and topped up successfully." });
         fetchStreams(); setActiveTab("streams");
       } catch (err: any) {
@@ -849,7 +849,7 @@ export default function Home({ initialStreams = [] }: Props) {
           throw new Error("Each milestone amount must be greater than zero.");
         }
         for (let i = 0; i < amounts.length; i++) {
-          await editMilestoneOnChain({ wallet, endpoint, input: { streamAddress: data.streamId, milestoneIndex: i, newAmount: amounts[i] } });
+          await editMilestoneOnChain({ wallet, endpoint, input: { streamAddress: data.streamId, milestoneIndex: i, newAmount: amounts[i] }, onStatus: setTxStatus });
         }
         addNotification({ type: "success", event: "stream_edited", title: "Milestone Updated", message: "Milestone allocations updated successfully." });
         fetchStreams(); setActiveTab("streams");
@@ -864,8 +864,8 @@ export default function Home({ initialStreams = [] }: Props) {
     if (actionName === "edit_cliff") {
       if (!wallet) { showNotification("error", "Connect the creator wallet before editing a cliff stream."); return; }
       try {
-        await editCliffOnChain({ wallet, endpoint, input: { streamAddress: data.streamId, newCliffDuration: data.newCliffDuration } });
-        addNotification({ type: "success", event: "stream_edited", title: "Cliff Updated", message: "Cliff timestamp updated successfully." });
+        await editCliffOnChain({ wallet, endpoint, input: { streamAddress: data.streamId, newCliffDuration: data.newCliffDuration, topupAmount: data.topupAmount }, onStatus: setTxStatus });
+        addNotification({ type: "success", event: "stream_edited", title: "Cliff Updated", message: "Cliff conditions updated successfully." });
         fetchStreams(); setActiveTab("streams");
       } catch (err: any) {
         clearTxStatus();
@@ -897,7 +897,7 @@ export default function Home({ initialStreams = [] }: Props) {
     }
     if (tab === "edit_cliff") {
       const duration = stream?.cliffTs && stream?.startTs ? String(Number(stream.cliffTs) - Number(stream.startTs)) : "";
-      setEditCliffForm({ streamId, newCliffDuration: duration });
+      setEditCliffForm({ streamId, newCliffDuration: duration, topupAmount: "" });
     }
     setSelectedStream(null);
   };

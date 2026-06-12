@@ -8,6 +8,7 @@ import { AlertTriangle, Check, ChevronDown, Shield, Download, Layers, Lock, Refr
 import { CsvDiffPanel } from "@/components/dashboard/csv-diff-panel";
 import type { MintPreset } from "@/components/dashboard/token-mints";
 import { PreflightChecklist } from "./preflight-checklist";
+import { shorten } from "@/components/dashboard/utils";
 import { useTokenBalance } from "@/lib/use-token-balance";
 import { useAddressHistory } from "@/lib/use-address-history";
 const QUICK_DURATIONS = [
@@ -192,6 +193,27 @@ function formatBaseUnitsToTokenAmount(amount: bigint, decimals: number) {
   const whole = padded.slice(0, -decimals) || "0";
   const fraction = padded.slice(-decimals).replace(/0+$/, "");
   return `${negative ? "-" : ""}${whole}${fraction ? `.${fraction}` : ""}`;
+}
+
+// Format a duration (in seconds) into a compact "Xd Yh Zm" string. Pure: takes
+// an explicit number so it is safe to call during render.
+function formatDurationSecs(totalSecs: number) {
+  if (!Number.isFinite(totalSecs) || totalSecs <= 0) return "0m";
+  const days = Math.floor(totalSecs / 86400);
+  const hours = Math.floor((totalSecs % 86400) / 3600);
+  const mins = Math.floor((totalSecs % 3600) / 60);
+  const parts: string[] = [];
+  if (days > 0) parts.push(`${days}d`);
+  if (hours > 0) parts.push(`${hours}h`);
+  if (mins > 0 && days === 0) parts.push(`${mins}m`);
+  return parts.length > 0 ? parts.join(" ") : "0m";
+}
+
+// Format a unix-seconds timestamp into a readable local date/time. Pure: the
+// timestamp is explicit (no Date.now()), so this is safe during render.
+function formatUnixTs(ts: number) {
+  if (!Number.isFinite(ts) || ts <= 0) return "—";
+  return new Date(ts * 1000).toLocaleString();
 }
 
 // ─── Cancel Panel (manages dialog state) ─────────────────────────────────
@@ -382,6 +404,7 @@ export function DashboardActionPanels(props: Props) {
   const feeEstimate = useFeeEstimate();
   const csvMilestoneValidation = useCsvMilestoneValidation(csvCreateText);
   const csvEditMilestoneValidation = useCsvMilestoneValidation(csvEditText);
+  const csvEditIdValidation = useCsvIdValidation(csvEditText, streams, true);
   // ── Resolve mint dari stream yang sedang diedit ───────────────────────────
 const editLinearStream = useMemo(
   () => streams.find((s) => String(s?.id || "") === editLinearForm.streamId) ?? null,
@@ -418,6 +441,61 @@ const editLinearExceedsBalance =
   editLinearBalance.balance !== null &&
   editLinearTopupNum > 0 &&
   editLinearTopupNum > editLinearBalance.balance;
+
+// ── Validasi topup pada Edit Cliff ────────────────────────────────────────
+// Cliff stream juga bisa di-topup (program menerima edit_linear untuk tipe
+// cliff). Resolve mint & saldo dari stream yang sedang diedit.
+const editCliffStream = useMemo(
+  () => streams.find((s) => String(s?.id || "") === editCliffForm.streamId) ?? null,
+  [streams, editCliffForm.streamId]
+);
+const editCliffMint = editCliffStream?.mint ?? "";
+const editCliffDecimals = typeof editCliffStream?.mintDecimals === "number"
+  ? editCliffStream.mintDecimals : 6;
+const editCliffBalance = useTokenBalance(editCliffMint, endpoint, editCliffDecimals);
+const editCliffSymbol =
+  mintPresets.find((p) => p.mint === editCliffMint)?.label ?? shortenMint(editCliffMint);
+const editCliffTopupNum = parseFloat(String(editCliffForm.topupAmount ?? "")) || 0;
+const editCliffExceedsBalance =
+  editCliffBalance.balance !== null &&
+  editCliffTopupNum > 0 &&
+  editCliffTopupNum > editCliffBalance.balance;
+// Cliff dianggap "diubah" hanya jika durasi baru berbeda dari yang sekarang.
+// Membiarkan nilai prefilled (sama dengan sekarang) = niat topup saja.
+const editCliffCurrentDuration =
+  editCliffStream?.cliffTs && editCliffStream?.startTs
+    ? String(Number(editCliffStream.cliffTs) - Number(editCliffStream.startTs))
+    : "";
+const editCliffNewDuration = String(editCliffForm.newCliffDuration ?? "").trim();
+const editCliffWantsChange =
+  editCliffNewDuration !== "" && editCliffNewDuration !== editCliffCurrentDuration;
+const editCliffHasTopup = editCliffTopupNum > 0;
+
+// ── Info stream & estimasi untuk panel Edit Cliff ─────────────────────────
+const toBigIntSafe = (raw: any) => {
+  try { return BigInt(String(raw ?? "0")); } catch { return BigInt(0); }
+};
+const editCliffWrongType = Boolean(editCliffStream) && editCliffStream.vestingType !== 1;
+const editCliffTotalBase = toBigIntSafe(editCliffStream?.totalAmount);
+const editCliffWithdrawnBase = toBigIntSafe(editCliffStream?.withdrawn);
+const editCliffHasWithdrawals = editCliffWithdrawnBase > BigInt(0);
+const editCliffStartTsNum = Number(editCliffStream?.startTs ?? 0);
+const editCliffEndTsNum = Number(editCliffStream?.endTs ?? 0);
+const editCliffCurrentCliffTsNum = Number(editCliffStream?.cliffTs ?? 0);
+
+// Feature 1 — total terkunci setelah top-up (base units → display).
+const editCliffTopupBase = parseTokenAmountToBaseUnits(String(editCliffForm.topupAmount ?? "0"), editCliffDecimals);
+const editCliffNewTotalBase = editCliffTotalBase + editCliffTopupBase;
+
+// Feature 3 — cliff timestamp baru (start + durasi) + apakah di luar rentang.
+const editCliffNewDurationNum = Number(editCliffNewDuration);
+const editCliffNewCliffTs =
+  editCliffStream && editCliffNewDuration !== "" && Number.isFinite(editCliffNewDurationNum)
+    ? editCliffStartTsNum + editCliffNewDurationNum
+    : null;
+const editCliffNewCliffOutOfRange =
+  editCliffNewCliffTs !== null &&
+  (editCliffNewCliffTs < editCliffStartTsNum || editCliffNewCliffTs > editCliffEndTsNum);
 
 
 // edit_milestone tidak transfer token baru (redistribute saja)
@@ -652,6 +730,7 @@ const editCsvDisabled =
   !csvEditText?.trim() ||
   activeTxAction === "edit_stream_csv" ||
   csvEditMilestoneValidation.hasErrors ||
+  csvEditIdValidation.hasErrors || // ← blok apply kalau ada id ngawur
   csvEditExceedsBalance; // ← tambah ini
   const editMilestoneAlreadyUnlocked = isMilestoneUnlocked(editMilestoneForm.streamId);
   const editMilestoneDisabled =
@@ -670,11 +749,17 @@ const editCsvDisabled =
   editLinearExceedsBalance ||   // ← tambah ini
   activeTxAction === "edit_linear";
   const editCliffPeriodOver = isCliffPassed(editCliffForm.streamId);
+  // Setelah cliff lewat, program tidak mengizinkan ubah cliff. Selama field New
+  // Cliff Duration masih terisi, tombol di-disable; kosongkan field untuk lanjut
+  // top-up saja (top-up tetap didukung program lewat edit_linear).
+  const editCliffBlockedByPeriod = editCliffPeriodOver && editCliffNewDuration !== "";
   const editCliffDisabled =
     isStreamCsvCreated(editCliffForm.streamId) ||
-    editCliffPeriodOver ||
     !editCliffForm.streamId?.trim() ||
-    !String(editCliffForm.newCliffDuration ?? "").trim() ||
+    (!editCliffWantsChange && !editCliffHasTopup) ||   // butuh minimal satu aksi
+    editCliffBlockedByPeriod ||                          // cliff sudah lewat & field belum dikosongkan
+    (editCliffWantsChange && editCliffNewCliffOutOfRange) || // cliff di luar rentang start–end
+    editCliffExceedsBalance ||
     activeTxAction === "edit_cliff";
 
   useEffect(() => {
@@ -1535,6 +1620,7 @@ const editCsvDisabled =
   walletDecimals={tokenBalance.decimals ?? selectedMintPreset?.decimals ?? 6}
   editMode={true}              // ← flag supaya label lebih relevan
   editTotalByMint={csvEditTotalByMint}
+  editStreams={streams}        // ← live DB untuk validasi kolom id
 />
             <CsvDiffPanel
               csvDiffResult={csvDiffResult}
@@ -1693,9 +1779,10 @@ const editCsvDisabled =
           <button
             disabled={unlockDisabled}
             onClick={() => handleAction("unlock_milestone", unlockForm)}
-            className={`w-full mt-6 text-white font-bold text-xs py-3 rounded-xl transition-all shadow-lg ${unlockDisabled ? "bg-zinc-800 text-zinc-500 cursor-not-allowed shadow-none" : "bg-indigo-600 hover:bg-indigo-700 hover:shadow-indigo-500/20"}`}
+            className={`w-full mt-6 text-white font-bold text-xs py-3 rounded-xl transition-all shadow-lg flex items-center justify-center gap-2 ${unlockDisabled ? "bg-zinc-800 text-zinc-500 cursor-not-allowed shadow-none" : "bg-indigo-600 hover:bg-indigo-700 hover:shadow-indigo-500/20"}`}
           >
-            Unlock Milestone
+            {activeTxAction === "unlock_milestone" && activeTxPhase ? <RefreshCw className="w-4 h-4 animate-spin" /> : null}
+            {getTxLabel("unlock_milestone", "Unlock Milestone")}
           </button>
         </div>
       )}
@@ -1811,9 +1898,10 @@ const editCsvDisabled =
           <button
             disabled={editMilestoneDisabled}
             onClick={() => handleAction("edit_milestone", editMilestoneForm)}
-            className={`w-full mt-6 text-white font-bold text-xs py-3 rounded-xl transition-all shadow-lg ${editMilestoneDisabled ? "bg-zinc-850 border border-zinc-800 text-zinc-550 cursor-not-allowed opacity-50" : "bg-indigo-600 hover:bg-indigo-700 hover:shadow-indigo-500/20"}`}
+            className={`w-full mt-6 text-white font-bold text-xs py-3 rounded-xl transition-all shadow-lg flex items-center justify-center gap-2 ${editMilestoneDisabled ? "bg-zinc-850 border border-zinc-800 text-zinc-550 cursor-not-allowed opacity-50" : "bg-indigo-600 hover:bg-indigo-700 hover:shadow-indigo-500/20"}`}
           >
-            Apply All Milestone Edits
+            {activeTxAction === "edit_milestone" && activeTxPhase ? <RefreshCw className="w-4 h-4 animate-spin" /> : null}
+            {getTxLabel("edit_milestone", "Apply All Milestone Edits")}
           </button>
         </div>
       )}
@@ -1879,8 +1967,9 @@ const editCsvDisabled =
         </div>
       </div>
     )}
-    <button disabled={editLinearDisabled} onClick={() => handleAction("edit_linear", editLinearForm)} className={`w-full mt-6 text-white font-bold text-xs py-3 rounded-xl transition-all shadow-lg ${editLinearDisabled ? "bg-zinc-850 border border-zinc-800 text-zinc-550 cursor-not-allowed opacity-50" : "bg-indigo-600 hover:bg-indigo-700 hover:shadow-indigo-500/20"}`}>
-      Update End Timeline & Top-up Stream
+    <button disabled={editLinearDisabled} onClick={() => handleAction("edit_linear", editLinearForm)} className={`w-full mt-6 text-white font-bold text-xs py-3 rounded-xl transition-all shadow-lg flex items-center justify-center gap-2 ${editLinearDisabled ? "bg-zinc-850 border border-zinc-800 text-zinc-550 cursor-not-allowed opacity-50" : "bg-indigo-600 hover:bg-indigo-700 hover:shadow-indigo-500/20"}`}>
+      {activeTxAction === "edit_linear" && activeTxPhase ? <RefreshCw className="w-4 h-4 animate-spin" /> : null}
+      {getTxLabel("edit_linear", "Update End Timeline & Top-up Stream")}
     </button>
   </div>
 )}
@@ -1888,17 +1977,83 @@ const editCsvDisabled =
       {activeTab === "edit_cliff" && (
         <div className="animate-in fade-in-30 duration-200">
           <div className="border-b border-zinc-900 pb-4 mb-6"><div className="flex items-center gap-2"><h2 className="text-2xl font-extrabold tracking-tight">Edit Cliff Conditions</h2></div><p className="text-xs text-zinc-400">Modify cliff release durations or shift lockup parameters</p></div>
-          {isStreamCsvCreated(editCliffForm.streamId) ? <div className="bg-red-950/45 border border-red-500/30 rounded-2xl p-5 text-red-300 flex items-start gap-4 mb-6"><Lock className="w-6 h-6 text-red-400 shrink-0 mt-0.5" /><div><h4 className="text-sm font-extrabold">Manual Edit Locked!</h4><p className="text-xs text-red-400/80 mt-1 leading-relaxed">This stream was created via CSV Import. To comply with consistency requirements, CSV-created streams must be edited exclusively using the Bulk Edit CSV console.</p></div></div> : <div className="grid gap-4"><div><label className="block text-xs font-semibold text-zinc-400 uppercase tracking-wider mb-1.5">Stream ID (PDA Address)</label><input type="text" value={editCliffForm.streamId} onChange={(e) => setEditCliffForm({ ...editCliffForm, streamId: e.target.value })} className="w-full bg-zinc-950 border border-zinc-800 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:border-indigo-500 font-mono" /></div><div><label className="block text-xs font-semibold text-zinc-400 uppercase tracking-wider mb-1.5">New Cliff Duration (Seconds from Start)</label><input type="number" value={editCliffForm.newCliffDuration} onChange={(e) => setEditCliffForm({ ...editCliffForm, newCliffDuration: e.target.value })} className="w-full bg-zinc-950 border border-zinc-800 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:border-indigo-500 font-mono" /></div></div>}
+          {isStreamCsvCreated(editCliffForm.streamId) ? <div className="bg-red-950/45 border border-red-500/30 rounded-2xl p-5 text-red-300 flex items-start gap-4 mb-6"><Lock className="w-6 h-6 text-red-400 shrink-0 mt-0.5" /><div><h4 className="text-sm font-extrabold">Manual Edit Locked!</h4><p className="text-xs text-red-400/80 mt-1 leading-relaxed">This stream was created via CSV Import. To comply with consistency requirements, CSV-created streams must be edited exclusively using the Bulk Edit CSV console.</p></div></div> : <div className="grid gap-4"><div><label className="block text-xs font-semibold text-zinc-400 uppercase tracking-wider mb-1.5">Stream ID (PDA Address)</label><input type="text" value={editCliffForm.streamId} onChange={(e) => setEditCliffForm({ ...editCliffForm, streamId: e.target.value })} className="w-full bg-zinc-950 border border-zinc-800 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:border-indigo-500 font-mono" /></div><div><label className="block text-xs font-semibold text-zinc-400 uppercase tracking-wider mb-1.5">New Cliff Duration (Seconds from Start)</label><input type="number" value={editCliffForm.newCliffDuration} onChange={(e) => setEditCliffForm({ ...editCliffForm, newCliffDuration: e.target.value })} className="w-full bg-zinc-950 border border-zinc-800 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:border-indigo-500 font-mono" />
+              {editCliffNewCliffTs !== null && (
+                <div className={`mt-1.5 text-[10px] font-mono ${editCliffNewCliffOutOfRange ? "text-rose-400" : "text-zinc-500"}`}>
+                  {editCliffNewCliffOutOfRange
+                    ? "Cliff falls outside the stream window — must be between start and end."
+                    : <>Cliff unlocks {formatDurationSecs(editCliffNewDurationNum)} after start → <span className="text-zinc-300">{formatUnixTs(editCliffNewCliffTs)}</span></>}
+                </div>
+              )}</div>
+            <div>
+              <label className="block text-xs font-semibold text-zinc-400 uppercase tracking-wider mb-1.5">Top-up Amount (Tokens to Add) — Optional</label>
+              <input
+                type="number"
+                value={editCliffForm.topupAmount}
+                onChange={(e) => setEditCliffForm({ ...editCliffForm, topupAmount: e.target.value })}
+                className={`w-full bg-zinc-950 border rounded-xl px-4 py-2.5 text-sm focus:outline-none font-mono transition-colors ${editCliffExceedsBalance ? "border-rose-500/60 focus:border-rose-500" : "border-zinc-800 focus:border-indigo-500"}`}
+              />
+              <div className="mt-1.5 flex items-center gap-2">
+                {!connected ? null
+                : editCliffBalance.loading ? (
+                  <span className="text-[10px] font-mono text-zinc-600 animate-pulse">fetching balance…</span>
+                ) : editCliffBalance.error ? (
+                  <span className="text-[10px] font-mono text-zinc-600">balance unavailable</span>
+                ) : !editCliffMint ? null
+                : editCliffBalance.balance !== null ? (
+                  <span className={`text-[10px] font-mono ${editCliffExceedsBalance ? "text-rose-400" : "text-zinc-500"}`}>
+                    Balance: {editCliffBalance.balance.toLocaleString(undefined, { maximumFractionDigits: editCliffDecimals })}{editCliffSymbol ? ` ${editCliffSymbol}` : ""}
+                  </span>
+                ) : null}
+              </div>
+              {editCliffExceedsBalance && (
+                <div className="mt-1 text-[10px] font-semibold text-rose-400">
+                  Top-up amount exceeds wallet balance of {editCliffBalance.balance!.toLocaleString(undefined, { maximumFractionDigits: editCliffDecimals })}{editCliffSymbol ? ` ${editCliffSymbol}` : ""}.
+                </div>
+              )}
+              <p className="mt-1.5 text-[10px] text-zinc-600 leading-relaxed">Adds tokens to this cliff stream. Allowed even after the cliff has passed or tokens were withdrawn. Leave empty to only adjust the cliff.</p>
+              {editCliffHasTopup && editCliffStream && (
+                <div className="mt-1.5 text-[10px] font-mono text-emerald-400/90">
+                  Total locked after top-up: <span className="font-semibold">{formatBaseUnitsToTokenAmount(editCliffNewTotalBase, editCliffDecimals)}{editCliffSymbol ? ` ${editCliffSymbol}` : ""}</span>
+                  <span className="text-zinc-600"> (was {formatBaseUnitsToTokenAmount(editCliffTotalBase, editCliffDecimals)})</span>
+                </div>
+              )}
+            </div></div>}
+          {editCliffStream && !isStreamCsvCreated(editCliffForm.streamId) && (
+            <div className="mt-4 bg-zinc-950/60 border border-zinc-800 rounded-2xl p-4">
+              <div className="flex items-center justify-between mb-3">
+                <h4 className="text-[11px] font-bold uppercase tracking-wider text-zinc-400">Stream Info</h4>
+                <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${editCliffWrongType ? "bg-rose-500/15 text-rose-300" : "bg-indigo-500/15 text-indigo-300"}`}>
+                  {editCliffStream.vestingType === 0 ? "Linear" : editCliffStream.vestingType === 1 ? "Cliff" : "Milestone"}
+                </span>
+              </div>
+              <div className="grid grid-cols-2 gap-x-4 gap-y-2 text-[11px]">
+                <div className="flex flex-col"><span className="text-zinc-600">Recipient</span><span className="font-mono text-zinc-300">{shorten(String(editCliffStream.recipient || "")) || "—"}</span></div>
+                <div className="flex flex-col"><span className="text-zinc-600">Asset</span><span className="font-mono text-zinc-300">{editCliffSymbol || "—"}</span></div>
+                <div className="flex flex-col"><span className="text-zinc-600">Total Locked</span><span className="font-mono text-zinc-300">{formatBaseUnitsToTokenAmount(editCliffTotalBase, editCliffDecimals)}{editCliffSymbol ? ` ${editCliffSymbol}` : ""}</span></div>
+                <div className="flex flex-col"><span className="text-zinc-600">Withdrawn</span><span className={`font-mono ${editCliffHasWithdrawals ? "text-amber-300" : "text-zinc-300"}`}>{formatBaseUnitsToTokenAmount(editCliffWithdrawnBase, editCliffDecimals)}{editCliffSymbol ? ` ${editCliffSymbol}` : ""}</span></div>
+                <div className="flex flex-col"><span className="text-zinc-600">Start</span><span className="font-mono text-zinc-300">{formatUnixTs(editCliffStartTsNum)}</span></div>
+                <div className="flex flex-col"><span className="text-zinc-600">Current Cliff</span><span className="font-mono text-zinc-300">{formatUnixTs(editCliffCurrentCliffTsNum)}</span></div>
+                <div className="flex flex-col col-span-2"><span className="text-zinc-600">End</span><span className="font-mono text-zinc-300">{formatUnixTs(editCliffEndTsNum)}</span></div>
+              </div>
+              {editCliffWrongType && (
+                <p className="mt-3 text-[10px] font-semibold text-rose-400 leading-relaxed">This is not a cliff stream — its cliff duration cannot be edited here. Use the edit panel that matches its vesting type.</p>
+              )}
+              {editCliffHasWithdrawals && !editCliffWrongType && (
+                <p className="mt-3 text-[10px] text-amber-400/80 leading-relaxed">Tokens have already been withdrawn, so the cliff date is locked. Top-up is still available.</p>
+              )}
+            </div>
+          )}
           {editCliffPeriodOver && !isStreamCsvCreated(editCliffForm.streamId) && (
             <div className="bg-amber-950/40 border border-amber-500/30 rounded-2xl p-4 text-amber-300 flex items-start gap-3 mt-6">
               <Lock className="w-5 h-5 text-amber-400 shrink-0 mt-0.5" />
               <div>
                 <h4 className="text-sm font-extrabold">Cliff Period Ended</h4>
-                <p className="text-xs text-amber-400/80 mt-1 leading-relaxed">This stream's cliff timestamp has already elapsed, so the cliff can no longer be adjusted.</p>
+                <p className="text-xs text-amber-400/80 mt-1 leading-relaxed">The cliff timestamp for this stream has already elapsed, so the cliff itself can no longer be adjusted. {editCliffNewDuration !== "" ? "Clear the New Cliff Duration field above to enable a top-up." : "You can still add tokens using the top-up field above."}</p>
               </div>
             </div>
           )}
-          <button disabled={editCliffDisabled} onClick={() => handleAction("edit_cliff", editCliffForm)} className={`w-full mt-6 text-white font-bold text-xs py-3 rounded-xl transition-all shadow-lg ${editCliffDisabled ? "bg-zinc-850 border border-zinc-800 text-zinc-550 cursor-not-allowed opacity-50" : "bg-indigo-600 hover:bg-indigo-700 hover:shadow-indigo-500/20"}`}>Adjust Cliff Timestamp</button>
+          <button disabled={editCliffDisabled} onClick={() => handleAction("edit_cliff", editCliffForm)} className={`w-full mt-6 text-white font-bold text-xs py-3 rounded-xl transition-all shadow-lg flex items-center justify-center gap-2 ${editCliffDisabled ? "bg-zinc-850 border border-zinc-800 text-zinc-550 cursor-not-allowed opacity-50" : "bg-indigo-600 hover:bg-indigo-700 hover:shadow-indigo-500/20"}`}>{activeTxAction === "edit_cliff" && activeTxPhase ? <RefreshCw className="w-4 h-4 animate-spin" /> : null}{getTxLabel("edit_cliff", "Apply Cliff & Top-up")}</button>
         </div>
       )}
 
@@ -1963,6 +2118,9 @@ const editCsvDisabled =
       $ unifiedflow edit-cliff{" "}
       {editCliffForm.streamId || "<stream_address>"}{" "}
       {editCliffForm.newCliffDuration || "<new_cliff_duration_secs>"}
+      {editCliffForm.topupAmount && editCliffForm.topupAmount !== "0"
+        ? ` --topup ${editCliffForm.topupAmount}`
+        : ""}
     </span>
   )}
 
@@ -2157,6 +2315,61 @@ function useCsvMilestoneValidation(csvText: string) {
   }, [csvText]);
 }
 
+// Validasi kolom `id` khusus mode edit. Mirror cek backend di
+// /streams/edit-csv (server.ts): id harus ada di DB dan stream harus CSV-created.
+// Tanpa ini, baris dengan id ngawur (mis. "xxx") tampil "valid" karena
+// useCsvMilestoneValidation tidak pernah melihat kolom id.
+function useCsvIdValidation(
+  csvText: string,
+  knownStreams: any[] | undefined,
+  enabled: boolean
+) {
+  return useMemo(() => {
+    if (!enabled || !csvText?.trim()) return { issues: [], hasErrors: false };
+
+    const lines = csvText.trim().split("\n");
+    if (lines.length < 2) return { issues: [], hasErrors: false };
+
+    const headers = lines[0].split(",").map((h) => h.trim().toLowerCase());
+    const idIdx = headers.indexOf("id");
+    // Tanpa kolom id, edit memakai identity-match (recipient+mint+type),
+    // jadi tidak ada id yang bisa divalidasi di sini.
+    if (idIdx === -1) return { issues: [], hasErrors: false };
+
+    const knownById = new Map<string, any>();
+    (knownStreams ?? []).forEach((s) => {
+      const sid = String(s?.id ?? "").trim();
+      if (sid) knownById.set(sid, s);
+    });
+
+    const issues: { rowNum: number; id: string; reason: string }[] = [];
+
+    for (let i = 1; i < lines.length; i++) {
+      const line = lines[i].trim();
+      if (!line) continue;
+      const values = line.split(",").map((v) => v.trim());
+      const id = (values[idIdx] ?? "").trim();
+      // Baris tanpa id sengaja memakai identity-match — bukan error.
+      if (!id) continue;
+
+      const match = knownById.get(id);
+      if (!match) {
+        issues.push({ rowNum: i, id, reason: "ID not found in database" });
+        continue;
+      }
+      if (!match.isCsvCreated) {
+        issues.push({
+          rowNum: i,
+          id,
+          reason: "Manually-created stream — cannot be edited via CSV",
+        });
+      }
+    }
+
+    return { issues, hasErrors: issues.length > 0 };
+  }, [csvText, knownStreams, enabled]);
+}
+
 function CsvValidationPanel({
   csvText,
   walletBalance,
@@ -2165,6 +2378,7 @@ function CsvValidationPanel({
   walletDecimals,
   editMode,
   editTotalByMint,
+  editStreams,
 }: {
   csvText: string;
   walletBalance: number | null;
@@ -2173,8 +2387,14 @@ function CsvValidationPanel({
   walletDecimals: number;
   editMode?: boolean;           // ← baru
   editTotalByMint?: Record<string, number>; // ← baru, override total calculation
+  editStreams?: any[];          // ← baru, daftar stream live DB untuk validasi id
 }) {
   const { rows, hasErrors } = useCsvMilestoneValidation(csvText);
+  const { issues: idIssues, hasErrors: hasIdErrors } = useCsvIdValidation(
+    csvText,
+    editStreams,
+    !!editMode
+  );
   const totalByMint = useCsvTotalByMint(csvText);
 
   // ── Per-mint balance check ─────────────────────────────────────────────
@@ -2195,9 +2415,9 @@ const mintExceedsBalance =
   walletBalance !== null &&
   csvTotalForMint > walletBalance;
 
-  const hasAnyError = hasErrors || !!mintExceedsBalance;
+  const hasAnyError = hasErrors || !!mintExceedsBalance || hasIdErrors;
 
-  if (rows.length === 0 && !mintExceedsBalance) return null;
+  if (rows.length === 0 && !mintExceedsBalance && idIssues.length === 0) return null;
 
   const allGood = !hasAnyError;
 
@@ -2223,6 +2443,7 @@ const mintExceedsBalance =
             ? "All checks passed"
             : [
                 mintExceedsBalance && "insufficient balance",
+                hasIdErrors && `${idIssues.length} invalid id${idIssues.length > 1 ? "s" : ""}`,
                 hasErrors && `${rows.filter((r) => !r.isMatch || r.hasInvalid).length} unbalanced`,
               ]
                 .filter(Boolean)
@@ -2263,6 +2484,29 @@ const mintExceedsBalance =
               </div>
             </div>
           </div>
+        </div>
+      )}
+
+      {/* ── Invalid id rows (edit mode) ──────────────────────────────────── */}
+      {idIssues.length > 0 && (
+        <div className="border-b border-rose-500/20">
+          {idIssues.map((issue) => (
+            <div
+              key={issue.rowNum}
+              className="px-4 py-3 bg-rose-950/20 flex items-start gap-3 border-b border-rose-500/10 last:border-b-0"
+            >
+              <AlertTriangle className="w-4 h-4 text-rose-400 shrink-0 mt-0.5" />
+              <div className="flex-1 min-w-0">
+                <div className="text-[11px] font-bold text-rose-300 mb-0.5">
+                  Row #{issue.rowNum} · invalid id
+                </div>
+                <div className="text-[10px] font-mono text-rose-400/80 break-all mb-0.5">
+                  {issue.id}
+                </div>
+                <div className="text-[10px] text-rose-300/70">{issue.reason}</div>
+              </div>
+            </div>
+          ))}
         </div>
       )}
 
@@ -2360,7 +2604,9 @@ const mintExceedsBalance =
   <div className="px-4 py-3 border-t border-rose-500/20 bg-rose-950/10 flex items-start gap-2">
     <span className="text-rose-400 text-[10px]">⚠</span>
     <p className="text-[10px] text-rose-300/80 leading-relaxed">
-      {mintExceedsBalance && hasErrors
+      {hasIdErrors
+        ? "Fix the invalid id column before applying. Each edit row must reference an existing CSV-created stream id, or leave id blank to match by recipient."
+        : mintExceedsBalance && hasErrors
         ? editMode
           ? "Fix balance shortfall (milestone + topup amounts) and milestone allocations before applying."
           : "Fix balance shortfall and milestone allocations before deploying."

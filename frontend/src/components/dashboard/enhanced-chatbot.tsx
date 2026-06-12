@@ -351,7 +351,7 @@ edit_linear:    { label: "Extend Stream",    icon: "📈", color: "bg-teal-600" 
 
   // ─── Render ───────────────────────────────────────────────────────────────
   const widget = (
-    <div className="fixed bottom-6 right-6 z-50 flex flex-col items-end gap-3">
+    <div className="fixed bottom-[calc(4rem_+_env(safe-area-inset-bottom)_+_1.5rem)] right-6 z-50 flex flex-col items-end gap-3 md:bottom-6">
       {open && (
         <div
           className={`w-[380px] bg-zinc-950 border border-zinc-800 rounded-2xl shadow-2xl overflow-hidden transition-all duration-300 ${

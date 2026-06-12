@@ -7,7 +7,7 @@ import { Buffer } from "buffer";
 import { createWalletTransactionSigner, transactionToBase64 } from "@solana/client";
 import {
   AccountRole,
-  appendTransactionMessageInstruction,
+  appendTransactionMessageInstructions,
   createTransactionMessage,
   setTransactionMessageFeePayerSigner,
   setTransactionMessageLifetimeUsingBlockhash,
@@ -30,6 +30,7 @@ type StreamAccountView = {
   vault: PublicKey;
   milestoneCount: number;
   totalAmount: anchor.BN | bigint | number | string;
+  withdrawn: anchor.BN | bigint | number | string;
   startTs: anchor.BN | bigint | number | string;
   endTs: anchor.BN | bigint | number | string;
   cliffTs: anchor.BN | bigint | number | string;
@@ -65,7 +66,8 @@ export type EditLinearInput = Readonly<{
 
 export type EditCliffInput = Readonly<{
   streamAddress: string;
-  newCliffDuration: string;
+  newCliffDuration?: string;
+  topupAmount?: string;
 }>;
 
 export type EditMilestoneInput = Readonly<{
@@ -142,27 +144,41 @@ function getAnchorWallet(session: WalletSession) {
   };
 }
 
-async function executeInstruction({
+type InstructionSpec = {
+  data: Uint8Array | Buffer | number[];
+  accounts: { address: string; role: AccountRole; signer?: any }[];
+};
+
+async function executeInstructions({
   connection,
   commitment,
   walletSignerMode,
   walletSigner,
-  anchorInstructionData,
-  accounts,
+  instructions,
   programId,
   onStatus,
-}: ExecuteInstructionParams) {
+}: {
+  connection: Connection;
+  commitment: Commitment;
+  walletSignerMode: string;
+  walletSigner: any;
+  instructions: InstructionSpec[];
+  programId: PublicKey;
+  onStatus?: (phase: TxProgressPhase) => void;
+}) {
   const { blockhash, lastValidBlockHeight } = await connection.getLatestBlockhash(commitment);
   const kitSigner = walletSigner as any;
 
+  // All instructions are bundled into one transaction so they execute
+  // atomically — either every instruction lands or none do (single signature).
   const transactionMessage = setTransactionMessageLifetimeUsingBlockhash(
     { blockhash: blockhash as any, lastValidBlockHeight: BigInt(lastValidBlockHeight) },
-    appendTransactionMessageInstruction(
-      {
+    appendTransactionMessageInstructions(
+      instructions.map((instruction) => ({
         programAddress: programId.toBase58(),
-        accounts,
-        data: anchorInstructionData,
-      } as any,
+        accounts: instruction.accounts,
+        data: instruction.data,
+      })) as any,
       setTransactionMessageFeePayerSigner(
         kitSigner,
         createTransactionMessage({ version: 0 })
@@ -210,6 +226,17 @@ async function executeInstruction({
   await connection.confirmTransaction({ blockhash, lastValidBlockHeight, signature }, commitment);
 
   return { signature, simulationLogs };
+}
+
+async function executeInstruction({
+  anchorInstructionData,
+  accounts,
+  ...rest
+}: ExecuteInstructionParams) {
+  return executeInstructions({
+    ...rest,
+    instructions: [{ data: anchorInstructionData, accounts }],
+  });
 }
 
 async function getStreamProgram(wallet: WalletSession, endpoint: string, commitment: Commitment) {
@@ -367,43 +394,114 @@ export async function editCliffOnChain({
     throw new Error("Connected wallet is not the creator for this stream.");
   }
 
-  const newCliffDurationRaw = input.newCliffDuration.trim();
-  if (!/^\d+$/.test(newCliffDurationRaw)) {
-    throw new Error("New cliff duration must be a valid integer.");
-  }
-
   const startTs = new anchor.BN(String(streamState.startTs || "0"));
   const endTs = new anchor.BN(String(streamState.endTs || "0"));
-
-  const newCliffDurationBn = new anchor.BN(newCliffDurationRaw);
-  const newCliffBn = startTs.add(newCliffDurationBn);
-
-  if (newCliffBn.lt(startTs) || newCliffBn.gt(endTs)) {
-    throw new Error(`Cliff timestamp must be between stream start time (${startTs.toString()}) and end time (${endTs.toString()}).`);
-  }
-
+  const currentCliffTs = new anchor.BN(String(streamState.cliffTs || "0"));
+  const withdrawn = new anchor.BN(String(streamState.withdrawn || "0"));
+  const mint = streamState.mint as PublicKey;
   const [configPda] = PublicKey.findProgramAddressSync([Buffer.from("config")], PROGRAM_ID);
 
-  const anchorInstruction = await program.methods
-    .editCliff(newCliffBn)
-    .accounts({
-      creator,
-      config: configPda,
-      stream: streamAddress,
-    })
-    .instruction();
+  // ── Resolve top-up intent ───────────────────────────────────────────────
+  // Top-up reuses the edit_linear instruction, which the program also accepts
+  // for cliff streams. We pass the current end timestamp so only the balance
+  // changes (no schedule extension).
+  const topupRaw = input.topupAmount?.trim() ?? "";
+  let topupAmountBn = new anchor.BN(0);
+  if (topupRaw !== "" && topupRaw !== "0") {
+    const mintDecimals = await getMintDecimals(connection, mint, commitment);
+    topupAmountBn = parseTokenAmount(topupRaw, mintDecimals, "Top-up amount");
+  }
+  const hasTopup = topupAmountBn.gt(new anchor.BN(0));
 
-  const { signature, simulationLogs } = await executeInstruction({
+  // ── Resolve cliff-edit intent ───────────────────────────────────────────
+  const newCliffDurationRaw = (input.newCliffDuration ?? "").trim();
+  let wantsCliffEdit = false;
+  let newCliffBn = currentCliffTs;
+  if (newCliffDurationRaw !== "") {
+    if (!/^\d+$/.test(newCliffDurationRaw)) {
+      throw new Error("New cliff duration must be a valid integer.");
+    }
+    newCliffBn = startTs.add(new anchor.BN(newCliffDurationRaw));
+    // When the user is only topping up, an unchanged cliff value (e.g. the
+    // prefilled current duration) must NOT emit a cliff edit — that would
+    // needlessly trip the on-chain withdrawn==0 guard.
+    wantsCliffEdit = !newCliffBn.eq(currentCliffTs) || !hasTopup;
+  }
+
+  if (!wantsCliffEdit && !hasTopup) {
+    throw new Error("Nothing to update: change the cliff duration or enter a positive top-up amount.");
+  }
+
+  const instructions: InstructionSpec[] = [];
+
+  // ── Cliff edit instruction ──────────────────────────────────────────────
+  if (wantsCliffEdit) {
+    if (!withdrawn.isZero()) {
+      throw new Error("Cliff can no longer be changed because tokens have already been withdrawn from this stream. You can still top up.");
+    }
+    if (newCliffBn.lt(startTs) || newCliffBn.gt(endTs)) {
+      throw new Error(`Cliff timestamp must be between stream start time (${startTs.toString()}) and end time (${endTs.toString()}).`);
+    }
+
+    const cliffInstruction = await program.methods
+      .editCliff(newCliffBn)
+      .accounts({
+        creator,
+        config: configPda,
+        stream: streamAddress,
+      })
+      .instruction();
+
+    instructions.push({
+      data: cliffInstruction.data,
+      accounts: [
+        { address: creator.toBase58(), role: AccountRole.WRITABLE_SIGNER, signer: walletSigner as any },
+        { address: configPda.toBase58(), role: AccountRole.READONLY },
+        { address: streamAddress.toBase58(), role: AccountRole.WRITABLE },
+      ],
+    });
+  }
+
+  // ── Top-up instruction (edit_linear with end unchanged) ─────────────────
+  if (hasTopup) {
+    const creatorTokenAccount = PublicKey.findProgramAddressSync(
+      [creator.toBuffer(), TOKEN_PROGRAM_ID.toBuffer(), mint.toBuffer()],
+      ASSOCIATED_TOKEN_PROGRAM_ID
+    )[0];
+
+    const topupInstruction = await program.methods
+      .editLinear(endTs, topupAmountBn)
+      .accounts({
+        creator,
+        mint,
+        config: configPda,
+        stream: streamAddress,
+        vault: streamState.vault,
+        creatorTokenAccount,
+        tokenProgram: TOKEN_PROGRAM_ID,
+      })
+      .instruction();
+
+    instructions.push({
+      data: topupInstruction.data,
+      accounts: [
+        { address: creator.toBase58(), role: AccountRole.WRITABLE_SIGNER, signer: walletSigner as any },
+        { address: mint.toBase58(), role: AccountRole.READONLY },
+        { address: configPda.toBase58(), role: AccountRole.READONLY },
+        { address: streamAddress.toBase58(), role: AccountRole.WRITABLE },
+        { address: streamState.vault.toBase58(), role: AccountRole.WRITABLE },
+        { address: creatorTokenAccount.toBase58(), role: AccountRole.WRITABLE },
+        { address: TOKEN_PROGRAM_ID.toBase58(), role: AccountRole.READONLY },
+      ],
+    });
+  }
+
+  const { signature, simulationLogs } = await executeInstructions({
     connection,
     commitment,
     walletSignerMode,
     walletSigner,
-    anchorInstructionData: anchorInstruction.data,
-    accounts: [
-      { address: creator.toBase58(), role: AccountRole.WRITABLE_SIGNER, signer: walletSigner as any },
-      { address: configPda.toBase58(), role: AccountRole.READONLY },
-      { address: streamAddress.toBase58(), role: AccountRole.WRITABLE },
-    ],
+    instructions,
     programId: PROGRAM_ID,
     onStatus,
   });
