@@ -12,6 +12,7 @@ import { shorten } from "@/components/dashboard/utils";
 import { useTokenBalance } from "@/lib/use-token-balance";
 import { useAddressHistory } from "@/lib/use-address-history";
 import { parseBaseUnits } from "./dashboard-home-client";
+import { api } from "@/lib/api";
 const QUICK_DURATIONS = [
   { label: "1M", value: 60 * 60 * 24 * 30 },
   { label: "3M", value: 60 * 60 * 24 * 90 },
@@ -809,6 +810,7 @@ function UnlockMilestonePanel({
   activeTxAction,
   activeTxPhase,
   connected,
+  endpoint,
 }: {
   unlockForm: { streamId: string };
   setUnlockForm: (value: { streamId: string }) => void;
@@ -818,15 +820,67 @@ function UnlockMilestonePanel({
   activeTxAction: string | null;
   activeTxPhase: "wallet_approval" | "sending" | "confirming" | null;
   connected: boolean;
+  endpoint: string;
 }) {
-  // ── Resolve stream ─────────────────────────────────────────────────────
-  const stream = useMemo(
+  // ── Local detail state ─────────────────────────────────────────────────
+  const [streamDetail, setStreamDetail] = useState<any | null>(null);
+  const [detailLoading, setDetailLoading] = useState(false);
+  const [detailError, setDetailError] = useState<string | null>(null);
+
+  // ── Debounced fetch on streamId change ─────────────────────────────────
+  useEffect(() => {
+    const id = unlockForm.streamId.trim();
+    setStreamDetail(null);
+    setDetailError(null);
+
+    if (!id) return;
+
+    const timer = setTimeout(async () => {
+      setDetailLoading(true);
+      try {
+        const res = await api.get(`/streams/${id}`);
+        setStreamDetail(res.data);
+      } catch (err: any) {
+        setDetailError(
+          err?.response?.data?.error ||
+            err?.message ||
+            "Failed to fetch stream details."
+        );
+      } finally {
+        setDetailLoading(false);
+      }
+    }, 600);
+
+    return () => clearTimeout(timer);
+  }, [unlockForm.streamId]);
+
+  // ── Refetch after successful unlock ───────────────────────────────────
+  const prevTxAction = useRef<string | null>(null);
+  useEffect(() => {
+    const wasUnlocking =
+      prevTxAction.current === "unlock_milestone" && activeTxAction === null;
+    prevTxAction.current = activeTxAction;
+    if (!wasUnlocking) return;
+
+    const id = unlockForm.streamId.trim();
+    if (!id) return;
+    api
+      .get(`/streams/${id}`)
+      .then((res) => setStreamDetail(res.data))
+      .catch(() => {});
+  }, [activeTxAction, unlockForm.streamId]);
+
+  // ── Summary stream dari streams[] (for creator/type guard) ────────────
+  const streamSummary = useMemo(
     () =>
       streams.find(
         (s) => String(s?.id || "") === unlockForm.streamId.trim()
       ) ?? null,
     [streams, unlockForm.streamId]
   );
+
+  // Prefer detail data kalau sudah ada, fallback ke summary
+  const stream = streamDetail ?? streamSummary;
 
   // ── Wallet vs creator check ────────────────────────────────────────────
   const isWrongWallet =
@@ -835,90 +889,104 @@ function UnlockMilestonePanel({
     !!connectedWalletAddress &&
     stream.creator?.toLowerCase() !== connectedWalletAddress.toLowerCase();
 
-  // ── Stream type guard ──────────────────────────────────────────────────
+  // ── Stream type / status guards ────────────────────────────────────────
   const isNotMilestoneType =
     !!stream && Number(stream.vestingType ?? -1) !== 2;
-
   const isStreamCancelled = !!stream && Number(stream.status) === 3;
   const isStreamCompleted = !!stream && Number(stream.status) === 2;
 
-  // ── Milestone list preview ─────────────────────────────────────────────
+  // ── Milestone list dari /streams/:id ──────────────────────────────────
   const milestonePreview = useMemo(() => {
-    if (!stream) return null;
+    if (!streamDetail) return null;
 
     const decimals =
-      typeof stream.mintDecimals === "number" ? stream.mintDecimals : 6;
-    const milestoneCount = Number(stream.milestoneCount ?? 0);
-    const nextIndex = Number(
-      stream.nextMilestoneIndex ?? stream.next_milestone_index ?? 0
+      typeof streamDetail.mintDecimals === "number"
+        ? streamDetail.mintDecimals
+        : 6;
+
+    const rawMilestones: any[] = Array.isArray(streamDetail.milestones)
+      ? streamDetail.milestones
+      : [];
+
+    const milestoneCount = Number(
+      streamDetail.milestoneCount ?? rawMilestones.length ?? 0
     );
-    const totalBase = parseBaseUnits(stream.totalAmount);
 
-    // Parse milestone amounts dari field milestones (semicolon-separated)
-    const rawMilestones = String(stream.milestones || "").trim();
-    let milestoneAmounts: bigint[] = [];
+    const nextIndex = Number(
+      streamDetail.nextMilestoneIndex ??
+        streamDetail.next_milestone_index ??
+        0
+    );
 
-    if (rawMilestones !== "") {
-      const parsed = rawMilestones
-        .split(";")
-        .map((v: string) => v.trim())
-        .filter(Boolean);
-      milestoneAmounts = parsed.map((v) => {
-        try {
-          return parseTokenAmountToBaseUnits(v, decimals);
-        } catch {
-          return BigInt(0);
-        }
-      });
-    }
+    const fmt = (v: any) => {
+      try {
+        const base = parseBaseUnits(v);
+        return Number(
+          formatBaseUnitsToTokenAmount(base, decimals)
+        ).toLocaleString(undefined, { maximumFractionDigits: decimals });
+      } catch {
+        return "0";
+      }
+    };
 
-    // Fallback: distribusi merata kalau milestones tidak tersedia
-    if (milestoneAmounts.length !== milestoneCount && milestoneCount > 0) {
-      const base = totalBase / BigInt(milestoneCount);
-      const remainder = totalBase % BigInt(milestoneCount);
-      milestoneAmounts = Array.from({ length: milestoneCount }, (_, i) =>
-        base + (BigInt(i) < remainder ? BigInt(1) : BigInt(0))
-      );
-    }
-
-    const fmt = (v: bigint) =>
-      Number(formatBaseUnitsToTokenAmount(v, decimals)).toLocaleString(
-        undefined,
-        { maximumFractionDigits: decimals }
-      );
-
+    // Build items — merge rawMilestones array dengan index derivation
     const items = Array.from({ length: milestoneCount }, (_, i) => {
-      const amountBase = milestoneAmounts[i] ?? BigInt(0);
-      const isUnlocked = i < nextIndex;
-      const isNext = i === nextIndex;
-      const isLocked = i > nextIndex;
-      return { index: i, amountBase, amount: fmt(amountBase), isUnlocked, isNext, isLocked };
+      // Cari milestone dari array berdasarkan index field
+      const raw = rawMilestones.find(
+        (m) => Number(m.index ?? m.milestoneIndex ?? i) === i
+      );
+
+      const amountRaw = raw?.amount ?? raw?.tokenAmount ?? 0;
+      const isUnlocked = raw
+        ? Boolean(raw.unlocked ?? raw.approved ?? false)
+        : i < nextIndex;
+      const isNext = !isUnlocked && i === nextIndex;
+      const isLocked = !isUnlocked && !isNext;
+
+      return {
+        index: i,
+        amount: fmt(amountRaw),
+        amountRaw,
+        isUnlocked,
+        isNext,
+        isLocked,
+        unlockTs: raw?.unlockTs ?? raw?.unlock_ts ?? null,
+      };
     });
 
-    const unlockedAmount = items
-      .filter((m) => m.isUnlocked)
-      .reduce((sum, m) => sum + m.amountBase, BigInt(0));
-
-    const lockedAmount = items
-      .filter((m) => m.isLocked || m.isNext)
-      .reduce((sum, m) => sum + m.amountBase, BigInt(0));
-
+    const unlockedCount = items.filter((m) => m.isUnlocked).length;
     const nextMilestone = items.find((m) => m.isNext) ?? null;
-    const allUnlocked = nextIndex >= milestoneCount;
+    const allUnlocked = unlockedCount >= milestoneCount && milestoneCount > 0;
+
+    // Totals
+    const unlockedAmountBase = rawMilestones
+      .filter((m) => Boolean(m.unlocked ?? m.approved ?? false))
+      .reduce((sum, m) => {
+        try {
+          return sum + parseBaseUnits(m.amount ?? m.tokenAmount ?? 0);
+        } catch {
+          return sum;
+        }
+      }, BigInt(0));
+
+    const totalBase = parseBaseUnits(streamDetail.totalAmount);
+    const lockedAmountBase =
+      totalBase > unlockedAmountBase
+        ? totalBase - unlockedAmountBase
+        : BigInt(0);
 
     return {
       items,
       milestoneCount,
       nextIndex,
-      unlockedCount: nextIndex,
-      lockedCount: milestoneCount - nextIndex,
-      unlockedAmount: fmt(unlockedAmount),
-      lockedAmount: fmt(lockedAmount),
+      unlockedCount,
+      lockedCount: milestoneCount - unlockedCount,
+      unlockedAmount: fmt(unlockedAmountBase),
+      lockedAmount: fmt(lockedAmountBase),
       nextMilestone,
       allUnlocked,
-      decimals,
     };
-  }, [stream]);
+  }, [streamDetail]);
 
   const isSubmitting = activeTxAction === "unlock_milestone" && !!activeTxPhase;
 
@@ -939,6 +1007,7 @@ function UnlockMilestonePanel({
     !isNotMilestoneType &&
     !isStreamCancelled &&
     !isStreamCompleted &&
+    !detailLoading &&
     connected &&
     (milestonePreview ? !milestonePreview.allUnlocked : true);
 
@@ -959,15 +1028,42 @@ function UnlockMilestonePanel({
         <label className="block text-xs font-semibold text-zinc-400 uppercase tracking-wider mb-1.5">
           Stream ID (PDA Address)
         </label>
-        <input
-          type="text"
-          value={unlockForm.streamId}
-          onChange={(e) =>
-            setUnlockForm({ ...unlockForm, streamId: e.target.value })
-          }
-          placeholder="Paste stream PDA address"
-          className="w-full bg-zinc-950 border border-zinc-800 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:border-indigo-500 font-mono"
-        />
+        <div className="relative">
+          <input
+            type="text"
+            value={unlockForm.streamId}
+            onChange={(e) =>
+              setUnlockForm({ ...unlockForm, streamId: e.target.value })
+            }
+            placeholder="Paste stream PDA address"
+            className="w-full bg-zinc-950 border border-zinc-800 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:border-indigo-500 font-mono pr-10"
+          />
+          {/* Loading spinner inside input */}
+          {detailLoading && (
+            <div className="absolute inset-y-0 right-3 flex items-center">
+              <RefreshCw className="w-3.5 h-3.5 text-zinc-500 animate-spin" />
+            </div>
+          )}
+        </div>
+
+        {/* Fetch status row */}
+        <div className="mt-1.5 h-4 flex items-center">
+          {detailLoading && (
+            <span className="text-[10px] font-mono text-zinc-600 animate-pulse">
+              fetching stream details…
+            </span>
+          )}
+          {detailError && !detailLoading && (
+            <span className="text-[10px] font-semibold text-rose-400">
+              {detailError}
+            </span>
+          )}
+          {streamDetail && !detailLoading && !detailError && (
+            <span className="text-[10px] font-mono text-emerald-600 flex items-center gap-1">
+              <Check className="w-3 h-3" /> Stream loaded
+            </span>
+          )}
+        </div>
       </div>
 
       {/* ── Wrong wallet warning ─────────────────────────────────────────── */}
@@ -1013,12 +1109,14 @@ function UnlockMilestonePanel({
         </div>
       )}
 
-      {/* ── Cancelled / completed warnings ──────────────────────────────── */}
+      {/* ── Cancelled warning ────────────────────────────────────────────── */}
       {isStreamCancelled && (
         <div className="mb-5 bg-rose-950/20 border border-rose-500/20 rounded-2xl p-4 flex items-start gap-3">
           <AlertTriangle className="w-4 h-4 text-rose-400 shrink-0 mt-0.5" />
           <p className="text-[11px] text-rose-300/80 leading-relaxed">
-            This stream has been <strong className="text-rose-300">cancelled</strong>. Milestones can no longer be unlocked.
+            This stream has been{" "}
+            <strong className="text-rose-300">cancelled</strong>. Milestones
+            can no longer be unlocked.
           </p>
         </div>
       )}
@@ -1036,14 +1134,15 @@ function UnlockMilestonePanel({
             </div>
             <div className="flex items-center gap-3">
               <span className="text-[10px] font-mono text-zinc-600">
-                {milestonePreview.unlockedCount}/{milestonePreview.milestoneCount} unlocked
+                {milestonePreview.unlockedCount}/
+                {milestonePreview.milestoneCount} unlocked
               </span>
               {milestonePreview.allUnlocked && (
                 <span className="text-[9px] font-black uppercase tracking-wider px-2 py-0.5 rounded-full bg-emerald-950/50 border border-emerald-500/30 text-emerald-400">
                   All Done
                 </span>
               )}
-              {isStreamCompleted && (
+              {isStreamCompleted && !milestonePreview.allUnlocked && (
                 <span className="text-[9px] font-black uppercase tracking-wider px-2 py-0.5 rounded-full bg-zinc-900 border border-zinc-700 text-zinc-400">
                   Completed
                 </span>
@@ -1051,7 +1150,7 @@ function UnlockMilestonePanel({
             </div>
           </div>
 
-          {/* ── Progress bar ── */}
+          {/* Progress bar */}
           <div className="px-4 pt-4 pb-3 border-b border-zinc-900/60">
             <div className="flex justify-between items-center mb-1.5">
               <span className="text-[9px] font-bold uppercase tracking-wider text-zinc-600">
@@ -1082,7 +1181,6 @@ function UnlockMilestonePanel({
                 }}
               />
             </div>
-            {/* Summary row */}
             <div className="flex gap-4 mt-2">
               <div className="flex items-center gap-1.5">
                 <div className="w-1.5 h-1.5 rounded-full bg-amber-400" />
@@ -1099,14 +1197,14 @@ function UnlockMilestonePanel({
             </div>
           </div>
 
-          {/* ── Milestone list ── */}
-          <div className="divide-y divide-zinc-900/60 max-h-64 overflow-y-auto">
+          {/* Milestone rows */}
+          <div className="divide-y divide-zinc-900/60 max-h-72 overflow-y-auto">
             {milestonePreview.items.map((m) => (
               <div
                 key={m.index}
                 className={`flex items-center justify-between px-4 py-3 transition-colors ${
                   m.isNext
-                    ? "bg-amber-950/10"
+                    ? "bg-indigo-950/10"
                     : m.isUnlocked
                     ? "bg-zinc-950/20"
                     : ""
@@ -1129,11 +1227,11 @@ function UnlockMilestonePanel({
                   )}
 
                   <div>
-                    <div className="flex items-center gap-2">
+                    <div className="flex items-center gap-2 flex-wrap">
                       <span
                         className={`text-xs font-bold ${
                           m.isUnlocked
-                            ? "text-zinc-400"
+                            ? "text-zinc-500"
                             : m.isNext
                             ? "text-indigo-300"
                             : "text-zinc-600"
@@ -1152,6 +1250,14 @@ function UnlockMilestonePanel({
                         </span>
                       )}
                     </div>
+                    {/* Unlock timestamp kalau ada */}
+                    {m.isUnlocked && m.unlockTs && (
+                      <div className="text-[9px] font-mono text-zinc-600 mt-0.5">
+                        {new Date(
+                          Number(m.unlockTs) * 1000
+                        ).toLocaleString()}
+                      </div>
+                    )}
                   </div>
                 </div>
 
@@ -1159,7 +1265,7 @@ function UnlockMilestonePanel({
                 <span
                   className={`font-mono text-sm font-bold ${
                     m.isUnlocked
-                      ? "text-zinc-500"
+                      ? "text-zinc-600"
                       : m.isNext
                       ? "text-indigo-300"
                       : "text-zinc-700"
@@ -1171,7 +1277,7 @@ function UnlockMilestonePanel({
             ))}
           </div>
 
-          {/* ── All unlocked footer ── */}
+          {/* All unlocked footer */}
           {milestonePreview.allUnlocked && (
             <div className="px-4 py-3 border-t border-zinc-900 bg-emerald-950/10 flex items-center gap-2">
               <Check className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
@@ -1180,13 +1286,13 @@ function UnlockMilestonePanel({
                 <span className="font-bold">
                   {milestonePreview.milestoneCount}
                 </span>{" "}
-                milestones have been unlocked. The recipient can now claim the
-                full allocation.
+                milestones unlocked. The recipient can now claim the full
+                allocation.
               </p>
             </div>
           )}
 
-          {/* ── Sequential note ── */}
+          {/* Sequential note */}
           {!milestonePreview.allUnlocked && milestonePreview.nextMilestone && (
             <div className="px-4 py-3 border-t border-zinc-900 flex items-start gap-2">
               <div className="w-1.5 h-1.5 rounded-full bg-zinc-700 shrink-0 mt-1.5" />
@@ -1206,16 +1312,19 @@ function UnlockMilestonePanel({
         </div>
       )}
 
-      {/* Stream not found hint */}
-      {unlockForm.streamId.trim() && !stream && (
-        <div className="mb-5 bg-zinc-900/40 border border-zinc-800 rounded-xl px-4 py-3 flex items-center gap-2">
-          <div className="w-1.5 h-1.5 rounded-full bg-zinc-600" />
-          <span className="text-[11px] text-zinc-500">
-            Stream not found in local index — preview unavailable until the
-            indexer syncs.
-          </span>
-        </div>
-      )}
+      {/* Stream not found hint — hanya kalau bukan loading dan bukan error */}
+      {unlockForm.streamId.trim() &&
+        !stream &&
+        !detailLoading &&
+        !detailError && (
+          <div className="mb-5 bg-zinc-900/40 border border-zinc-800 rounded-xl px-4 py-3 flex items-center gap-2">
+            <div className="w-1.5 h-1.5 rounded-full bg-zinc-600" />
+            <span className="text-[11px] text-zinc-500">
+              Stream not found in index — preview unavailable until the indexer
+              syncs.
+            </span>
+          </div>
+        )}
 
       {/* Submit button */}
       <button
@@ -1234,6 +1343,8 @@ function UnlockMilestonePanel({
         )}
         {!connected
           ? "Connect wallet to unlock"
+          : detailLoading
+          ? "Loading stream..."
           : isWrongWallet
           ? "Wrong wallet — switch to creator wallet"
           : isNotMilestoneType
@@ -2930,6 +3041,7 @@ const editCsvDisabled =
 
    {activeTab === "unlock_milestone" && (
   <UnlockMilestonePanel
+    endpoint={endpoint}
     unlockForm={unlockForm}
     setUnlockForm={setUnlockForm}
     handleAction={handleAction}
