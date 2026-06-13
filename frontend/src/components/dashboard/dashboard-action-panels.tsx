@@ -339,7 +339,11 @@ type Props = {
   endpoint: string;
   streams: any[];
 };
-
+const BASE58_REGEX = /^[1-9A-HJ-NP-Za-km-z]{32,44}$/;
+function isValidSolanaAddress(address: string): boolean {
+  if (!address?.trim()) return false;
+  return BASE58_REGEX.test(address.trim());
+}
 export function DashboardActionPanels(props: Props) {
   const {
     activeTab,
@@ -406,11 +410,7 @@ export function DashboardActionPanels(props: Props) {
   const csvEditMilestoneValidation = useCsvMilestoneValidation(csvEditText);
   const csvEditIdValidation = useCsvIdValidation(csvEditText, streams, true);
   // ─── Solana pubkey validator ──────────────────────────────────────────────
-const BASE58_REGEX = /^[1-9A-HJ-NP-Za-km-z]{32,44}$/;
-function isValidSolanaAddress(address: string): boolean {
-  if (!address?.trim()) return false;
-  return BASE58_REGEX.test(address.trim());
-}
+
   // ── Resolve mint dari stream yang sedang diedit ───────────────────────────
 const editLinearStream = useMemo(
   () => streams.find((s) => String(s?.id || "") === editLinearForm.streamId) ?? null,
@@ -2303,11 +2303,12 @@ function useCsvMilestoneValidation(csvText: string) {
     const milestonesIdx = headers.indexOf("milestones");
     const recipientIdx = headers.indexOf("recipient");
 
-    if (typeIdx === -1 || amountIdx === -1) return { rows: [], hasErrors: false };
+    if (amountIdx === -1) return { rows: [], hasErrors: false };
 
     const rows: {
       rowNum: number;
       recipient: string;
+      recipientInvalid: boolean;        // ← baru
       totalAmount: number;
       milestones: number[];
       milestoneSum: number;
@@ -2315,40 +2316,64 @@ function useCsvMilestoneValidation(csvText: string) {
       remaining: number;
       isMatch: boolean;
       hasInvalid: boolean;
+      isMilestoneRow: boolean;          // ← baru, supaya non-milestone bisa skip milestone check
     }[] = [];
 
     for (let i = 1; i < lines.length; i++) {
       const line = lines[i].trim();
       if (!line) continue;
       const values = line.split(",").map((v) => v.trim());
-      if (values[typeIdx] !== "2") continue;
 
       const recipient = recipientIdx !== -1 ? (values[recipientIdx] ?? "") : "";
+      const recipientInvalid = Boolean(recipient.trim()) && !isValidSolanaAddress(recipient);
+      const isMilestoneRow = typeIdx !== -1 && values[typeIdx] === "2";
       const totalAmount = parseFloat(values[amountIdx] ?? "0") || 0;
+
       let milestones: number[] = [];
-  if (milestonesIdx !== -1) {
-  const raw = values.slice(milestonesIdx).join(";"); // join sisa kolom dengan ";"
-  // Support both ";" and "," as milestone separators
-  milestones = raw
-    .split(/[;,]/)
-    .map((v) => v.trim())
-    .filter(Boolean)
-    .map((v) => parseFloat(v) || 0);
-}
+      let milestoneSum = 0;
+      let remaining = 0;
+      let pct = 0;
+      let isMatch = true;
+      let hasInvalid = false;
 
-      const milestoneSum = milestones.reduce((a, b) => a + b, 0);
-      const remaining = totalAmount - milestoneSum;
-      const pct = totalAmount > 0 ? Math.min((milestoneSum / totalAmount) * 100, 100) : 0;
-      const isMatch = totalAmount > 0 && Math.abs(remaining) < 0.0000001;
-      const hasInvalid = milestones.length === 0 || milestones.some((v) => v <= 0 || !Number.isFinite(v));
+      if (isMilestoneRow) {
+        if (milestonesIdx !== -1) {
+          const raw = values.slice(milestonesIdx).join(";");
+          milestones = raw
+            .split(/[;,]/)
+            .map((v) => v.trim())
+            .filter(Boolean)
+            .map((v) => parseFloat(v) || 0);
+        }
+        milestoneSum = milestones.reduce((a, b) => a + b, 0);
+        remaining = totalAmount - milestoneSum;
+        pct = totalAmount > 0 ? Math.min((milestoneSum / totalAmount) * 100, 100) : 0;
+        isMatch = totalAmount > 0 && Math.abs(remaining) < 0.0000001;
+        hasInvalid = milestones.length === 0 || milestones.some((v) => v <= 0 || !Number.isFinite(v));
+      }
 
-      rows.push({ rowNum: i, recipient, totalAmount, milestones, milestoneSum, pct, remaining, isMatch, hasInvalid });
+      // Hanya push row yang punya error (recipient invalid ATAU milestone mismatch)
+      const hasAnyError = recipientInvalid || (isMilestoneRow && (!isMatch || hasInvalid));
+      if (hasAnyError) {
+        rows.push({
+          rowNum: i,
+          recipient,
+          recipientInvalid,
+          totalAmount,
+          milestones,
+          milestoneSum,
+          pct,
+          remaining,
+          isMatch,
+          hasInvalid,
+          isMilestoneRow,
+        });
+      }
     }
 
-    return { rows, hasErrors: rows.some((r) => !r.isMatch || r.hasInvalid) };
+    return { rows, hasErrors: rows.length > 0 };
   }, [csvText]);
 }
-
 // Validasi kolom `id` khusus mode edit. Mirror cek backend di
 // /streams/edit-csv (server.ts): id harus ada di DB dan stream harus CSV-created.
 // Tanpa ini, baris dengan id ngawur (mis. "xxx") tampil "valid" karena
@@ -2544,94 +2569,101 @@ const mintExceedsBalance =
         </div>
       )}
 
-      {/* ── Milestone rows ───────────────────────────────────────────────── */}
-      {rows.length > 0 && (
-        <div className="divide-y divide-zinc-900/60">
-          {rows.map((row) => {
-            const barColor = row.hasInvalid
-              ? "bg-rose-500"
-              : row.isMatch
-              ? "bg-emerald-500"
-              : row.pct > 100
-              ? "bg-rose-500"
-              : "bg-amber-400";
-            const statusColor = row.hasInvalid
-              ? "text-rose-400"
-              : row.isMatch
-              ? "text-emerald-400"
-              : "text-amber-400";
-            const shortRecipient = row.recipient
-              ? `${row.recipient.slice(0, 6)}…${row.recipient.slice(-4)}`
-              : `Row #${row.rowNum}`;
+      {/* ── Error rows ──────────────────────────────────────────────────── */}
+{rows.length > 0 && (
+  <div className="divide-y divide-zinc-900/60">
+    {rows.map((row) => {
+      const shortRecipient = row.recipient
+        ? `${row.recipient.slice(0, 6)}…${row.recipient.slice(-4)}`
+        : `Row #${row.rowNum}`;
 
-            return (
-              <div key={row.rowNum} className="px-4 py-3 bg-zinc-950/40">
-                <div className="flex items-center justify-between mb-2">
-                  <span className="font-mono text-[10px] text-zinc-500">{shortRecipient}</span>
-                  <span className={`text-[10px] font-black font-mono ${statusColor}`}>
-                    {row.pct.toFixed(1)}%
-                  </span>
+      return (
+        <div key={row.rowNum} className="px-4 py-3 bg-zinc-950/40 space-y-2">
+          {/* Row header */}
+          <div className="flex items-center justify-between">
+            <span className="font-mono text-[10px] text-zinc-500">
+              Row #{row.rowNum}
+            </span>
+            <span className="text-[10px] font-black text-rose-400">
+              {[
+                row.recipientInvalid && "invalid recipient",
+                row.isMilestoneRow && row.hasInvalid && "missing milestone",
+                row.isMilestoneRow && !row.hasInvalid && !row.isMatch && "milestone mismatch",
+              ]
+                .filter(Boolean)
+                .join(" · ")}
+            </span>
+          </div>
+
+          {/* Recipient error */}
+          {row.recipientInvalid && (
+            <div className="flex items-start gap-2 rounded-xl border border-rose-500/20 bg-rose-950/20 px-3 py-2">
+              <AlertTriangle className="w-3 h-3 text-rose-400 shrink-0 mt-0.5" />
+              <div className="min-w-0">
+                <div className="text-[10px] font-bold text-rose-300 mb-0.5">
+                  Invalid Solana address
                 </div>
-                <div className="relative h-1.5 w-full rounded-full bg-zinc-900 overflow-hidden mb-2">
-                  <div
-                    className={`absolute left-0 top-0 h-full rounded-full transition-all duration-500 ${barColor}`}
-                    style={{ width: `${Math.min(row.pct, 100)}%` }}
-                  />
-                </div>
-                <div className="grid grid-cols-3 gap-2 text-[10px] font-mono mb-2">
-                  <div>
-                    <div className="text-zinc-600 text-[9px] uppercase">Allocated</div>
-                    <div className={statusColor}>{row.milestoneSum.toLocaleString()}</div>
-                  </div>
-                  <div>
-                    <div className="text-zinc-600 text-[9px] uppercase">Total</div>
-                    <div className="text-zinc-300">{row.totalAmount.toLocaleString()}</div>
-                  </div>
-                  <div>
-                    <div className="text-zinc-600 text-[9px] uppercase">
-                      {row.remaining < 0 ? "Excess" : "Remaining"}
-                    </div>
-                    <div
-                      className={
-                        row.remaining < 0
-                          ? "text-rose-400"
-                          : row.remaining === 0
-                          ? "text-emerald-400"
-                          : "text-amber-400"
-                      }
-                    >
-                      {Math.abs(row.remaining).toLocaleString()}
-                    </div>
-                  </div>
-                </div>
-                <div className="flex flex-wrap gap-1 mb-1.5">
-                  {row.milestones.map((m, idx) => (
-                    <span
-                      key={idx}
-                      className={`px-1.5 py-0.5 rounded-md text-[9px] font-mono font-bold border ${
-                        m <= 0
-                          ? "border-rose-500/40 bg-rose-950/20 text-rose-400"
-                          : "border-zinc-800 bg-zinc-900/50 text-zinc-400"
-                      }`}
-                    >
-                      #{idx}: {m}
-                    </span>
-                  ))}
-                </div>
-                <div className={`text-[9px] font-semibold ${statusColor}`}>
-                  {row.hasInvalid
-                    ? "⚠ Missing or zero milestone values"
-                    : row.isMatch
-                    ? "✓ Allocations balanced"
-                    : row.remaining > 0
-                    ? `${row.remaining.toLocaleString()} tokens unallocated`
-                    : `Over-allocated by ${Math.abs(row.remaining).toLocaleString()}`}
+                <div className="font-mono text-[10px] text-rose-400/80 break-all">
+                  {row.recipient || "(empty)"}
                 </div>
               </div>
-            );
-          })}
+            </div>
+          )}
+
+          {/* Milestone error — hanya kalau isMilestoneRow */}
+          {row.isMilestoneRow && (
+            <>
+              <div className="relative h-1.5 w-full rounded-full bg-zinc-900 overflow-hidden">
+                <div
+                  className={`absolute left-0 top-0 h-full rounded-full transition-all duration-500 ${
+                    row.hasInvalid ? "bg-rose-500" :
+                    row.isMatch ? "bg-emerald-500" :
+                    row.pct > 100 ? "bg-rose-500" : "bg-amber-400"
+                  }`}
+                  style={{ width: `${Math.min(row.pct, 100)}%` }}
+                />
+              </div>
+              <div className="grid grid-cols-3 gap-2 text-[10px] font-mono">
+                <div>
+                  <div className="text-zinc-600 text-[9px] uppercase">Allocated</div>
+                  <div className={row.isMatch ? "text-emerald-400" : "text-rose-400"}>
+                    {row.milestoneSum.toLocaleString()}
+                  </div>
+                </div>
+                <div>
+                  <div className="text-zinc-600 text-[9px] uppercase">Total</div>
+                  <div className="text-zinc-300">{row.totalAmount.toLocaleString()}</div>
+                </div>
+                <div>
+                  <div className="text-zinc-600 text-[9px] uppercase">
+                    {row.remaining < 0 ? "Excess" : "Remaining"}
+                  </div>
+                  <div className={row.remaining < 0 ? "text-rose-400" : "text-amber-400"}>
+                    {Math.abs(row.remaining).toLocaleString()}
+                  </div>
+                </div>
+              </div>
+              <div className="flex flex-wrap gap-1">
+                {row.milestones.map((m, idx) => (
+                  <span
+                    key={idx}
+                    className={`px-1.5 py-0.5 rounded-md text-[9px] font-mono font-bold border ${
+                      m <= 0
+                        ? "border-rose-500/40 bg-rose-950/20 text-rose-400"
+                        : "border-zinc-800 bg-zinc-900/50 text-zinc-400"
+                    }`}
+                  >
+                    #{idx}: {m}
+                  </span>
+                ))}
+              </div>
+            </>
+          )}
         </div>
-      )}
+      );
+    })}
+  </div>
+)}
 
      {/* Footer */}
 {hasAnyError && (
