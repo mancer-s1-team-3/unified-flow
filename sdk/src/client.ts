@@ -282,16 +282,15 @@ export class UnifiedFlowClient {
 
     const anchorIx = await this.program.methods
       .cancel()
-      .accountsStrict({
+      .accounts({
         creator,
-        stream: streamPDA,
         mint,
-        config,
-        vault,
+        config: config,
+        stream: streamPDA,
+        vault: streamState.vault,
         creatorTokenAccount,
         recipientTokenAccount,
         tokenProgram: TOKEN_PROGRAM_ID,
-        systemProgram: SystemProgram.programId,
       } as any)
       .instruction();
 
@@ -301,9 +300,9 @@ export class UnifiedFlowClient {
 
     const kitIx = this._toKitInstruction(anchorIx, [
       { address: creator.toBase58(), role: AccountRole.WRITABLE_SIGNER, signer: this.kitSigner },
-      { address: streamPDA.toBase58(), role: AccountRole.WRITABLE },
       { address: mint.toBase58(), role: AccountRole.READONLY },
       { address: config.toBase58(), role: AccountRole.READONLY },
+      { address: streamPDA.toBase58(), role: AccountRole.WRITABLE },
       { address: vault.toBase58(), role: AccountRole.WRITABLE },
       { address: creatorTokenAccount.toBase58(), role: AccountRole.WRITABLE },
       { address: recipientTokenAccount.toBase58(), role: AccountRole.WRITABLE },
