@@ -57,7 +57,7 @@ function formatBaseUnitsToTokenAmount(amount: bigint, decimals: number) {
   return `${negative ? "-" : ""}${whole}${fraction ? `.${fraction}` : ""}`;
 }
 
-function parseBaseUnits(value: unknown) {
+export function parseBaseUnits(value: unknown) {
   try {
     if (typeof value === "bigint") return value;
     if (typeof value === "number") return BigInt(Math.trunc(value));
@@ -940,6 +940,7 @@ export default function Home({ initialStreams = [] }: Props) {
 
             {activeTab !== "streams" && (
               <DashboardActionPanels
+connectedWalletAddress={connectedWalletAddress}  // ← tambah ini
               streams={streams}
                 endpoint={endpoint} activeTab={activeTab}
                 useMultisig={useMultisig} setUseMultisig={setUseMultisig}

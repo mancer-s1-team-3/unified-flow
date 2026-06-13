@@ -11,6 +11,7 @@ import { PreflightChecklist } from "./preflight-checklist";
 import { shorten } from "@/components/dashboard/utils";
 import { useTokenBalance } from "@/lib/use-token-balance";
 import { useAddressHistory } from "@/lib/use-address-history";
+import { parseBaseUnits } from "./dashboard-home-client";
 const QUICK_DURATIONS = [
   { label: "1M", value: 60 * 60 * 24 * 30 },
   { label: "3M", value: 60 * 60 * 24 * 90 },
@@ -216,26 +217,103 @@ function formatUnixTs(ts: number) {
   return new Date(ts * 1000).toLocaleString();
 }
 
-// ─── Cancel Panel (manages dialog state) ─────────────────────────────────
+// ─── Cancel Panel ─────────────────────────────────────────────────────────
 function CancelPanel({
   cancelForm,
   setCancelForm,
   handleAction,
   isSubmitting,
   submitLabel,
+  streams,
+  connectedWalletAddress,
 }: {
   cancelForm: { streamId: string };
   setCancelForm: (value: { streamId: string }) => void;
   handleAction: (actionName: string, data: any) => Promise<void> | void;
   isSubmitting: boolean;
   submitLabel: string;
+  streams: any[];
+  connectedWalletAddress: string | null;
 }) {
   const [showDialog, setShowDialog] = useState(false);
+
+  // ── Resolve stream dari streams[] ──────────────────────────────────────
+  const stream = useMemo(
+    () => streams.find((s) => String(s?.id || "") === cancelForm.streamId.trim()) ?? null,
+    [streams, cancelForm.streamId]
+  );
+
+  // ── Wallet vs creator check ────────────────────────────────────────────
+  const isWrongWallet =
+    !!cancelForm.streamId.trim() &&
+    !!stream &&
+    !!connectedWalletAddress &&
+    stream.creator?.toLowerCase() !== connectedWalletAddress.toLowerCase();
+
+  const isNotConnected = !connectedWalletAddress;
+
+  // ── Token breakdown preview ────────────────────────────────────────────
+  const cancelPreview = useMemo(() => {
+    if (!stream) return null;
+
+    const decimals = typeof stream.mintDecimals === "number" ? stream.mintDecimals : 6;
+    const nowTs = Math.floor(Date.now() / 1000);
+    const totalBase = parseBaseUnits(stream.totalAmount);
+    const withdrawnBase = parseBaseUnits(stream.withdrawn ?? 0);
+
+    // Hitung vested amount berdasarkan vesting type
+    let vestedBase: bigint;
+    const vestingType = Number(stream.vestingType ?? 0);
+    const startTs = Number(stream.startTs ?? 0);
+    const endTs = Number(stream.endTs ?? 0);
+    const cliffTs = Number(stream.cliffTs ?? 0);
+
+    if (vestingType === 2) {
+      // Milestone: vested = unlocked milestone amount
+      vestedBase = parseBaseUnits(stream.unlockedAmount ?? stream.unlocked_milestone_amount ?? 0);
+    } else if (nowTs < startTs) {
+      vestedBase = BigInt(0);
+    } else if (vestingType === 1 && nowTs < cliffTs) {
+      // Cliff: belum lewat cliff
+      vestedBase = BigInt(0);
+    } else if (nowTs >= endTs) {
+      vestedBase = totalBase;
+    } else {
+      const elapsed = BigInt(nowTs - startTs);
+      const duration = BigInt(Math.max(endTs - startTs, 1));
+      vestedBase = (totalBase * elapsed) / duration;
+    }
+
+    const claimableForRecipient =
+      vestedBase > withdrawnBase ? vestedBase - withdrawnBase : BigInt(0);
+    const returnedToCreator =
+      totalBase > vestedBase ? totalBase - vestedBase : BigInt(0);
+
+    const fmt = (v: bigint) =>
+      Number(formatBaseUnitsToTokenAmount(v, decimals)).toLocaleString(undefined, {
+        maximumFractionDigits: decimals,
+      });
+
+    return {
+      total: fmt(totalBase),
+      withdrawn: fmt(withdrawnBase),
+      claimableForRecipient: fmt(claimableForRecipient),
+      returnedToCreator: fmt(returnedToCreator),
+      hasAnything: totalBase > BigInt(0),
+      isPureZeroReturn: returnedToCreator === BigInt(0),
+    };
+  }, [stream]);
 
   const handleConfirm = () => {
     setShowDialog(false);
     handleAction("cancel", cancelForm);
   };
+
+  const canSubmit =
+    !!cancelForm.streamId.trim() &&
+    !isSubmitting &&
+    !isWrongWallet &&
+    !isNotConnected;
 
   return (
     <div className="animate-in fade-in-30 duration-200">
@@ -245,7 +323,7 @@ function CancelPanel({
       </div>
 
       {/* Stream ID */}
-      <div className="mb-6">
+      <div className="mb-5">
         <label className="block text-xs font-semibold text-zinc-400 uppercase tracking-wider mb-1.5">
           Stream ID (PDA Address)
         </label>
@@ -254,10 +332,117 @@ function CancelPanel({
           value={cancelForm.streamId}
           onChange={(e) => setCancelForm({ ...cancelForm, streamId: e.target.value })}
           className="w-full bg-zinc-950 border border-zinc-800 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:border-zinc-600 font-mono"
+          placeholder="Paste stream PDA address"
         />
       </div>
 
-      {/* Warning card */}
+      {/* ── Wrong wallet warning ───────────────────────────────────────── */}
+      {isWrongWallet && (
+        <div className="mb-5 bg-amber-950/30 border border-amber-500/30 rounded-2xl p-4 flex items-start gap-3">
+          <AlertTriangle className="w-4 h-4 text-amber-400 shrink-0 mt-0.5" />
+          <div>
+            <p className="text-[11px] font-bold text-amber-300 mb-1">Wrong wallet connected</p>
+            <p className="text-[11px] text-amber-300/70 leading-relaxed">
+              Only the stream creator can cancel. This stream was created by{" "}
+              <span className="font-mono text-amber-300 break-all">
+                {stream?.creator
+                  ? `${stream.creator.slice(0, 6)}…${stream.creator.slice(-4)}`
+                  : "unknown"}
+              </span>
+              , but your connected wallet is{" "}
+              <span className="font-mono text-amber-300 break-all">
+                {`${connectedWalletAddress!.slice(0, 6)}…${connectedWalletAddress!.slice(-4)}`}
+              </span>
+              .
+            </p>
+          </div>
+        </div>
+      )}
+
+      {/* ── Token breakdown preview ────────────────────────────────────── */}
+      {cancelPreview && cancelPreview.hasAnything && (
+        <div className="mb-5 rounded-2xl border border-zinc-800 overflow-hidden">
+          {/* Header */}
+          <div className="flex items-center gap-2 px-4 py-3 border-b border-zinc-900 bg-zinc-950/60">
+            <XCircle className="w-3.5 h-3.5 text-rose-400" />
+            <span className="text-[10px] font-black uppercase tracking-widest text-zinc-400">
+              Cancel Preview
+            </span>
+            {stream && (
+              <span className="ml-auto text-[10px] font-mono text-zinc-600">
+                {Number(stream.vestingType) === 0
+                  ? "Linear"
+                  : Number(stream.vestingType) === 1
+                  ? "Cliff"
+                  : "Milestone"}
+              </span>
+            )}
+          </div>
+
+          <div className="divide-y divide-zinc-900/60">
+            {/* Returned to creator */}
+            <div className="flex items-center justify-between px-4 py-3">
+              <div className="flex items-center gap-2">
+                <div className="w-2 h-2 rounded-full bg-emerald-400 shrink-0" />
+                <span className="text-xs text-zinc-400">Returned to creator</span>
+              </div>
+              <span className="font-mono text-sm font-bold text-emerald-400">
+                {cancelPreview.returnedToCreator}
+              </span>
+            </div>
+
+            {/* Claimable by recipient */}
+            <div className="flex items-center justify-between px-4 py-3">
+              <div className="flex items-center gap-2">
+                <div className="w-2 h-2 rounded-full bg-amber-400 shrink-0" />
+                <span className="text-xs text-zinc-400">Claimable by recipient</span>
+              </div>
+              <span className="font-mono text-sm font-bold text-amber-400">
+                {cancelPreview.claimableForRecipient}
+              </span>
+            </div>
+
+            {/* Already withdrawn */}
+            <div className="flex items-center justify-between px-4 py-3">
+              <div className="flex items-center gap-2">
+                <div className="w-2 h-2 rounded-full bg-zinc-600 shrink-0" />
+                <span className="text-xs text-zinc-500">Already withdrawn (non-refundable)</span>
+              </div>
+              <span className="font-mono text-sm font-bold text-zinc-500">
+                {cancelPreview.withdrawn}
+              </span>
+            </div>
+
+            {/* Total */}
+            <div className="flex items-center justify-between px-4 py-3 bg-zinc-950/40">
+              <span className="text-xs font-bold text-zinc-400">Total locked</span>
+              <span className="font-mono text-sm font-bold text-zinc-200">
+                {cancelPreview.total}
+              </span>
+            </div>
+          </div>
+
+          {/* Zero-return warning */}
+          {cancelPreview.isPureZeroReturn && (
+            <div className="px-4 py-3 border-t border-zinc-900 bg-amber-950/10 flex items-start gap-2">
+              <AlertTriangle className="w-3.5 h-3.5 text-amber-400 shrink-0 mt-0.5" />
+              <p className="text-[10px] text-amber-300/80 leading-relaxed">
+                All tokens are already vested — nothing will be returned to the creator. Consider letting the stream complete naturally instead.
+              </p>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Stream not found hint */}
+      {cancelForm.streamId.trim() && !stream && (
+        <div className="mb-5 bg-zinc-900/40 border border-zinc-800 rounded-xl px-4 py-3 flex items-center gap-2">
+          <div className="w-1.5 h-1.5 rounded-full bg-zinc-600" />
+          <span className="text-[11px] text-zinc-500">Stream not found in local index — preview unavailable until the indexer syncs.</span>
+        </div>
+      )}
+
+      {/* Permanent warning card */}
       <div className="bg-rose-950/20 border border-rose-500/20 rounded-2xl p-4 mb-6 flex items-start gap-3">
         <AlertTriangle className="w-4 h-4 text-rose-400 shrink-0 mt-0.5" />
         <p className="text-[11px] text-rose-300/80 leading-relaxed">
@@ -266,14 +451,22 @@ function CancelPanel({
         </p>
       </div>
 
-      {/* Trigger */}
+      {/* Trigger button */}
       <button
-        disabled={!cancelForm.streamId.trim() || isSubmitting}
+        disabled={!canSubmit}
         onClick={() => setShowDialog(true)}
-        className="w-full bg-rose-950/30 hover:bg-rose-600 text-rose-400 hover:text-white border border-rose-500/30 hover:border-rose-600 font-bold text-xs py-3 rounded-xl transition-all shadow-lg hover:shadow-rose-900/30 flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+        className={`w-full font-bold text-xs py-3 rounded-xl transition-all shadow-lg flex items-center justify-center gap-2 ${
+          !canSubmit
+            ? "bg-zinc-900 text-zinc-600 border border-zinc-800 cursor-not-allowed shadow-none"
+            : "bg-rose-950/30 hover:bg-rose-600 text-rose-400 hover:text-white border border-rose-500/30 hover:border-rose-600 hover:shadow-rose-900/30"
+        }`}
       >
         {isSubmitting ? <RefreshCw className="w-4 h-4 animate-spin" /> : <XCircle className="w-4 h-4" />}
-        {submitLabel}
+        {isNotConnected
+          ? "Connect wallet to cancel"
+          : isWrongWallet
+          ? "Wrong wallet — switch to creator wallet"
+          : submitLabel}
       </button>
 
       {showDialog && (
@@ -338,6 +531,7 @@ type Props = {
   connected: boolean;
   endpoint: string;
   streams: any[];
+connectedWalletAddress: string | null;
 };
 const BASE58_REGEX = /^[1-9A-HJ-NP-Za-km-z]{32,44}$/;
 function isValidSolanaAddress(address: string): boolean {
@@ -395,6 +589,7 @@ export function DashboardActionPanels(props: Props) {
     connected,
     endpoint,
     streams,
+    connectedWalletAddress,
   } = props;
 
   const recipientHistory = useAddressHistory("recipient");
@@ -1795,16 +1990,18 @@ const editCsvDisabled =
           </button>
         </div>
       )}
-
-      {activeTab === "cancel" && (
-        <CancelPanel
-          cancelForm={cancelForm}
-          setCancelForm={setCancelForm}
-          handleAction={handleAction}
-          isSubmitting={activeTxAction === "cancel" && !!activeTxPhase}
-          submitLabel={getTxLabel("cancel", "Cancel and Refund Stream")}
-        />
-      )}
+      
+{activeTab === "cancel" && (
+  <CancelPanel
+    cancelForm={cancelForm}
+    setCancelForm={setCancelForm}
+    handleAction={handleAction}
+    isSubmitting={activeTxAction === "cancel" && !!activeTxPhase}
+    submitLabel={getTxLabel("cancel", "Cancel and Refund Stream")}
+    streams={streams}                            // ← tambah
+    connectedWalletAddress={connectedWalletAddress}  // ← tambah
+  />
+)}
 
       {activeTab === "unlock_milestone" && (
         <div className="animate-in fade-in-30 duration-200">
