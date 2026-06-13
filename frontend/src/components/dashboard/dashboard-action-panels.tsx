@@ -405,6 +405,12 @@ export function DashboardActionPanels(props: Props) {
   const csvMilestoneValidation = useCsvMilestoneValidation(csvCreateText);
   const csvEditMilestoneValidation = useCsvMilestoneValidation(csvEditText);
   const csvEditIdValidation = useCsvIdValidation(csvEditText, streams, true);
+  // ─── Solana pubkey validator ──────────────────────────────────────────────
+const BASE58_REGEX = /^[1-9A-HJ-NP-Za-km-z]{32,44}$/;
+function isValidSolanaAddress(address: string): boolean {
+  if (!address?.trim()) return false;
+  return BASE58_REGEX.test(address.trim());
+}
   // ── Resolve mint dari stream yang sedang diedit ───────────────────────────
 const editLinearStream = useMemo(
   () => streams.find((s) => String(s?.id || "") === editLinearForm.streamId) ?? null,
@@ -677,7 +683,9 @@ const editCliffNewCliffOutOfRange =
   endpoint,
   selectedMintPreset?.decimals
 );
-
+const recipientInvalid =
+  Boolean(createForm.recipient?.trim()) &&
+  !isValidSolanaAddress(createForm.recipient);
 const exceedsBalance =
   tokenBalance.balance !== null &&
   Boolean(createForm.amount?.trim()) &&
@@ -704,7 +712,8 @@ const createDisabled =
   cliffExceedsDuration ||
   cliffDateInPast ||
   endDateInPast ||
-  exceedsBalance ||   // ← add this
+  exceedsBalance ||
+  recipientInvalid ||   // ← tambah ini
   (createForm.type === "2" && (hasInvalidMilestones || !milestonesMatchTotal)) ||
   activeTxAction === "create_stream";
   const withdrawDisabled = !withdrawForm.streamId?.trim() || activeTxAction === "withdraw";
@@ -835,14 +844,39 @@ const editCsvDisabled =
           {createMode === "manual" ? (
             <div className={`grid min-w-0 gap-4 md:grid-cols-2 max-w-full ${mobileNarrowFormClass}`}>
               <div className="md:col-span-2 min-w-0 max-w-full">
-                <label className="block text-[10px] sm:text-xs font-semibold text-zinc-400 uppercase tracking-wider mb-1.5">Recipient</label>
-                <input type="text" list="uf-recipient-history" autoComplete="off" value={createForm.recipient} onChange={(e) => setCreateForm({ ...createForm, recipient: e.target.value })} onBlur={(e) => recipientHistory.remember(e.target.value)} className="block w-full max-w-full min-w-0 bg-zinc-950 border border-zinc-800 rounded-xl px-3.5 py-2.5 sm:px-4 sm:py-3 text-sm focus:outline-none focus:border-indigo-500 font-mono" />
-                <datalist id="uf-recipient-history">
+  <label className="block text-[10px] sm:text-xs font-semibold text-zinc-400 uppercase tracking-wider mb-1.5">
+    Recipient
+  </label>
+  <input
+    type="text"
+    list="uf-recipient-history" autoComplete="off" 
+    value={createForm.recipient}
+    onBlur={(e) => recipientHistory.remember(e.target.value)}
+    onChange={(e) => setCreateForm({ ...createForm, recipient: e.target.value })}
+    className={`block w-full max-w-full min-w-0 bg-zinc-950 border rounded-xl px-3.5 py-2.5 sm:px-4 sm:py-3 text-sm focus:outline-none font-mono transition-colors ${
+      recipientInvalid
+        ? "border-rose-500/60 focus:border-rose-500"
+        : "border-zinc-800 focus:border-indigo-500"
+    }`}
+    placeholder="Solana wallet address (base58)"
+  />
+   <datalist id="uf-recipient-history">
                   {recipientHistory.addresses.map((addr) => (
                     <option key={addr} value={addr} />
                   ))}
                 </datalist>
-              </div>
+  {recipientInvalid && (
+    <div className="mt-1.5 text-[10px] font-semibold text-rose-400">
+      Invalid Solana address — must be a valid base58 public key (32–44 characters).
+    </div>
+  )}
+  {!recipientInvalid && createForm.recipient?.trim() && (
+    <div className="mt-1.5 text-[10px] font-semibold text-emerald-500 flex items-center gap-1">
+      <Check className="w-3 h-3" /> Valid Solana address
+    </div>
+  )}
+</div>
+              
              <div className="min-w-0 max-w-full">
   <label className="block text-[10px] sm:text-xs font-semibold text-zinc-400 uppercase tracking-wider mb-1.5">
     Amount
