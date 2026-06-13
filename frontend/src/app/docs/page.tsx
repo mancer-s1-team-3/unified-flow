@@ -720,12 +720,17 @@ const [activeTab, setActiveTab] = useState<
                     <span className="text-3xs uppercase tracking-wider font-semibold text-zinc-500 block mb-2">Installation</span>
                     <code className="font-mono text-xs text-emerald-400">npm install -g @unifiedflow/cli</code>
                   </div>
-                  <div className="mt-3 p-4 rounded-xl bg-zinc-900 border border-zinc-800">
-                    <span className="text-3xs uppercase tracking-wider font-semibold text-zinc-500 block mb-2">Environment Variables (.env)</span>
-                    <pre className="font-mono text-xs text-zinc-300 whitespace-pre-wrap">{`WALLET_PATH=~/.config/solana/id.json   # Path to keypair file
+                <div className="mt-3 p-4 rounded-xl bg-zinc-900 border border-zinc-800 overflow-x-auto">
+  <span className="text-3xs uppercase tracking-wider font-semibold text-zinc-500 block mb-2">
+    Environment Variables (.env)
+  </span>
+
+  <pre className="font-mono text-xs text-zinc-300 whitespace-pre-wrap break-all">
+{`WALLET_PATH=~/.config/solana/id.json
 PROGRAM_ID=8M5yieUh7pxwUi1YBByDF82nqoorZwaKi8dBoMVpurFa
-RPC_URL=https://api.devnet.solana.com`}</pre>
-                  </div>
+RPC_URL=https://api.devnet.solana.com`}
+  </pre>
+</div>
                 </div>
 
                 {/* READ COMMANDS */}
