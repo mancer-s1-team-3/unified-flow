@@ -353,11 +353,11 @@ edit_linear:    { label: "Extend Stream",    icon: "📈", color: "bg-teal-600" 
   const widget = (
     <div className="fixed bottom-[calc(4rem_+_env(safe-area-inset-bottom)_+_1.5rem)] right-6 z-50 flex flex-col items-end gap-3 md:bottom-6">
       {open && (
-        <div
-          className={`w-[380px] bg-zinc-950 border border-zinc-800 rounded-2xl shadow-2xl overflow-hidden transition-all duration-300 ${
-            minimized ? "h-14" : "h-[600px]"
-          }`}
-        >
+      <div
+  className={`w-[380px] bg-zinc-950 border border-zinc-800 rounded-2xl shadow-2xl overflow-hidden transition-all duration-300 flex flex-col ${
+    minimized ? "h-14" : "h-[600px]"
+  }`}
+>
           {!minimized && (
             <>
               {/* Header */}
@@ -417,7 +417,9 @@ edit_linear:    { label: "Extend Stream",    icon: "📈", color: "bg-teal-600" 
               )}
 
               {/* Messages */}
-              <div className="flex-1 overflow-y-auto p-4 space-y-4">
+              <div
+  className="flex-1 overflow-y-auto p-4 space-y-4 min-h-0"
+>
                 {messages.map((message) => (
                   <div
                     key={message.id}
