@@ -2512,6 +2512,7 @@ const editCsvDisabled =
                 <label className="block text-xs font-semibold text-zinc-400 uppercase tracking-wider mb-1.5">Stream ID (PDA Address)</label>
                 <input
                   type="text"
+                    placeholder="Paste stream PDA address"
                   value={editMilestoneForm.streamId}
                   onChange={(e) => setEditMilestoneForm({ ...editMilestoneForm, streamId: e.target.value })}
                   className="w-full bg-zinc-950 border border-zinc-800 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:border-indigo-500 font-mono"
@@ -2632,7 +2633,7 @@ const editCsvDisabled =
       <div className="grid gap-4">
         <div>
           <label className="block text-xs font-semibold text-zinc-400 uppercase tracking-wider mb-1.5">Stream ID (PDA Address)</label>
-          <input type="text" value={editLinearForm.streamId} onChange={(e) => setEditLinearForm({ ...editLinearForm, streamId: e.target.value })} className="w-full bg-zinc-950 border border-zinc-800 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:border-indigo-500 font-mono" />
+          <input type="text" value={editLinearForm.streamId}   placeholder="Paste stream PDA address" onChange={(e) => setEditLinearForm({ ...editLinearForm, streamId: e.target.value })} className="w-full bg-zinc-950 border border-zinc-800 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:border-indigo-500 font-mono" />
         </div>
         <div>
           <label className="block text-xs font-semibold text-zinc-400 uppercase tracking-wider mb-1.5">New Stream Duration (Seconds from Start)</label>
@@ -2685,7 +2686,7 @@ const editCsvDisabled =
       {activeTab === "edit_cliff" && (
         <div className="animate-in fade-in-30 duration-200">
           <div className="border-b border-zinc-900 pb-4 mb-6"><div className="flex items-center gap-2"><h2 className="text-2xl font-extrabold tracking-tight">Edit Cliff Conditions</h2></div><p className="text-xs text-zinc-400">Modify cliff release durations or shift lockup parameters</p></div>
-          {isStreamCsvCreated(editCliffForm.streamId) ? <div className="bg-red-950/45 border border-red-500/30 rounded-2xl p-5 text-red-300 flex items-start gap-4 mb-6"><Lock className="w-6 h-6 text-red-400 shrink-0 mt-0.5" /><div><h4 className="text-sm font-extrabold">Manual Edit Locked!</h4><p className="text-xs text-red-400/80 mt-1 leading-relaxed">This stream was created via CSV Import. To comply with consistency requirements, CSV-created streams must be edited exclusively using the Bulk Edit CSV console.</p></div></div> : <div className="grid gap-4"><div><label className="block text-xs font-semibold text-zinc-400 uppercase tracking-wider mb-1.5">Stream ID (PDA Address)</label><input type="text" value={editCliffForm.streamId} onChange={(e) => setEditCliffForm({ ...editCliffForm, streamId: e.target.value })} className="w-full bg-zinc-950 border border-zinc-800 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:border-indigo-500 font-mono" /></div><div><label className="block text-xs font-semibold text-zinc-400 uppercase tracking-wider mb-1.5">New Cliff Duration (Seconds from Start)</label><input type="number" value={editCliffForm.newCliffDuration} onChange={(e) => setEditCliffForm({ ...editCliffForm, newCliffDuration: e.target.value })} className="w-full bg-zinc-950 border border-zinc-800 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:border-indigo-500 font-mono" />
+          {isStreamCsvCreated(editCliffForm.streamId) ? <div className="bg-red-950/45 border border-red-500/30 rounded-2xl p-5 text-red-300 flex items-start gap-4 mb-6"><Lock className="w-6 h-6 text-red-400 shrink-0 mt-0.5" /><div><h4 className="text-sm font-extrabold">Manual Edit Locked!</h4><p className="text-xs text-red-400/80 mt-1 leading-relaxed">This stream was created via CSV Import. To comply with consistency requirements, CSV-created streams must be edited exclusively using the Bulk Edit CSV console.</p></div></div> : <div className="grid gap-4"><div><label className="block text-xs font-semibold text-zinc-400 uppercase tracking-wider mb-1.5">Stream ID (PDA Address)</label><input type="text" value={editCliffForm.streamId}   placeholder="Paste stream PDA address" onChange={(e) => setEditCliffForm({ ...editCliffForm, streamId: e.target.value })} className="w-full bg-zinc-950 border border-zinc-800 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:border-indigo-500 font-mono" /></div><div><label className="block text-xs font-semibold text-zinc-400 uppercase tracking-wider mb-1.5">New Cliff Duration (Seconds from Start)</label><input type="number" value={editCliffForm.newCliffDuration} onChange={(e) => setEditCliffForm({ ...editCliffForm, newCliffDuration: e.target.value })} className="w-full bg-zinc-950 border border-zinc-800 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:border-indigo-500 font-mono" />
               {editCliffNewCliffTs !== null && (
                 <div className={`mt-1.5 text-[10px] font-mono ${editCliffNewCliffOutOfRange ? "text-rose-400" : "text-zinc-500"}`}>
                   {editCliffNewCliffOutOfRange
