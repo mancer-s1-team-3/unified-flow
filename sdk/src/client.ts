@@ -369,7 +369,6 @@ export class UnifiedFlowClient {
 
   public async editMilestone(
     streamPDA: PublicKey,
-    mint: PublicKey,
     milestoneIndex: number,
     newAmount: anchor.BN,
     onStatus?: (phase: TxProgressPhase) => void
@@ -378,6 +377,9 @@ export class UnifiedFlowClient {
 
     const creator = new PublicKey(this.wallet.account.address.toString());
     const milestonePDA = getMilestonePDA(streamPDA, milestoneIndex, this.program.programId)[0];
+    const programAny = this.program as any;
+    const streamState: any = await programAny.account.streamAccount.fetch(streamPDA);
+    const mint = streamState.mint as PublicKey;
     const vault = getVaultATA(mint, streamPDA);
     const creatorTokenAccount = getAssociatedTokenAddressSync(mint, creator, true);
 
@@ -387,7 +389,8 @@ export class UnifiedFlowClient {
         creator,
         stream: streamPDA,
         milestone: milestonePDA,
-        vault,
+        mint,
+        vault: streamState.vault,
         creatorTokenAccount,
         tokenProgram: TOKEN_PROGRAM_ID,
       } as any)
@@ -401,6 +404,7 @@ export class UnifiedFlowClient {
       { address: creator.toBase58(), role: AccountRole.WRITABLE_SIGNER, signer: this.kitSigner },
       { address: streamPDA.toBase58(), role: AccountRole.WRITABLE },
       { address: milestonePDA.toBase58(), role: AccountRole.WRITABLE },
+      { address: mint.toBase58(), role: AccountRole.READONLY },
       { address: vault.toBase58(), role: AccountRole.WRITABLE },
       { address: creatorTokenAccount.toBase58(), role: AccountRole.WRITABLE },
       { address: TOKEN_PROGRAM_ID.toBase58(), role: AccountRole.READONLY },
@@ -428,13 +432,22 @@ export class UnifiedFlowClient {
 
     const creator = new PublicKey(this.wallet.account.address.toString());
     const config = this.getConfigPDA();
+    const programAny = this.program as any;
+    const streamState: any = await programAny.account.streamAccount.fetch(streamPDA);
+    const mint = streamState.mint as PublicKey;
+    const vault = getVaultATA(mint, streamPDA);
+    const creatorTokenAccount = getAssociatedTokenAddressSync(mint, creator, true);
 
     const anchorIx = await this.program.methods
       .editCliff(newCliffTs)
       .accounts({
         creator,
+        mint,
+        config: config,
         stream: streamPDA,
-        config,
+        vault: vault,
+        creatorTokenAccount,
+        tokenProgram: TOKEN_PROGRAM_ID,
       } as any)
       .instruction();
 
@@ -444,8 +457,12 @@ export class UnifiedFlowClient {
 
     const kitIx = this._toKitInstruction(anchorIx, [
       { address: creator.toBase58(), role: AccountRole.WRITABLE_SIGNER, signer: this.kitSigner },
-      { address: streamPDA.toBase58(), role: AccountRole.WRITABLE },
+      { address: mint.toBase58(), role: AccountRole.READONLY },
       { address: config.toBase58(), role: AccountRole.READONLY },
+      { address: streamPDA.toBase58(), role: AccountRole.WRITABLE },
+      { address: vault.toBase58(), role: AccountRole.WRITABLE },
+      { address: creatorTokenAccount.toBase58(), role: AccountRole.WRITABLE },
+      { address: TOKEN_PROGRAM_ID.toBase58(), role: AccountRole.READONLY },
     ]);
 
     const txMsg = this._buildTxMessage(kitIx, blockhash, lastValidBlockHeight);
@@ -463,7 +480,6 @@ export class UnifiedFlowClient {
 
   public async editLinear(
     streamPDA: PublicKey,
-    mint: PublicKey,
     newEndTs: anchor.BN,
     topupAmount: anchor.BN,
     onStatus?: (phase: TxProgressPhase) => void
@@ -472,6 +488,9 @@ export class UnifiedFlowClient {
 
     const creator = new PublicKey(this.wallet.account.address.toString());
     const config = this.getConfigPDA();
+    const programAny = this.program as any;
+    const streamState: any = await programAny.account.streamAccount.fetch(streamPDA);
+    const mint = streamState.mint as PublicKey;
     const vault = getVaultATA(mint, streamPDA);
     const creatorTokenAccount = getAssociatedTokenAddressSync(mint, creator, true);
 
@@ -479,9 +498,10 @@ export class UnifiedFlowClient {
       .editLinear(newEndTs, topupAmount)
       .accounts({
         creator,
+        mint,
+        config: config,
         stream: streamPDA,
-        config,
-        vault,
+        vault: streamState.vault,
         creatorTokenAccount,
         tokenProgram: TOKEN_PROGRAM_ID,
       } as any)
@@ -493,8 +513,9 @@ export class UnifiedFlowClient {
 
     const kitIx = this._toKitInstruction(anchorIx, [
       { address: creator.toBase58(), role: AccountRole.WRITABLE_SIGNER, signer: this.kitSigner },
-      { address: streamPDA.toBase58(), role: AccountRole.WRITABLE },
+      { address: mint.toBase58(), role: AccountRole.READONLY },
       { address: config.toBase58(), role: AccountRole.READONLY },
+      { address: streamPDA.toBase58(), role: AccountRole.WRITABLE },
       { address: vault.toBase58(), role: AccountRole.WRITABLE },
       { address: creatorTokenAccount.toBase58(), role: AccountRole.WRITABLE },
       { address: TOKEN_PROGRAM_ID.toBase58(), role: AccountRole.READONLY },

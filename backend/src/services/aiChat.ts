@@ -147,11 +147,10 @@ const TOOLS = [
         type: "object",
         properties: {
           stream_pda: { type: "string", description: "Stream account PDA public key" },
-          mint: { type: "string", description: "Token mint public key" },
           milestone_index: { type: "number", description: "0-based index of the milestone to edit" },
           new_amount: { type: "number", description: "New token amount in base units" },
         },
-        required: ["stream_pda", "mint", "milestone_index", "new_amount"],
+        required: ["stream_pda", "milestone_index", "new_amount"],
       },
     },
   },
@@ -179,11 +178,11 @@ const TOOLS = [
         type: "object",
         properties: {
           stream_pda: { type: "string", description: "Stream account PDA public key" },
-          mint: { type: "string", description: "Token mint public key" },
+
           new_end_ts: { type: "number", description: "New end timestamp (Unix seconds)" },
           topup_amount: { type: "number", description: "Additional tokens to deposit into vault (0 if only extending)" },
         },
-        required: ["stream_pda", "mint", "new_end_ts", "topup_amount"],
+        required: ["stream_pda", "new_end_ts", "topup_amount"],
       },
     },
   },
