@@ -216,7 +216,589 @@ function formatUnixTs(ts: number) {
   if (!Number.isFinite(ts) || ts <= 0) return "—";
   return new Date(ts * 1000).toLocaleString();
 }
+// ─── Withdraw Panel ────────────────────────────────────────────────────────
+function WithdrawPanel({
+  withdrawForm,
+  setWithdrawForm,
+  handleAction,
+  streams,
+  connectedWalletAddress,
+  activeTxAction,
+  activeTxPhase,
+  connected,
+}: {
+  withdrawForm: { streamId: string };
+  setWithdrawForm: (value: { streamId: string }) => void;
+  handleAction: (actionName: string, data: any) => Promise<void> | void;
+  streams: any[];
+  connectedWalletAddress: string | null;
+  activeTxAction: string | null;
+  activeTxPhase: "wallet_approval" | "sending" | "confirming" | null;
+  connected: boolean;
+}) {
+  const feeEstimate = useFeeEstimate();
 
+  // ── Resolve stream ─────────────────────────────────────────────────────
+  const stream = useMemo(
+    () =>
+      streams.find(
+        (s) => String(s?.id || "") === withdrawForm.streamId.trim()
+      ) ?? null,
+    [streams, withdrawForm.streamId]
+  );
+
+  // ── Wallet vs recipient check ──────────────────────────────────────────
+  const isWrongWallet =
+    !!withdrawForm.streamId.trim() &&
+    !!stream &&
+    !!connectedWalletAddress &&
+    stream.recipient?.toLowerCase() !== connectedWalletAddress.toLowerCase();
+
+  // ── Claimable preview ──────────────────────────────────────────────────
+  const withdrawPreview = useMemo(() => {
+    if (!stream) return null;
+
+    const decimals =
+      typeof stream.mintDecimals === "number" ? stream.mintDecimals : 6;
+    const nowTs = Math.floor(Date.now() / 1000);
+    const totalBase = parseBaseUnits(stream.totalAmount);
+    const withdrawnBase = parseBaseUnits(stream.withdrawn ?? 0);
+
+    const vestingType = Number(stream.vestingType ?? 0);
+    const startTs = Number(stream.startTs ?? 0);
+    const endTs = Number(stream.endTs ?? 0);
+    const cliffTs = Number(stream.cliffTs ?? 0);
+
+    let vestedBase: bigint;
+
+    if (vestingType === 2) {
+      vestedBase = parseBaseUnits(
+        stream.unlockedAmount ?? stream.unlocked_milestone_amount ?? 0
+      );
+    } else if (nowTs < startTs) {
+      vestedBase = BigInt(0);
+    } else if (vestingType === 1 && nowTs < cliffTs) {
+      vestedBase = BigInt(0);
+    } else if (nowTs >= endTs) {
+      vestedBase = totalBase;
+    } else {
+      const elapsed = BigInt(nowTs - startTs);
+      const duration = BigInt(Math.max(endTs - startTs, 1));
+      vestedBase = (totalBase * elapsed) / duration;
+    }
+
+    const claimableBase =
+      vestedBase > withdrawnBase ? vestedBase - withdrawnBase : BigInt(0);
+
+    const fmt = (v: bigint) =>
+      Number(formatBaseUnitsToTokenAmount(v, decimals)).toLocaleString(
+        undefined,
+        { maximumFractionDigits: decimals }
+      );
+
+    // Progress pct: withdrawn / total
+    const totalNum = Number(totalBase);
+    const withdrawnNum = Number(withdrawnBase);
+    const vestedNum = Number(vestedBase);
+    const claimableNum = Number(claimableBase);
+
+    const withdrawnPct = totalNum > 0 ? (withdrawnNum / totalNum) * 100 : 0;
+    const vestedPct = totalNum > 0 ? (vestedNum / totalNum) * 100 : 0;
+    const claimablePct = totalNum > 0 ? (claimableNum / totalNum) * 100 : 0;
+
+    // Time remaining
+    const streamActive = Number(stream.status ?? 1) === 1;
+    const secondsRemaining = Math.max(0, endTs - nowTs);
+    const daysRemaining = Math.floor(secondsRemaining / 86400);
+    const hoursRemaining = Math.floor((secondsRemaining % 86400) / 3600);
+
+    // Cliff state (for cliff type)
+    const cliffPending = vestingType === 1 && nowTs < cliffTs;
+    const cliffSecondsRemaining = Math.max(0, cliffTs - nowTs);
+    const cliffDaysRemaining = Math.floor(cliffSecondsRemaining / 86400);
+    const cliffHoursRemaining = Math.floor(
+      (cliffSecondsRemaining % 86400) / 3600
+    );
+
+    const isCompleted = Number(stream.status) === 2;
+    const isCancelled = Number(stream.status) === 3;
+
+    return {
+      total: fmt(totalBase),
+      withdrawn: fmt(withdrawnBase),
+      claimable: fmt(claimableBase),
+      vested: fmt(vestedBase),
+      hasClaimable: claimableBase > BigInt(0),
+      withdrawnPct,
+      vestedPct,
+      claimablePct,
+      vestingType,
+      streamActive,
+      isCompleted,
+      isCancelled,
+      daysRemaining,
+      hoursRemaining,
+      cliffPending,
+      cliffDaysRemaining,
+      cliffHoursRemaining,
+      decimals,
+    };
+  }, [stream]);
+
+  const withdrawFeeUsd =
+    feeEstimate.solCost && feeEstimate.solPrice
+      ? feeEstimate.solCost * feeEstimate.solPrice
+      : null;
+
+  const isSubmitting = activeTxAction === "withdraw" && !!activeTxPhase;
+
+  const getTxLabel = () => {
+    if (activeTxAction !== "withdraw" || !activeTxPhase)
+      return "Claim Claimable Tokens";
+    if (activeTxPhase === "wallet_approval") return "Approve In Wallet...";
+    if (activeTxPhase === "sending") return "Sending Transaction...";
+    return "Confirming On-Chain...";
+  };
+
+  const canSubmit =
+    !!withdrawForm.streamId.trim() &&
+    !isSubmitting &&
+    !isWrongWallet &&
+    connected &&
+    (withdrawPreview ? withdrawPreview.hasClaimable : true) &&
+    !(withdrawPreview?.isCancelled);
+
+  return (
+    <div className="animate-in fade-in-30 duration-200">
+      <div className="border-b border-zinc-900 pb-4 mb-6">
+        <h2 className="text-2xl font-extrabold tracking-tight">
+          Withdraw Claim
+        </h2>
+        <p className="text-xs text-zinc-400">
+          Withdraw matured/unlocked tokens from an active vesting stream
+        </p>
+      </div>
+
+      {/* Stream ID input */}
+      <div className="mb-5">
+        <label className="block text-xs font-semibold text-zinc-400 uppercase tracking-wider mb-1.5">
+          Stream ID (PDA Address)
+        </label>
+        <input
+          type="text"
+          value={withdrawForm.streamId}
+          onChange={(e) =>
+            setWithdrawForm({ ...withdrawForm, streamId: e.target.value })
+          }
+          placeholder="Paste stream PDA address"
+          className="w-full bg-zinc-950 border border-zinc-800 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:border-indigo-500 font-mono"
+        />
+      </div>
+
+      {/* ── Wrong wallet warning ─────────────────────────────────────────── */}
+      {isWrongWallet && (
+        <div className="mb-5 bg-amber-950/30 border border-amber-500/30 rounded-2xl p-4 flex items-start gap-3">
+          <AlertTriangle className="w-4 h-4 text-amber-400 shrink-0 mt-0.5" />
+          <div>
+            <p className="text-[11px] font-bold text-amber-300 mb-1">
+              Wrong wallet connected
+            </p>
+            <p className="text-[11px] text-amber-300/70 leading-relaxed">
+              Only the stream recipient can withdraw. This stream pays to{" "}
+              <span className="font-mono text-amber-300 break-all">
+                {stream?.recipient
+                  ? `${stream.recipient.slice(0, 6)}…${stream.recipient.slice(-4)}`
+                  : "unknown"}
+              </span>
+              , but your connected wallet is{" "}
+              <span className="font-mono text-amber-300 break-all">
+                {`${connectedWalletAddress!.slice(0, 6)}…${connectedWalletAddress!.slice(-4)}`}
+              </span>
+              .
+            </p>
+          </div>
+        </div>
+      )}
+
+      {/* ── Claimable preview + fee card ────────────────────────────────── */}
+      {withdrawPreview ? (
+        <div className="mb-5 rounded-2xl border border-zinc-800 overflow-hidden">
+          {/* Header */}
+          <div className="flex items-center justify-between gap-3 px-4 py-3 border-b border-zinc-900 bg-zinc-950/60">
+            <div className="flex items-center gap-2">
+              <div
+                className={`w-1.5 h-1.5 rounded-full ${
+                  withdrawPreview.isCancelled
+                    ? "bg-rose-500"
+                    : withdrawPreview.isCompleted
+                    ? "bg-zinc-500"
+                    : withdrawPreview.hasClaimable
+                    ? "bg-emerald-400 animate-pulse"
+                    : "bg-amber-400"
+                }`}
+              />
+              <span className="text-[10px] font-black uppercase tracking-widest text-zinc-400">
+                Withdraw Preview
+              </span>
+            </div>
+            <div className="flex items-center gap-2">
+              <span className="text-[10px] font-mono text-zinc-600">
+                {withdrawPreview.vestingType === 0
+                  ? "Linear"
+                  : withdrawPreview.vestingType === 1
+                  ? "Cliff"
+                  : "Milestone"}
+              </span>
+              {withdrawPreview.isCancelled && (
+                <span className="text-[9px] font-black uppercase tracking-wider px-2 py-0.5 rounded-full bg-rose-950/50 border border-rose-500/30 text-rose-400">
+                  Cancelled
+                </span>
+              )}
+              {withdrawPreview.isCompleted && (
+                <span className="text-[9px] font-black uppercase tracking-wider px-2 py-0.5 rounded-full bg-zinc-900 border border-zinc-700 text-zinc-400">
+                  Completed
+                </span>
+              )}
+            </div>
+          </div>
+
+          {/* ── Progress bar ── */}
+          <div className="px-4 pt-4 pb-2">
+            <div className="flex justify-between items-center mb-1.5">
+              <span className="text-[9px] font-bold uppercase tracking-wider text-zinc-600">
+                Vesting Progress
+              </span>
+              <span className="text-[10px] font-mono text-zinc-500">
+                {withdrawPreview.vestedPct.toFixed(1)}% vested
+              </span>
+            </div>
+            {/* Stacked bar: withdrawn (zinc) + claimable (emerald) + locked (zinc-900) */}
+            <div className="relative h-2.5 w-full rounded-full bg-zinc-900 overflow-hidden">
+              {/* Already withdrawn */}
+              <div
+                className="absolute left-0 top-0 h-full bg-zinc-600 rounded-l-full transition-all duration-500"
+                style={{ width: `${withdrawPreview.withdrawnPct}%` }}
+              />
+              {/* Claimable now */}
+              <div
+                className="absolute top-0 h-full bg-emerald-500 transition-all duration-500"
+                style={{
+                  left: `${withdrawPreview.withdrawnPct}%`,
+                  width: `${withdrawPreview.claimablePct}%`,
+                }}
+              />
+            </div>
+            <div className="flex gap-4 mt-2">
+              <div className="flex items-center gap-1.5">
+                <div className="w-1.5 h-1.5 rounded-full bg-zinc-600" />
+                <span className="text-[9px] text-zinc-600">Withdrawn</span>
+              </div>
+              <div className="flex items-center gap-1.5">
+                <div className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
+                <span className="text-[9px] text-zinc-600">Claimable now</span>
+              </div>
+              <div className="flex items-center gap-1.5">
+                <div className="w-1.5 h-1.5 rounded-full bg-zinc-900 border border-zinc-700" />
+                <span className="text-[9px] text-zinc-600">Still locked</span>
+              </div>
+            </div>
+          </div>
+
+          {/* ── Token amounts ── */}
+          <div className="divide-y divide-zinc-900/60 mt-1">
+            {/* Claimable now — highlight */}
+            <div
+              className={`flex items-center justify-between px-4 py-3 ${
+                withdrawPreview.hasClaimable ? "bg-emerald-950/10" : ""
+              }`}
+            >
+              <div className="flex items-center gap-2">
+                <div className="w-2 h-2 rounded-full bg-emerald-400 shrink-0" />
+                <span className="text-xs text-zinc-300 font-semibold">
+                  Claimable now
+                </span>
+              </div>
+              <span
+                className={`font-mono text-sm font-black ${
+                  withdrawPreview.hasClaimable
+                    ? "text-emerald-400"
+                    : "text-zinc-600"
+                }`}
+              >
+                {withdrawPreview.claimable}
+              </span>
+            </div>
+
+            {/* Already withdrawn */}
+            <div className="flex items-center justify-between px-4 py-3">
+              <div className="flex items-center gap-2">
+                <div className="w-2 h-2 rounded-full bg-zinc-600 shrink-0" />
+                <span className="text-xs text-zinc-500">Already withdrawn</span>
+              </div>
+              <span className="font-mono text-sm font-bold text-zinc-500">
+                {withdrawPreview.withdrawn}
+              </span>
+            </div>
+
+            {/* Total */}
+            <div className="flex items-center justify-between px-4 py-3 bg-zinc-950/40">
+              <span className="text-xs font-bold text-zinc-400">
+                Total allocation
+              </span>
+              <span className="font-mono text-sm font-bold text-zinc-200">
+                {withdrawPreview.total}
+              </span>
+            </div>
+          </div>
+
+          {/* ── Status notes ── */}
+          {withdrawPreview.cliffPending && (
+            <div className="px-4 py-3 border-t border-zinc-900 bg-violet-950/10 flex items-start gap-2">
+              <div className="w-1.5 h-1.5 rounded-full bg-violet-400 shrink-0 mt-1" />
+              <p className="text-[10px] text-violet-300/80 leading-relaxed">
+                Cliff not yet reached — tokens unlock in{" "}
+                <span className="font-bold text-violet-300">
+                  {withdrawPreview.cliffDaysRemaining}d{" "}
+                  {withdrawPreview.cliffHoursRemaining}h
+                </span>
+                .
+              </p>
+            </div>
+          )}
+
+          {!withdrawPreview.hasClaimable &&
+            !withdrawPreview.cliffPending &&
+            !withdrawPreview.isCancelled &&
+            !withdrawPreview.isCompleted && (
+              <div className="px-4 py-3 border-t border-zinc-900 bg-amber-950/10 flex items-start gap-2">
+                <div className="w-1.5 h-1.5 rounded-full bg-amber-400 shrink-0 mt-1" />
+                <p className="text-[10px] text-amber-300/80 leading-relaxed">
+                  No tokens available to claim yet. Vesting has not started or
+                  no new tokens have vested since the last withdrawal.
+                </p>
+              </div>
+            )}
+
+          {withdrawPreview.isCancelled && (
+            <div className="px-4 py-3 border-t border-zinc-900 bg-rose-950/10 flex items-start gap-2">
+              <AlertTriangle className="w-3.5 h-3.5 text-rose-400 shrink-0 mt-0.5" />
+              <p className="text-[10px] text-rose-300/80 leading-relaxed">
+                This stream has been cancelled. No further withdrawals are
+                possible.
+              </p>
+            </div>
+          )}
+
+          {withdrawPreview.streamActive &&
+            withdrawPreview.vestingType !== 2 &&
+            !withdrawPreview.cliffPending && (
+              <div className="px-4 py-3 border-t border-zinc-900 flex items-center gap-2">
+                <div className="w-1.5 h-1.5 rounded-full bg-zinc-700 shrink-0" />
+                <p className="text-[10px] text-zinc-600">
+                  Stream ends in{" "}
+                  <span className="text-zinc-500 font-semibold">
+                    {withdrawPreview.daysRemaining}d{" "}
+                    {withdrawPreview.hoursRemaining}h
+                  </span>
+                </p>
+              </div>
+            )}
+
+          {/* ── Protocol fee section ── */}
+          <div className="border-t border-amber-500/10 bg-amber-950/5">
+            <div className="flex items-center justify-between gap-3 px-4 py-3 border-b border-amber-500/10">
+              <div className="flex items-center gap-2">
+                <div className="w-5 h-5 rounded-lg bg-amber-500/10 flex items-center justify-center shrink-0">
+                  <svg
+                    className="w-3 h-3 text-amber-400"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="2"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                  >
+                    <circle cx="12" cy="12" r="10" />
+                    <path d="M12 6v2m0 8v2M9.5 9.5C9.5 8.1 10.6 7 12 7s2.5 1.1 2.5 2.5c0 3-5 3-5 6h5M12 17h.01" />
+                  </svg>
+                </div>
+                <span className="text-[10px] font-black uppercase tracking-widest text-amber-400/80">
+                  Protocol Fee (per withdraw)
+                </span>
+              </div>
+              <button
+                onClick={feeEstimate.refetch}
+                disabled={feeEstimate.loading}
+                title="Refresh SOL price"
+                className="p-1 rounded-lg text-zinc-500 hover:text-zinc-300 hover:bg-zinc-800/60 transition-all disabled:opacity-40"
+              >
+                <RefreshCw
+                  className={`w-3 h-3 ${feeEstimate.loading ? "animate-spin" : ""}`}
+                />
+              </button>
+            </div>
+
+            <div className="px-4 py-3 flex items-center justify-between">
+              <div>
+                <div className="text-xs font-bold text-zinc-100">$0.99 USD</div>
+                {feeEstimate.solPrice && (
+                  <div className="text-[9px] text-zinc-600 font-mono mt-0.5">
+                    @ ${feeEstimate.solPrice.toFixed(2)}/SOL
+                  </div>
+                )}
+              </div>
+              <div className="text-right">
+                {feeEstimate.loading ? (
+                  <span className="text-xs text-zinc-500 font-mono animate-pulse">
+                    fetching...
+                  </span>
+                ) : feeEstimate.error || !feeEstimate.solCost ? (
+                  <span className="text-xs text-zinc-500 font-mono">
+                    unavailable
+                  </span>
+                ) : (
+                  <>
+                    <div className="font-mono text-sm font-extrabold text-amber-300">
+                      ◎ {feeEstimate.solCost.toFixed(6)} SOL
+                    </div>
+                    {withdrawFeeUsd && (
+                      <div className="text-[9px] text-zinc-600 font-mono mt-0.5">
+                        ≈ ${withdrawFeeUsd.toFixed(2)}
+                      </div>
+                    )}
+                  </>
+                )}
+              </div>
+            </div>
+
+            <div className="px-4 pb-3">
+              <p className="text-[10px] text-amber-300/50 leading-relaxed">
+                Charged in SOL from your wallet on every{" "}
+                <code className="font-mono bg-amber-950/40 px-1 rounded">
+                  withdraw
+                </code>{" "}
+                call, regardless of claim size.
+              </p>
+            </div>
+          </div>
+        </div>
+      ) : (
+        /* ── Stream not found — tampilkan fee card standalone ── */
+        <div className="mt-5 rounded-2xl border border-amber-500/20 bg-amber-950/10 overflow-hidden mb-5">
+          <div className="flex items-center justify-between gap-3 px-4 py-3 border-b border-amber-500/10">
+            <div className="flex items-center gap-2">
+              <div className="w-6 h-6 rounded-lg bg-amber-500/10 flex items-center justify-center shrink-0">
+                <svg
+                  className="w-3.5 h-3.5 text-amber-400"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                >
+                  <circle cx="12" cy="12" r="10" />
+                  <path d="M12 6v2m0 8v2M9.5 9.5C9.5 8.1 10.6 7 12 7s2.5 1.1 2.5 2.5c0 3-5 3-5 6h5M12 17h.01" />
+                </svg>
+              </div>
+              <span className="text-[11px] font-black uppercase tracking-widest text-amber-400/80">
+                Protocol Fee (per withdraw call)
+              </span>
+            </div>
+            <button
+              onClick={feeEstimate.refetch}
+              disabled={feeEstimate.loading}
+              title="Refresh SOL price"
+              className="p-1 rounded-lg text-zinc-500 hover:text-zinc-300 hover:bg-zinc-800/60 transition-all disabled:opacity-40"
+            >
+              <RefreshCw
+                className={`w-3 h-3 ${feeEstimate.loading ? "animate-spin" : ""}`}
+              />
+            </button>
+          </div>
+          <div className="px-4 py-3.5 flex flex-col gap-3">
+            <div className="flex items-center justify-between">
+              <span className="text-xs text-zinc-400">Fixed fee (USD)</span>
+              <span className="font-mono text-sm font-extrabold text-zinc-100">
+                $0.99
+              </span>
+            </div>
+            <div className="flex items-center justify-between">
+              <span className="text-xs text-zinc-400">
+                Estimated SOL cost
+                {feeEstimate.solPrice && (
+                  <span className="ml-1.5 text-[10px] text-zinc-600">
+                    @ ${feeEstimate.solPrice.toFixed(2)}/SOL
+                  </span>
+                )}
+              </span>
+              {feeEstimate.loading ? (
+                <span className="text-xs text-zinc-500 font-mono animate-pulse">
+                  fetching...
+                </span>
+              ) : feeEstimate.error || !feeEstimate.solCost ? (
+                <span className="text-xs text-zinc-500 font-mono">
+                  unavailable
+                </span>
+              ) : (
+                <span className="font-mono text-sm font-extrabold text-amber-300">
+                  ◎ {feeEstimate.solCost.toFixed(6)} SOL
+                </span>
+              )}
+            </div>
+            <div className="flex items-start gap-2 pt-1 border-t border-amber-500/10">
+              <div className="mt-0.5 w-1 h-1 rounded-full bg-amber-400/60 shrink-0" />
+              <p className="text-[10px] text-amber-300/60 leading-relaxed">
+                Fee is charged in SOL from{" "}
+                <span className="font-bold text-amber-300/80">your wallet</span>{" "}
+                on every{" "}
+                <code className="font-mono bg-amber-950/40 px-1 rounded">
+                  withdraw
+                </code>{" "}
+                call, regardless of how many tokens are claimed.
+              </p>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Stream not found hint */}
+      {withdrawForm.streamId.trim() && !stream && (
+        <div className="mb-5 bg-zinc-900/40 border border-zinc-800 rounded-xl px-4 py-3 flex items-center gap-2">
+          <div className="w-1.5 h-1.5 rounded-full bg-zinc-600" />
+          <span className="text-[11px] text-zinc-500">
+            Stream not found in local index — preview unavailable until the
+            indexer syncs.
+          </span>
+        </div>
+      )}
+
+      {/* Submit button */}
+      <button
+        disabled={!canSubmit}
+        onClick={() => handleAction("withdraw", withdrawForm)}
+        className={`w-full text-white font-bold text-xs py-3 rounded-xl transition-all shadow-lg flex items-center justify-center gap-2 ${
+          !canSubmit
+            ? "bg-zinc-800 text-zinc-500 cursor-not-allowed shadow-none"
+            : "bg-indigo-600 hover:bg-indigo-700 hover:shadow-indigo-500/20"
+        }`}
+      >
+        {isSubmitting ? (
+          <RefreshCw className="w-4 h-4 animate-spin" />
+        ) : null}
+        {!connected
+          ? "Connect wallet to withdraw"
+          : isWrongWallet
+          ? "Wrong wallet — switch to recipient wallet"
+          : withdrawPreview?.isCancelled
+          ? "Stream cancelled — cannot withdraw"
+          : !withdrawPreview?.hasClaimable && withdrawPreview
+          ? "No tokens to claim yet"
+          : getTxLabel()}
+      </button>
+    </div>
+  );
+}
 // ─── Cancel Panel ─────────────────────────────────────────────────────────
 function CancelPanel({
   cancelForm,
@@ -1874,123 +2456,18 @@ const editCsvDisabled =
       )}
 
       {activeTab === "withdraw" && (
-        <div className="animate-in fade-in-30 duration-200">
-          <div className="border-b border-zinc-900 pb-4 mb-6">
-            <h2 className="text-2xl font-extrabold tracking-tight">Withdraw Claim</h2>
-            <p className="text-xs text-zinc-400">Withdraw matured/unlocked tokens from an active vesting stream</p>
-          </div>
-
-          <div className="grid gap-4">
-            <div>
-              <label className="block text-xs font-semibold text-zinc-400 uppercase tracking-wider mb-1.5">
-                Stream ID (PDA Address)
-              </label>
-              <input
-                type="text"
-                value={withdrawForm.streamId}
-                onChange={(e) => setWithdrawForm({ ...withdrawForm, streamId: e.target.value })}
-                className="w-full bg-zinc-950 border border-zinc-800 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:border-indigo-500 font-mono"
-              />
-            </div>
-          </div>
-
-          {/* ─── Protocol Fee Preview Card ─────────────────────────────────── */}
-          <div className="mt-5 rounded-2xl border border-amber-500/20 bg-amber-950/10 overflow-hidden">
-            {/* Header */}
-            <div className="flex items-center justify-between gap-3 px-4 py-3 border-b border-amber-500/10">
-              <div className="flex items-center gap-2">
-                <div className="w-6 h-6 rounded-lg bg-amber-500/10 flex items-center justify-center shrink-0">
-                  <svg className="w-3.5 h-3.5 text-amber-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                    <circle cx="12" cy="12" r="10"/><path d="M12 6v2m0 8v2M9.5 9.5C9.5 8.1 10.6 7 12 7s2.5 1.1 2.5 2.5c0 3-5 3-5 6h5M12 17h.01"/>
-                  </svg>
-                </div>
-                <span className="text-[11px] font-black uppercase tracking-widest text-amber-400/80">
-                  Protocol Fee (per withdraw call)
-                </span>
-              </div>
-              <button
-                onClick={feeEstimate.refetch}
-                disabled={feeEstimate.loading}
-                title="Refresh SOL price"
-                className="p-1 rounded-lg text-zinc-500 hover:text-zinc-300 hover:bg-zinc-800/60 transition-all disabled:opacity-40"
-              >
-                <RefreshCw className={`w-3 h-3 ${feeEstimate.loading ? "animate-spin" : ""}`} />
-              </button>
-            </div>
-
-            {/* Fee breakdown */}
-            <div className="px-4 py-3.5 flex flex-col gap-3">
-              {/* Fixed USD amount */}
-              <div className="flex items-center justify-between">
-                <span className="text-xs text-zinc-400">Fixed fee (USD)</span>
-                <span className="font-mono text-sm font-extrabold text-zinc-100">$0.99</span>
-              </div>
-
-              {/* SOL equivalent */}
-              <div className="flex items-center justify-between">
-                <span className="text-xs text-zinc-400">
-                  Estimated SOL cost
-                  {feeEstimate.solPrice && (
-                    <span className="ml-1.5 text-[10px] text-zinc-600">
-                      @ ${feeEstimate.solPrice.toFixed(2)}/SOL
-                    </span>
-                  )}
-                </span>
-                <div className="flex items-center gap-2">
-                  {feeEstimate.loading ? (
-                    <span className="text-xs text-zinc-500 font-mono animate-pulse">fetching...</span>
-                  ) : feeEstimate.error || !feeEstimate.solCost ? (
-                    <span className="text-xs text-zinc-500 font-mono">unavailable</span>
-                  ) : (
-                    <span className="font-mono text-sm font-extrabold text-amber-300">
-                      ◎ {feeEstimate.solCost.toFixed(6)} SOL
-                    </span>
-                  )}
-                </div>
-              </div>
-
-              {/* Charged from */}
-              <div className="flex items-start gap-2 pt-1 border-t border-amber-500/10">
-                <div className="mt-0.5 w-1 h-1 rounded-full bg-amber-400/60 shrink-0" />
-                <p className="text-[10px] text-amber-300/60 leading-relaxed">
-                  Fee is charged in SOL from <span className="font-bold text-amber-300/80">your wallet</span> on every{" "}
-                  <code className="font-mono bg-amber-950/40 px-1 rounded">withdraw</code> call, regardless of how many
-                  tokens are claimed. Partial claims are fully supported but each call costs the full fee.
-                </p>
-              </div>
-
-              {/* Error fallback notice */}
-              {feeEstimate.error && (
-                <div className="flex items-center gap-2 pt-1 border-t border-zinc-800">
-                  <svg className="w-3 h-3 text-zinc-500 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                    <circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/>
-                  </svg>
-                  <span className="text-[10px] text-zinc-500">
-                    Could not fetch SOL price. The on-chain fee will still be charged at live oracle price.
-                  </span>
-                </div>
-              )}
-            </div>
-          </div>
-          {/* ──────────────────────────────────────────────────────────────────── */}
-
-          <button
-            disabled={withdrawDisabled}
-            onClick={() => handleAction("withdraw", withdrawForm)}
-            className={`w-full mt-5 text-white font-bold text-xs py-3 rounded-xl transition-all shadow-lg flex items-center justify-center gap-2 ${
-              withdrawDisabled
-                ? "bg-zinc-800 text-zinc-500 cursor-not-allowed shadow-none"
-                : "bg-indigo-600 hover:bg-indigo-700 hover:shadow-indigo-500/20"
-            }`}
-          >
-            {activeTxAction === "withdraw" && activeTxPhase ? (
-              <RefreshCw className="w-4 h-4 animate-spin" />
-            ) : null}
-            {getTxLabel("withdraw", "Claim Claimable Tokens")}
-          </button>
-        </div>
+        <WithdrawPanel
+    withdrawForm={withdrawForm}
+    setWithdrawForm={setWithdrawForm}
+    handleAction={handleAction}
+    streams={streams}
+    connectedWalletAddress={connectedWalletAddress}
+    activeTxAction={activeTxAction}
+    activeTxPhase={activeTxPhase}
+    connected={connected}
+  />
       )}
-      
+
 {activeTab === "cancel" && (
   <CancelPanel
     cancelForm={cancelForm}
