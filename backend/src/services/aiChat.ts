@@ -178,7 +178,6 @@ const TOOLS = [
         type: "object",
         properties: {
           stream_pda: { type: "string", description: "Stream account PDA public key" },
-
           new_end_ts: { type: "number", description: "New end timestamp (Unix seconds)" },
           topup_amount: { type: "number", description: "Additional tokens to deposit into vault (0 if only extending)" },
         },
