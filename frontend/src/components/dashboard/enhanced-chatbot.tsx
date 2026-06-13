@@ -222,7 +222,6 @@ case "edit_milestone": {
   const { stream_pda, mint, milestone_index, new_amount } = parsedArgs;
   const result = await client.editMilestone(
     new PublicKey(stream_pda),
-    new PublicKey(mint),
     Number(milestone_index),
     new BN(new_amount)
   );
@@ -242,7 +241,6 @@ case "edit_linear": {
   const { stream_pda, mint, new_end_ts, topup_amount } = parsedArgs;
   const result = await client.editLinear(
     new PublicKey(stream_pda),
-    new PublicKey(mint),
     new BN(new_end_ts),
     new BN(topup_amount)
   );
