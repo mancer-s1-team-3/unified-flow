@@ -170,7 +170,6 @@ const executeToolWithFeedback = async (toolName: string, args: string) => {
       switch (toolName) {
        case "create_stream": {
   const {
-    creator,
     recipient,
     mint,
     amount,
@@ -210,7 +209,7 @@ case "cancel_stream": {
   return { success: true, message: `Stream cancelled! Tx: ${result.signature}` };
 }
         case "unlock_milestone": {
-          const { stream_pda, creator, milestone_index } = parsedArgs;
+          const { stream_pda,  milestone_index } = parsedArgs;
 
           const result = await client.unlockMilestone(
             new PublicKey(stream_pda),
@@ -219,7 +218,7 @@ case "cancel_stream": {
           return { success: true, message: `Milestone ${milestone_index} unlocked! Tx: ${result.signature}` };
         }
 case "edit_milestone": {
-  const { stream_pda, mint, milestone_index, new_amount } = parsedArgs;
+  const { stream_pda,  milestone_index, new_amount } = parsedArgs;
   const result = await client.editMilestone(
     new PublicKey(stream_pda),
     Number(milestone_index),
@@ -238,7 +237,7 @@ case "edit_cliff": {
 }
 
 case "edit_linear": {
-  const { stream_pda, mint, new_end_ts, topup_amount } = parsedArgs;
+  const { stream_pda,  new_end_ts, topup_amount } = parsedArgs;
   const result = await client.editLinear(
     new PublicKey(stream_pda),
     new BN(new_end_ts),
