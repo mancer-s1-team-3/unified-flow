@@ -282,14 +282,16 @@ export class UnifiedFlowClient {
 
     const anchorIx = await this.program.methods
       .cancel()
-      .accounts({
+      .accountsStrict({
         creator,
         stream: streamPDA,
+        mint,
         config,
         vault,
         creatorTokenAccount,
         recipientTokenAccount,
         tokenProgram: TOKEN_PROGRAM_ID,
+        systemProgram: SystemProgram.programId,
       } as any)
       .instruction();
 
@@ -300,11 +302,13 @@ export class UnifiedFlowClient {
     const kitIx = this._toKitInstruction(anchorIx, [
       { address: creator.toBase58(), role: AccountRole.WRITABLE_SIGNER, signer: this.kitSigner },
       { address: streamPDA.toBase58(), role: AccountRole.WRITABLE },
+      { address: mint.toBase58(), role: AccountRole.READONLY },
       { address: config.toBase58(), role: AccountRole.READONLY },
       { address: vault.toBase58(), role: AccountRole.WRITABLE },
       { address: creatorTokenAccount.toBase58(), role: AccountRole.WRITABLE },
       { address: recipientTokenAccount.toBase58(), role: AccountRole.WRITABLE },
       { address: TOKEN_PROGRAM_ID.toBase58(), role: AccountRole.READONLY },
+      { address: SystemProgram.programId.toBase58(), role: AccountRole.READONLY },
     ]);
 
     const txMsg = this._buildTxMessage(kitIx, blockhash, lastValidBlockHeight);
@@ -336,6 +340,7 @@ export class UnifiedFlowClient {
         creator,
         stream: streamPDA,
         milestone: milestonePDA,
+        systemProgram: SystemProgram.programId,
       } as any)
       .instruction();
 
@@ -347,6 +352,7 @@ export class UnifiedFlowClient {
       { address: creator.toBase58(), role: AccountRole.WRITABLE_SIGNER, signer: this.kitSigner },
       { address: streamPDA.toBase58(), role: AccountRole.WRITABLE },
       { address: milestonePDA.toBase58(), role: AccountRole.WRITABLE },
+      { address: SystemProgram.programId.toBase58(), role: AccountRole.READONLY },
     ]);
 
     const txMsg = this._buildTxMessage(kitIx, blockhash, lastValidBlockHeight);
