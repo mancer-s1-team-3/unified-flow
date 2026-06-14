@@ -313,7 +313,7 @@ function UnlockMilestonePanel({
   const isStreamCompleted = !!stream && Number(stream.status) === 2;
 
   // ── Milestone list dari /streams/:id ──────────────────────────────────
-  const milestonePreview = useMemo(() => {
+ const milestonePreview = useMemo(() => {
   if (!streamDetail) return null;
 
   const decimals =
@@ -324,23 +324,15 @@ function UnlockMilestonePanel({
   const milestoneCount = Number(streamDetail.milestoneCount ?? 0);
   if (milestoneCount === 0) return null;
 
-  const nextIndex = Number(
-    streamDetail.nextMilestoneIndex ??
-      streamDetail.next_milestone_index ??
-      0
-  );
-
   // ── Parse amounts dari semicolon string ───────────────────────────────
   const rawStr = String(streamDetail.milestones || "").trim();
   const rawAmounts: bigint[] = rawStr
-    ? rawStr
-        .split(";")
-        .map((v) => {
-          try { return BigInt(v.trim()); } catch { return BigInt(0); }
-        })
+    ? rawStr.split(";").map((v) => {
+        try { return BigInt(v.trim()); } catch { return BigInt(0); }
+      })
     : [];
 
-  // Fallback distribusi merata kalau jumlah tidak cocok
+  // Fallback distribusi merata
   const totalBase = parseBaseUnits(streamDetail.totalAmount);
   let amounts: bigint[];
   if (rawAmounts.length === milestoneCount) {
@@ -353,12 +345,34 @@ function UnlockMilestonePanel({
     );
   }
 
+  // ── Derive nextIndex dari unlockedAmount ──────────────────────────────
+  // Hitung cumulative sum sampai cocok dengan unlockedAmount
+  // Ini akurat karena unlock selalu sequential
+  const unlockedAmountBase = parseBaseUnits(
+    streamDetail.unlockedAmount ?? streamDetail.unlocked_amount ?? 0
+  );
+
+  let derivedNextIndex = 0;
+  let cumulativeSum = BigInt(0);
+  for (let i = 0; i < milestoneCount; i++) {
+    cumulativeSum += amounts[i];
+    if (cumulativeSum <= unlockedAmountBase) {
+      derivedNextIndex = i + 1;
+    } else {
+      break;
+    }
+  }
+
+  // Fallback ke field kalau ada (untuk future-proofing)
+  const nextIndex =
+    streamDetail.nextMilestoneIndex ??
+    streamDetail.next_milestone_index ??
+    derivedNextIndex;
+
   // ── Derive unlock timestamps dari transactions[] ───────────────────────
-  // transactions diurutkan terbaru ke terlama — pakai index unlock order
-  // Setiap MILESTONE_UNLOCKED tx = satu milestone, urut dari index 0
   const unlockTxs = (streamDetail.transactions ?? [])
     .filter((tx: any) => tx.type === "MILESTONE_UNLOCKED")
-    .sort((a: any, b: any) => Number(a.slot) - Number(b.slot)); // oldest first = index 0
+    .sort((a: any, b: any) => Number(a.slot) - Number(b.slot));
 
   const fmt = (v: bigint) =>
     Number(formatBaseUnitsToTokenAmount(v, decimals)).toLocaleString(
@@ -372,8 +386,6 @@ function UnlockMilestonePanel({
     const isUnlocked = i < nextIndex;
     const isNext = i === nextIndex;
     const isLocked = i > nextIndex;
-
-    // Cari unlock tx untuk milestone ini berdasarkan urutan slot
     const unlockTx = isUnlocked ? (unlockTxs[i] ?? null) : null;
     const unlockTs = unlockTx?.raw?.blockTime ?? null;
 
@@ -388,26 +400,25 @@ function UnlockMilestonePanel({
     };
   });
 
-  // ── Aggregate totals ───────────────────────────────────────────────────
-  const unlockedAmountBase = items
+  // ── Totals ─────────────────────────────────────────────────────────────
+  const unlockedTotal = items
     .filter((m) => m.isUnlocked)
     .reduce((sum, m) => sum + m.amountBase, BigInt(0));
-  const lockedAmountBase = items
+  const lockedTotal = items
     .filter((m) => m.isNext || m.isLocked)
     .reduce((sum, m) => sum + m.amountBase, BigInt(0));
 
-  const unlockedCount = nextIndex;
-  const allUnlocked = unlockedCount >= milestoneCount;
+  const allUnlocked = nextIndex >= milestoneCount;
   const nextMilestone = items.find((m) => m.isNext) ?? null;
 
   return {
     items,
     milestoneCount,
     nextIndex,
-    unlockedCount,
-    lockedCount: milestoneCount - unlockedCount,
-    unlockedAmount: fmt(unlockedAmountBase),
-    lockedAmount: fmt(lockedAmountBase),
+    unlockedCount: nextIndex,
+    lockedCount: milestoneCount - nextIndex,
+    unlockedAmount: fmt(unlockedTotal),
+    lockedAmount: fmt(lockedTotal),
     nextMilestone,
     allUnlocked,
   };
