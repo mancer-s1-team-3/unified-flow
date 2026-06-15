@@ -1779,6 +1779,8 @@ export function DashboardActionPanels(props: Props) {
   const csvMilestoneValidation = useCsvMilestoneValidation(csvCreateText);
   const csvEditMilestoneValidation = useCsvMilestoneValidation(csvEditText);
   const csvEditIdValidation = useCsvIdValidation(csvEditText, streams, true);
+  const csvDurationValidation = useCsvDurationValidation(csvCreateText, "create", streams);
+  const csvEditDurationValidation = useCsvDurationValidation(csvEditText, "edit", streams);
   // ─── Solana pubkey validator ──────────────────────────────────────────────
 
   // ── Resolve mint dari stream yang sedang diedit ───────────────────────────
@@ -1952,6 +1954,7 @@ const createCsvDisabled =
   !csvCreateText?.trim() ||
   activeTxAction === "create_stream_csv" ||
   csvMilestoneValidation.hasErrors ||
+  csvDurationValidation.hasErrors || // ← validasi duration/cliff per baris
   csvExceedsBalance ||
   !createDiffFresh; // ← gate wajib: diff terkini harus ditinjau dulu
 const csvEditTotalByMint = useCsvEditTotalByMint(csvEditText);
@@ -1965,6 +1968,7 @@ const editCsvDisabled =
   activeTxAction === "edit_stream_csv" ||
   csvEditMilestoneValidation.hasErrors ||
   csvEditIdValidation.hasErrors || // ← blok apply kalau ada id ngawur
+  csvEditDurationValidation.hasErrors || // ← validasi duration/cliff per baris
   csvEditExceedsBalance ||
   !editDiffFresh; // ← gate wajib: diff terkini harus ditinjau dulu
 
@@ -2736,7 +2740,7 @@ const editCsvDisabled =
 />
               <CsvDiffPanel csvDiffResult={csvDiffResult} compareVersionSelected={compareVersionSelected} onClose={() => setCsvDiffResult(null)} />
 
-              {!createDiffFresh && csvCreateText?.trim() && !csvMilestoneValidation.hasErrors && !csvExceedsBalance && (
+              {!createDiffFresh && csvCreateText?.trim() && !csvMilestoneValidation.hasErrors && !csvDurationValidation.hasErrors && !csvExceedsBalance && (
                 <div className="mt-4 bg-amber-950/20 border border-amber-500/25 rounded-xl px-4 py-3 flex items-center gap-2">
                   <Layers className="w-3.5 h-3.5 text-amber-400 shrink-0" />
                   <span className="text-[11px] text-amber-300/90 leading-relaxed">
@@ -2872,7 +2876,7 @@ const editCsvDisabled =
               onClose={() => setCsvDiffResult(null)}
             />
 
-            {!editDiffFresh && csvEditText?.trim() && !csvEditMilestoneValidation.hasErrors && !csvEditIdValidation.hasErrors && !csvEditExceedsBalance && (
+            {!editDiffFresh && csvEditText?.trim() && !csvEditMilestoneValidation.hasErrors && !csvEditIdValidation.hasErrors && !csvEditDurationValidation.hasErrors && !csvEditExceedsBalance && (
               <div className="mt-4 bg-amber-950/20 border border-amber-500/25 rounded-xl px-4 py-3 flex items-center gap-2">
                 <Layers className="w-3.5 h-3.5 text-amber-400 shrink-0" />
                 <span className="text-[11px] text-amber-300/90 leading-relaxed">
@@ -3325,6 +3329,187 @@ function useCsvIdValidation(
   }, [csvText, knownStreams, enabled]);
 }
 
+// ── Duration / cliff validation for CSV (create + edit) ─────────────────────
+// Validates duration & cliff_duration per row BEFORE submit so the user never
+// hits an opaque mid-batch on-chain failure (e.g. edit-stream.ts throwing when
+// a new linear duration doesn't extend the end time). Mirrors the on-chain
+// rules: create needs duration > 0 (+ cliff_duration ∈ (0, duration] for cliff
+// rows); edit resolves each row against the *live* stream's vesting type
+// (linear → new end must extend current end; cliff → new cliff ∈ [start, end]).
+type CsvDurationIssue = {
+  rowNum: number;
+  field: "duration" | "cliff_duration" | "header";
+  reason: string;
+};
+function useCsvDurationValidation(
+  csvText: string,
+  mode: "create" | "edit",
+  knownStreams?: any[]
+): { issues: CsvDurationIssue[]; hasErrors: boolean } {
+  return useMemo(() => {
+    if (!csvText?.trim()) return { issues: [], hasErrors: false };
+
+    const lines = csvText.trim().split("\n");
+    if (lines.length < 2) return { issues: [], hasErrors: false };
+
+    const headers = lines[0].split(",").map((h) => h.trim().toLowerCase());
+    const typeIdx = headers.indexOf("type");
+    const durIdx = headers.indexOf("duration");
+    const cliffIdx =
+      headers.indexOf("cliff_duration") !== -1
+        ? headers.indexOf("cliff_duration")
+        : headers.indexOf("cliffduration");
+    const idIdx = headers.indexOf("id");
+    const amountIdx = headers.indexOf("amount");
+
+    const MAX_DURATION = 100 * 365 * 24 * 60 * 60; // ~100 years, catches typos/overflow
+    const issues: CsvDurationIssue[] = [];
+
+    // Parse a duration cell into a positive whole number of seconds.
+    const parseSecs = (
+      raw: string
+    ): { ok: boolean; value: number; bad: "missing" | "float" | "invalid" | null } => {
+      const t = (raw ?? "").trim();
+      if (t === "") return { ok: false, value: 0, bad: "missing" };
+      if (/^\d+$/.test(t)) return { ok: true, value: Number(t), bad: null };
+      if (/^\d+\.\d+$/.test(t)) return { ok: false, value: Number(t), bad: "float" };
+      return { ok: false, value: NaN, bad: "invalid" };
+    };
+
+    // Create mode cannot proceed without a duration column at all.
+    if (mode === "create" && durIdx === -1) {
+      return {
+        issues: [{ rowNum: 0, field: "header", reason: "Missing required column: duration" }],
+        hasErrors: true,
+      };
+    }
+
+    const knownById = new Map<string, any>();
+    (knownStreams ?? []).forEach((s) => {
+      const sid = String(s?.id ?? "").trim();
+      if (sid) knownById.set(sid, s);
+    });
+
+    for (let i = 1; i < lines.length; i++) {
+      const line = lines[i].trim();
+      if (!line) continue;
+      const values = line.split(",").map((v) => v.trim());
+
+      if (mode === "create") {
+        const d = parseSecs(durIdx !== -1 ? values[durIdx] ?? "" : "");
+        if (!d.ok) {
+          issues.push({
+            rowNum: i,
+            field: "duration",
+            reason:
+              d.bad === "missing"
+                ? "duration is required (whole seconds > 0)"
+                : d.bad === "float"
+                ? "duration must be a whole number of seconds"
+                : "duration is not a valid number",
+          });
+        } else if (d.value <= 0) {
+          issues.push({ rowNum: i, field: "duration", reason: "duration must be greater than 0" });
+        } else if (d.value > MAX_DURATION) {
+          issues.push({ rowNum: i, field: "duration", reason: "duration is unreasonably large (max ~100 years)" });
+        }
+
+        // cliff_duration only matters for cliff (type 1) rows
+        if (typeIdx !== -1 && values[typeIdx] === "1") {
+          const c = parseSecs(cliffIdx !== -1 ? values[cliffIdx] ?? "" : "");
+          if (!c.ok) {
+            issues.push({
+              rowNum: i,
+              field: "cliff_duration",
+              reason:
+                c.bad === "missing"
+                  ? "cliff_duration is required for cliff (type 1) streams"
+                  : c.bad === "float"
+                  ? "cliff_duration must be a whole number of seconds"
+                  : "cliff_duration is not a valid number",
+            });
+          } else if (c.value <= 0) {
+            issues.push({ rowNum: i, field: "cliff_duration", reason: "cliff_duration must be greater than 0 for cliff streams" });
+          } else if (d.ok && d.value > 0 && c.value > d.value) {
+            issues.push({ rowNum: i, field: "cliff_duration", reason: "cliff_duration must be ≤ duration (cliff must fall within the stream)" });
+          }
+        }
+        continue;
+      }
+
+      // ── edit mode: validate against the live stream's actual vesting type ──
+      const id = idIdx !== -1 ? (values[idIdx] ?? "").trim() : "";
+      if (!id) continue;                  // identity-match rows: type unknown here
+      const stream = knownById.get(id);
+      if (!stream) continue;              // unknown id → useCsvIdValidation flags it
+      const vestingType = Number(stream.vestingType);
+      const start = Number(stream.startTs ?? 0);
+      const currentEnd = Number(stream.endTs ?? 0);
+
+      const durCell = durIdx !== -1 ? (values[durIdx] ?? "") : "";
+      const cliffCell = cliffIdx !== -1 ? (values[cliffIdx] ?? "") : "";
+      const amountCell = amountIdx !== -1 ? (values[amountIdx] ?? "") : "";
+      const hasDuration = durCell.trim() !== "" && durCell.trim() !== "0";
+      const hasCliff = cliffCell.trim() !== "" && cliffCell.trim() !== "0";
+      const hasAmount = amountCell.trim() !== "" && amountCell.trim() !== "0";
+
+      if (vestingType === 0 && hasDuration) {
+        const d = parseSecs(durCell);
+        if (!d.ok) {
+          issues.push({
+            rowNum: i,
+            field: "duration",
+            reason: d.bad === "float" ? "duration must be a whole number of seconds" : "duration is not a valid number",
+          });
+        } else if (d.value > MAX_DURATION) {
+          issues.push({ rowNum: i, field: "duration", reason: "duration is unreasonably large (max ~100 years)" });
+        } else if (start > 0 && currentEnd > 0 && start + d.value <= currentEnd) {
+          // Not extending the end — only allowed if the row also tops up the
+          // total (delta > 0), mirroring the on-chain edit_linear rule.
+          let topupPositive = false;
+          if (hasAmount) {
+            const decimals = typeof stream.mintDecimals === "number" ? stream.mintDecimals : 6;
+            const currentTotal = Number(
+              formatBaseUnitsToTokenAmount(parseBaseUnits(stream.totalAmount), decimals)
+            );
+            const newTotal = parseFloat(amountCell) || 0;
+            topupPositive = newTotal - currentTotal > 0;
+          }
+          if (!topupPositive) {
+            issues.push({
+              rowNum: i,
+              field: "duration",
+              reason: "new duration must extend the end time, or provide a higher total amount to top up",
+            });
+          }
+        }
+      }
+
+      if (vestingType === 1 && hasCliff) {
+        const c = parseSecs(cliffCell);
+        if (!c.ok) {
+          issues.push({
+            rowNum: i,
+            field: "cliff_duration",
+            reason: c.bad === "float" ? "cliff_duration must be a whole number of seconds" : "cliff_duration is not a valid number",
+          });
+        } else if (start > 0 && currentEnd > 0) {
+          const newCliff = start + c.value;
+          if (newCliff < start || newCliff > currentEnd) {
+            issues.push({
+              rowNum: i,
+              field: "cliff_duration",
+              reason: "cliff must fall between stream start and end (cliff_duration ≤ stream duration)",
+            });
+          }
+        }
+      }
+    }
+
+    return { issues, hasErrors: issues.length > 0 };
+  }, [csvText, mode, knownStreams]);
+}
+
 function CsvValidationPanel({
   csvText,
   walletBalance,
@@ -3350,6 +3535,8 @@ function CsvValidationPanel({
     editStreams,
     !!editMode
   );
+  const { issues: durationIssues, hasErrors: hasDurationErrors } =
+    useCsvDurationValidation(csvText, editMode ? "edit" : "create", editStreams);
   const totalByMint = useCsvTotalByMint(csvText);
 
   // ── Per-mint balance check ─────────────────────────────────────────────
@@ -3370,9 +3557,9 @@ const mintExceedsBalance =
   walletBalance !== null &&
   csvTotalForMint > walletBalance;
 
-  const hasAnyError = hasErrors || !!mintExceedsBalance || hasIdErrors;
+  const hasAnyError = hasErrors || !!mintExceedsBalance || hasIdErrors || hasDurationErrors;
 
-  if (rows.length === 0 && !mintExceedsBalance && idIssues.length === 0) return null;
+  if (rows.length === 0 && !mintExceedsBalance && idIssues.length === 0 && durationIssues.length === 0) return null;
 
   const allGood = !hasAnyError;
 
@@ -3399,6 +3586,7 @@ const mintExceedsBalance =
             : [
                 mintExceedsBalance && "insufficient balance",
                 hasIdErrors && `${idIssues.length} invalid id${idIssues.length > 1 ? "s" : ""}`,
+                hasDurationErrors && `${durationIssues.length} duration issue${durationIssues.length > 1 ? "s" : ""}`,
                 hasErrors && `${rows.filter((r) => !r.isMatch || r.hasInvalid).length} unbalanced`,
               ]
                 .filter(Boolean)
@@ -3457,6 +3645,28 @@ const mintExceedsBalance =
                 </div>
                 <div className="text-[10px] font-mono text-rose-400/80 break-all mb-0.5">
                   {issue.id}
+                </div>
+                <div className="text-[10px] text-rose-300/70">{issue.reason}</div>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* ── Duration / cliff issues (create + edit) ──────────────────────── */}
+      {durationIssues.length > 0 && (
+        <div className="border-b border-rose-500/20">
+          {durationIssues.map((issue, k) => (
+            <div
+              key={`dur-${issue.rowNum}-${issue.field}-${k}`}
+              className="px-4 py-3 bg-rose-950/20 flex items-start gap-3 border-b border-rose-500/10 last:border-b-0"
+            >
+              <AlertTriangle className="w-4 h-4 text-rose-400 shrink-0 mt-0.5" />
+              <div className="flex-1 min-w-0">
+                <div className="text-[11px] font-bold text-rose-300 mb-0.5">
+                  {issue.field === "header"
+                    ? "CSV header"
+                    : `Row #${issue.rowNum} · ${issue.field}`}
                 </div>
                 <div className="text-[10px] text-rose-300/70">{issue.reason}</div>
               </div>
@@ -3568,6 +3778,8 @@ const mintExceedsBalance =
     <p className="text-[10px] text-rose-300/80 leading-relaxed">
       {hasIdErrors
         ? "Fix the invalid id column before applying. Each edit row must reference an existing CSV-created stream id, or leave id blank to match by recipient."
+        : hasDurationErrors
+        ? "Fix the highlighted duration / cliff_duration values before applying. Durations must be whole positive seconds, and edits must extend the end (linear) or keep the cliff within the stream."
         : mintExceedsBalance && hasErrors
         ? editMode
           ? "Fix balance shortfall (milestone + topup amounts) and milestone allocations before applying."

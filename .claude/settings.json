@@ -1,0 +1,13 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(node ./node_modules/eslint/bin/eslint.js --format compact src/components/dashboard/dashboard-action-panels.tsx src/components/dashboard/dashboard-home-client.tsx src/components/dashboard/csv-diff-panel.tsx)",
+      "Bash(awk '{print $2}')",
+      "Bash(node ./node_modules/eslint/bin/eslint.js --format json src/components/dashboard/dashboard-action-panels.tsx src/components/dashboard/dashboard-home-client.tsx src/components/dashboard/csv-diff-panel.tsx)",
+      "Bash(node -e 'const d=JSON.parse\\(require\\(\"fs\"\\).readFileSync\\(0\\)\\);for\\(const f of d\\){const lines=f.messages.map\\(m=>m.line\\);console.log\\(f.filePath.split\\(\"/dashboard/\"\\)[1]+\": \"+lines.sort\\(\\(a,b\\)=>a-b\\).join\\(\" \"\\)\\)}')",
+      "Bash(git --no-pager diff -- frontend/src/components/dashboard/dashboard-home-client.tsx)",
+      "Bash(git --no-pager diff -- frontend/src/components/dashboard/dashboard-action-panels.tsx)",
+      "Bash(git --no-pager diff -- frontend/src/components/dashboard/csv-diff-panel.tsx)"
+    ]
+  }
+}
