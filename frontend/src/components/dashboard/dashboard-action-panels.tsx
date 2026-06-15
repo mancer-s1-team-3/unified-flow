@@ -3862,10 +3862,12 @@ function EditMilestonePanel({
   const isNotActive = !!stream && Number(stream.status) !== 1;
 
   // ── Decimals ───────────────────────────────────────────────────────────
-  const decimals =
-    typeof editMilestoneForm.mintDecimals === "number"
-      ? editMilestoneForm.mintDecimals
-      : editMilestoneBalanceDecimals;
+ const decimals =
+  typeof editMilestoneForm.mintDecimals === "number"
+    ? editMilestoneForm.mintDecimals
+    : typeof streamDetail?.mintDecimals === "number"
+    ? streamDetail.mintDecimals
+    : editMilestoneBalanceDecimals;
 
   // ── totalAmount sebagai bigint ─────────────────────────────────────────
   const totalAmountBase = useMemo(() => {
@@ -3885,55 +3887,60 @@ function EditMilestonePanel({
       : "";
 
   // ── Rescale semua milestone proportionally saat total diubah ──────────
-  const rescaleMilestonesToTotal = (newTotalHuman: string) => {
-    const amounts = Array.isArray(editMilestoneForm.amounts)
-      ? editMilestoneForm.amounts
-      : [];
-    if (amounts.length === 0) return;
+ const rescaleMilestonesToTotal = (newTotalHuman: string) => {
+  const amounts = Array.isArray(editMilestoneForm.amounts)
+    ? editMilestoneForm.amounts
+    : [];
+  if (amounts.length === 0) return;
 
-    const newTotalBase = parseTokenAmountToBaseUnits(newTotalHuman, decimals);
-    if (newTotalBase <= BigInt(0)) return;
+  // ← Guard: jangan rescale kalau decimals belum resolve dari stream
+  if (!streamDetail && editMilestoneForm.mintDecimals === null) return;
 
-    // Hitung current sum untuk rasio
-    const currentSum = amounts.reduce(
-      (sum, v) =>
-        sum + parseTokenAmountToBaseUnits(String(v || "0"), decimals),
-      BigInt(0)
+  const safeDecimals =
+    typeof editMilestoneForm.mintDecimals === "number"
+      ? editMilestoneForm.mintDecimals
+      : typeof streamDetail?.mintDecimals === "number"
+      ? streamDetail.mintDecimals
+      : editMilestoneBalanceDecimals;
+
+  const newTotalBase = parseTokenAmountToBaseUnits(newTotalHuman, safeDecimals);
+  if (newTotalBase <= BigInt(0)) return;
+
+  const currentSum = amounts.reduce(
+    (sum, v) =>
+      sum + parseTokenAmountToBaseUnits(String(v || "0"), safeDecimals),
+    BigInt(0)
+  );
+
+  let rescaled: string[];
+  if (currentSum <= BigInt(0)) {
+    const base = newTotalBase / BigInt(amounts.length);
+    const remainder = newTotalBase % BigInt(amounts.length);
+    rescaled = amounts.map((_, i) =>
+      formatBaseUnitsToTokenAmount(
+        base + (BigInt(i) < remainder ? BigInt(1) : BigInt(0)),
+        safeDecimals
+      )
     );
-
-    let rescaled: string[];
-    if (currentSum <= BigInt(0)) {
-      // Distribusi merata kalau semua 0
-      const base = newTotalBase / BigInt(amounts.length);
-      const remainder = newTotalBase % BigInt(amounts.length);
-      rescaled = amounts.map((_, i) =>
-        formatBaseUnitsToTokenAmount(
-          base + (BigInt(i) < remainder ? BigInt(1) : BigInt(0)),
-          decimals
-        )
-      );
-    } else {
-      // Scale proportionally, fix rounding di last item
-      const scaled = amounts.map((v) => {
-        const base = parseTokenAmountToBaseUnits(String(v || "0"), decimals);
-        return (base * newTotalBase) / currentSum;
-      });
-      // Fix rounding: adjust last item supaya sum = newTotalBase
-      const scaledSum = scaled.reduce((a, b) => a + b, BigInt(0));
-      const diff = newTotalBase - scaledSum;
-      if (scaled.length > 0) scaled[scaled.length - 1] += diff;
-      rescaled = scaled.map((v) =>
-        formatBaseUnitsToTokenAmount(v, decimals)
-      );
-    }
-
-    setEditMilestoneForm({
-      ...editMilestoneForm,
-      amounts: rescaled,
-      // Simpan base units di totalAmount
-      totalAmount: String(newTotalBase),
+  } else {
+    const scaled = amounts.map((v) => {
+      const base = parseTokenAmountToBaseUnits(String(v || "0"), safeDecimals);
+      return (base * newTotalBase) / currentSum;
     });
-  };
+    const scaledSum = scaled.reduce((a, b) => a + b, BigInt(0));
+    const diff = newTotalBase - scaledSum;
+    if (scaled.length > 0) scaled[scaled.length - 1] += diff;
+    rescaled = scaled.map((v) =>
+      formatBaseUnitsToTokenAmount(v, safeDecimals)
+    );
+  }
+
+  setEditMilestoneForm({
+    ...editMilestoneForm,
+    amounts: rescaled,
+    totalAmount: String(newTotalBase),
+  });
+};
 
   // ── Allocation validation ──────────────────────────────────────────────
   const amounts = Array.isArray(editMilestoneForm.amounts)
