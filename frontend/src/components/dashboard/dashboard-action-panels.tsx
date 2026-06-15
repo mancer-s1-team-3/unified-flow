@@ -3862,29 +3862,33 @@ function EditMilestonePanel({
   const isNotActive = !!stream && Number(stream.status) !== 1;
 
   // ── Decimals ───────────────────────────────────────────────────────────
- const decimals =
-  typeof editMilestoneForm.mintDecimals === "number"
+// Ganti baris decimals constant
+const decimals = Math.max(
+  typeof editMilestoneForm.mintDecimals === "number" &&
+  editMilestoneForm.mintDecimals !== null
     ? editMilestoneForm.mintDecimals
     : typeof streamDetail?.mintDecimals === "number"
     ? streamDetail.mintDecimals
-    : editMilestoneBalanceDecimals;
+    : editMilestoneBalanceDecimals,
+  0
+);
 
   // ── totalAmount sebagai bigint ─────────────────────────────────────────
-  const totalAmountBase = useMemo(() => {
-    const raw = editMilestoneForm.totalAmount;
-    if (!raw) return BigInt(0);
-    try { return BigInt(String(raw).trim()); } catch { return BigInt(0); }
-  }, [editMilestoneForm.totalAmount]);
+const totalAmountBase = useMemo(() => {
+  const raw = editMilestoneForm?.totalAmount;
+  if (!raw || raw === "" || raw === "null" || raw === "undefined") return BigInt(0);
+  try { return BigInt(String(raw).trim()); } catch { return BigInt(0); }
+}, [editMilestoneForm?.totalAmount]);
 
   // ── Display value untuk total input ───────────────────────────────────
   // Saat user sedang ngetik (draft != null), tampilkan draft
   // Saat blur atau tidak ada draft, tampilkan human-readable dari base units
-  const editTotalValue =
-    editTotalDraft !== null
-      ? editTotalDraft
-      : totalAmountBase > BigInt(0)
-      ? formatBaseUnitsToTokenAmount(totalAmountBase, decimals)
-      : "";
+const editTotalValue =
+  editTotalDraft !== null
+    ? editTotalDraft
+    : totalAmountBase > BigInt(0) && decimals >= 0 && streamDetail !== null
+    ? formatBaseUnitsToTokenAmount(totalAmountBase, decimals)
+    : "";
 
   // ── Rescale semua milestone proportionally saat total diubah ──────────
  const rescaleMilestonesToTotal = (newTotalHuman: string) => {
