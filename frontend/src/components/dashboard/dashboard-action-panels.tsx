@@ -1754,8 +1754,7 @@ export function DashboardActionPanels(props: Props) {
 
   const recipientHistory = useAddressHistory("recipient");
   const mintHistory = useAddressHistory("mint");
-  const [editTotalDraft, setEditTotalDraft] = useState<string | null>(null);
-
+ 
   const mintPickerRef = useRef<HTMLDivElement | null>(null);
   const [mintMenuOpen, setMintMenuOpen] = useState(false);
   const [cliffInputMode, setCliffInputMode] = useState<"duration" | "date">("duration");
@@ -1947,90 +1946,6 @@ const editCliffNewCliffOutOfRange =
     return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
   })();
 
-  const editMilestoneDecimals = Number.isFinite(Number(editMilestoneForm?.mintDecimals))
-    ? Number(editMilestoneForm.mintDecimals)
-    : 0;
-  const editMilestoneAmounts = Array.isArray(editMilestoneForm?.amounts) ? editMilestoneForm.amounts : [];
-  const editMilestoneSum = useMemo(
-    () => editMilestoneAmounts.reduce(
-      (sum: bigint, amount: string) => sum + parseTokenAmountToBaseUnits(String(amount || "0"), editMilestoneDecimals),
-      BigInt(0)
-    ),
-    [editMilestoneAmounts, editMilestoneDecimals]
-  );
-  const editMilestoneTargetTotal = useMemo(
-    () => {
-      const rawTotal = editMilestoneForm?.totalAmount;
-
-      if (typeof rawTotal === "bigint") return rawTotal;
-      if (typeof rawTotal === "number") return BigInt(Math.trunc(rawTotal));
-      if (typeof rawTotal === "string" && rawTotal.trim() !== "") {
-        try {
-          return BigInt(rawTotal.trim());
-        } catch {
-          return BigInt(0);
-        }
-      }
-
-      return BigInt(0);
-    },
-    [editMilestoneForm?.totalAmount]
-  );
-  const editMilestoneHasTargetTotal =
-    (typeof editMilestoneForm?.totalAmount === "string" && editMilestoneForm.totalAmount.trim() !== "") ||
-    typeof editMilestoneForm?.totalAmount === "bigint" ||
-    typeof editMilestoneForm?.totalAmount === "number";
-  const editMilestoneHasInvalidAmounts = useMemo(
-    () => editMilestoneAmounts.some((value: string) => !value || Number(value) <= 0 || !Number.isFinite(Number(value))),
-    [editMilestoneAmounts]
-  );
-  const editMilestoneMatchesTotal = editMilestoneHasTargetTotal ? editMilestoneSum === editMilestoneTargetTotal : true;
-
-  // Edit-total: kalau total baru > total awal, butuh top-up dari wallet creator.
-  // Pastikan saldo cukup; kalau total turun (refund) tidak butuh saldo.
-  const editMilestoneTopupNeeded =
-    editMilestoneSum > editMilestoneTargetTotal ? editMilestoneSum - editMilestoneTargetTotal : BigInt(0);
-  const editMilestoneWalletBase =
-    editMilestoneBalance.balance !== null
-      ? parseTokenAmountToBaseUnits(String(editMilestoneBalance.balance), editMilestoneDecimals)
-      : null;
-  const editMilestoneExceedsBalance =
-    editMilestoneWalletBase !== null && editMilestoneTopupNeeded > editMilestoneWalletBase;
-
-  // Total amount yang sedang ditampilkan = jumlah seluruh milestone (display units)
-  const editMilestoneTotalDisplay = formatBaseUnitsToTokenAmount(editMilestoneSum, editMilestoneDecimals);
-  const editTotalValue = editTotalDraft ?? editMilestoneTotalDisplay;
-
-  // Skala ulang tiap milestone secara proporsional agar total = nilai baru.
-  // Dihitung dalam base units; sisa pembulatan diserap milestone terakhir agar sum tepat.
-  const rescaleMilestonesToTotal = (totalStr: string) => {
-    const decimals = editMilestoneDecimals;
-    const newTotalBase = parseTokenAmountToBaseUnits(totalStr || "0", decimals);
-    const oldBase = editMilestoneAmounts.map((v: string) =>
-      parseTokenAmountToBaseUnits(String(v || "0"), decimals)
-    );
-    if (oldBase.length === 0) return;
-    const oldTotalBase = oldBase.reduce((sum: bigint, b: bigint) => sum + b, BigInt(0));
-
-    let nextBase: bigint[];
-    if (oldTotalBase === BigInt(0)) {
-      // Tidak ada rasio lama -> bagi rata
-      const n = BigInt(oldBase.length);
-      const each = newTotalBase / n;
-      nextBase = oldBase.map(() => each);
-    } else {
-      nextBase = oldBase.map((b: bigint) => (b * newTotalBase) / oldTotalBase);
-    }
-
-    const assigned = nextBase.reduce((sum: bigint, b: bigint) => sum + b, BigInt(0));
-    const remainder = newTotalBase - assigned;
-    const lastIdx = nextBase.length - 1;
-    const adjustedLast = nextBase[lastIdx] + remainder;
-    nextBase[lastIdx] = adjustedLast < BigInt(0) ? BigInt(0) : adjustedLast;
-
-    const nextDisplay = nextBase.map((b: bigint) => formatBaseUnitsToTokenAmount(b, decimals));
-    setEditMilestoneForm({ ...editMilestoneForm, amounts: nextDisplay });
-  };
 
   const selectedMintPreset = mintPresets.find((preset) => preset.mint === createForm.mint) ?? null;
   const tokenBalance = useTokenBalance(
@@ -2096,15 +2011,7 @@ const editCsvDisabled =
   csvEditMilestoneValidation.hasErrors ||
   csvEditIdValidation.hasErrors || // ← blok apply kalau ada id ngawur
   csvEditExceedsBalance; // ← tambah ini
-  const editMilestoneAlreadyUnlocked = isMilestoneUnlocked(editMilestoneForm.streamId);
-  const editMilestoneDisabled =
-    isStreamCsvCreated(editMilestoneForm.streamId) ||
-    editMilestoneAlreadyUnlocked ||
-    !editMilestoneForm.streamId?.trim() ||
-    editMilestoneAmounts.length === 0 ||
-    editMilestoneHasInvalidAmounts ||
-    editMilestoneExceedsBalance ||
-    activeTxAction === "edit_milestone";
+
  const editLinearDisabled =
   isStreamCsvCreated(editLinearForm.streamId) ||
   !editLinearForm.streamId?.trim() ||
