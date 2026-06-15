@@ -3811,6 +3811,20 @@ const editTotalValue =
   const matchesTotal =
     totalAmountBase > BigInt(0) ? milestoneSum === totalAmountBase : true;
 
+  const insufficientBalance = useMemo(() => {
+    if (!stream) return false;
+    const oldTotalAmountBase = parseBaseUnits(stream.totalAmount);
+    const addedAmountBase = totalAmountBase > oldTotalAmountBase ? totalAmountBase - oldTotalAmountBase : BigInt(0);
+    const requiredTopUpTokenAmount = addedAmountBase > BigInt(0) ? Number(formatBaseUnitsToTokenAmount(addedAmountBase, decimals)) : 0;
+    
+    return (
+      !!editMilestoneMint &&
+      requiredTopUpTokenAmount > 0 &&
+      editMilestoneBalance.balance !== null &&
+      editMilestoneBalance.balance < requiredTopUpTokenAmount
+    );
+  }, [stream, totalAmountBase, decimals, editMilestoneMint, editMilestoneBalance.balance]);
+
   const isSubmitting = activeTxAction === "edit_milestone" && !!activeTxPhase;
 
   const getTxLabel = () => {
@@ -3830,6 +3844,7 @@ const editTotalValue =
     !alreadyUnlocked &&
     !detailLoading &&
     !hasInvalidAmounts &&
+    !insufficientBalance &&
     matchesTotal &&
     amounts.length > 0 &&
     connected;
@@ -4219,6 +4234,8 @@ const editTotalValue =
           ? "Cannot edit — milestone already unlocked"
           : detailLoading
           ? "Loading stream..."
+          : insufficientBalance
+          ? "Insufficient balance for top-up"
           : getTxLabel()}
       </button>
     </div>
