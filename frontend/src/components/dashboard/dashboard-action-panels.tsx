@@ -4,7 +4,7 @@ import type { ChangeEvent, RefObject } from "react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import Image from "next/image";
-import { AlertTriangle, Check, ChevronDown, Shield, Download, Layers, Lock, RefreshCw, Terminal, Upload, XCircle } from "lucide-react";
+import { AlertTriangle, Check, ChevronDown, Shield, Download, Layers, Lock, RefreshCw, Terminal, Upload, XCircle, Settings } from "lucide-react";
 import { CsvDiffPanel } from "@/components/dashboard/csv-diff-panel";
 import type { MintPreset } from "@/components/dashboard/token-mints";
 import { PreflightChecklist } from "./preflight-checklist";
@@ -3192,72 +3192,23 @@ const editCsvDisabled =
         </div>
       )}
 
-     {activeTab === "edit_linear" && (
-  <div className="animate-in fade-in-30 duration-200">
-    <div className="border-b border-zinc-900 pb-4 mb-6">
-      <h2 className="text-2xl font-extrabold tracking-tight">Edit Linear Timeline</h2>
-      <p className="text-xs text-zinc-400">Modify linear timelines or extend stream end thresholds</p>
-    </div>
-    {isStreamCsvCreated(editLinearForm.streamId) ? (
-      <div className="bg-red-950/45 border border-red-500/30 rounded-2xl p-5 text-red-300 flex items-start gap-4 mb-6">
-        <Lock className="w-6 h-6 text-red-400 shrink-0 mt-0.5" />
-        <div>
-          <h4 className="text-sm font-extrabold">Manual Edit Locked!</h4>
-          <p className="text-xs text-red-400/80 mt-1 leading-relaxed">This stream was created via CSV Import. To comply with consistency requirements, CSV-created streams must be edited exclusively using the Bulk Edit CSV console.</p>
-        </div>
-      </div>
-    ) : (
-      <div className="grid gap-4">
-        <div>
-          <label className="block text-xs font-semibold text-zinc-400 uppercase tracking-wider mb-1.5">Stream ID (PDA Address)</label>
-          <input type="text" value={editLinearForm.streamId}   placeholder="Paste stream PDA address" onChange={(e) => setEditLinearForm({ ...editLinearForm, streamId: e.target.value })} className="w-full bg-zinc-950 border border-zinc-800 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:border-indigo-500 font-mono" />
-        </div>
-        <div>
-          <label className="block text-xs font-semibold text-zinc-400 uppercase tracking-wider mb-1.5">New Stream Duration (Seconds from Start)</label>
-          <input type="number" value={editLinearForm.newEndDuration} onChange={(e) => setEditLinearForm({ ...editLinearForm, newEndDuration: e.target.value })} className="w-full bg-zinc-950 border border-zinc-800 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:border-indigo-500 font-mono" />
-        </div>
-        <div>
-          <label className="block text-xs font-semibold text-zinc-400 uppercase tracking-wider mb-1.5">
-            Top-up Amount (Tokens to Add)
-          </label>
-          <input
-            type="number"
-            value={editLinearForm.topupAmount}
-            onChange={(e) => setEditLinearForm({ ...editLinearForm, topupAmount: e.target.value })}
-            className={`w-full bg-zinc-950 border rounded-xl px-4 py-2.5 text-sm focus:outline-none font-mono transition-colors ${
-              editLinearExceedsBalance
-                ? "border-rose-500/60 focus:border-rose-500"
-                : "border-zinc-800 focus:border-indigo-500"
-            }`}
-          />
-          {/* Balance row */}
-          <div className="mt-1.5 flex items-center gap-2">
-            {!connected ? null
-            : editLinearBalance.loading ? (
-              <span className="text-[10px] font-mono text-zinc-600 animate-pulse">fetching balance…</span>
-            ) : editLinearBalance.error ? (
-              <span className="text-[10px] font-mono text-zinc-600">balance unavailable</span>
-            ) : !editLinearMint ? null
-            : editLinearBalance.balance !== null ? (
-              <span className={`text-[10px] font-mono ${editLinearExceedsBalance ? "text-rose-400" : "text-zinc-500"}`}>
-                Balance: {editLinearBalance.balance.toLocaleString(undefined, { maximumFractionDigits: editLinearDecimals })}{editLinearSymbol ? ` ${editLinearSymbol}` : ""}
-              </span>
-            ) : null}
-          </div>
-          {editLinearExceedsBalance && (
-            <div className="mt-1 text-[10px] font-semibold text-rose-400">
-              Top-up amount exceeds wallet balance of{" "}
-              {editLinearBalance.balance!.toLocaleString(undefined, { maximumFractionDigits: editLinearDecimals })}{editLinearSymbol ? ` ${editLinearSymbol}` : ""}.
-            </div>
-          )}
-        </div>
-      </div>
-    )}
-    <button disabled={editLinearDisabled} onClick={() => handleAction("edit_linear", editLinearForm)} className={`w-full mt-6 text-white font-bold text-xs py-3 rounded-xl transition-all shadow-lg flex items-center justify-center gap-2 ${editLinearDisabled ? "bg-zinc-850 border border-zinc-800 text-zinc-550 cursor-not-allowed opacity-50" : "bg-indigo-600 hover:bg-indigo-700 hover:shadow-indigo-500/20"}`}>
-      {activeTxAction === "edit_linear" && activeTxPhase ? <RefreshCw className="w-4 h-4 animate-spin" /> : null}
-      {getTxLabel("edit_linear", "Update End Timeline & Top-up Stream")}
-    </button>
-  </div>
+    {activeTab === "edit_linear" && (
+  <EditLinearPanel
+    editLinearForm={editLinearForm}
+    setEditLinearForm={setEditLinearForm}
+    handleAction={handleAction}
+    streams={streams}
+    connectedWalletAddress={connectedWalletAddress}
+    activeTxAction={activeTxAction}
+    activeTxPhase={activeTxPhase}
+    connected={connected}
+    endpoint={endpoint}
+    isStreamCsvCreated={isStreamCsvCreated}
+    editLinearBalance={editLinearBalance}
+    editLinearExceedsBalance={editLinearExceedsBalance}
+    editLinearDecimals={editLinearDecimals}
+    editLinearMint={editLinearMint}
+  />
 )}
 
       {activeTab === "edit_cliff" && (
@@ -3961,6 +3912,556 @@ function useCsvTotalByMint(csvText: string): Record<string, number> {
     }
     return totals;
   }, [csvText]);
+}
+// ─── Edit Linear Panel ─────────────────────────────────────────────────────
+function EditLinearPanel({
+  editLinearForm,
+  setEditLinearForm,
+  handleAction,
+  streams,
+  connectedWalletAddress,
+  activeTxAction,
+  activeTxPhase,
+  connected,
+  endpoint,
+  isStreamCsvCreated,
+  editLinearBalance,
+  editLinearExceedsBalance,
+  editLinearDecimals,
+  editLinearMint,
+}: {
+  editLinearForm: { streamId: string; newEndDuration: string; topupAmount: string };
+  setEditLinearForm: (value: any) => void;
+  handleAction: (actionName: string, data: any) => Promise<void> | void;
+  streams: any[];
+  connectedWalletAddress: string | null;
+  activeTxAction: string | null;
+  activeTxPhase: "wallet_approval" | "sending" | "confirming" | null;
+  connected: boolean;
+  endpoint: string;
+  isStreamCsvCreated: (id: string) => boolean;
+editLinearBalance: { balance: number | null; loading: boolean; error: string | null; decimals?: number | null };
+  editLinearExceedsBalance: boolean;
+  editLinearDecimals: number;
+  editLinearMint: string;
+}) {
+  // ── Resolve stream dari streams[] ──────────────────────────────────────
+  const stream = useMemo(
+    () =>
+      streams.find(
+        (s) => String(s?.id || "") === editLinearForm.streamId.trim()
+      ) ?? null,
+    [streams, editLinearForm.streamId]
+  );
+
+  const nowTs = Math.floor(Date.now() / 1000);
+
+  // ── Validasi guards ────────────────────────────────────────────────────
+  const isCsvCreated = isStreamCsvCreated(editLinearForm.streamId);
+
+  const isWrongWallet =
+    !!editLinearForm.streamId.trim() &&
+    !!stream &&
+    !!connectedWalletAddress &&
+    stream.creator?.toLowerCase() !== connectedWalletAddress.toLowerCase();
+
+  const isWrongType =
+    !!stream &&
+    Number(stream.vestingType) !== 0 &&
+    Number(stream.vestingType) !== 1;
+
+  const isNotActive =
+    !!stream && Number(stream.status) !== 1;
+
+  const isExpired =
+    !!stream &&
+    Number(stream.endTs ?? 0) > 0 &&
+    nowTs >= Number(stream.endTs);
+
+  // ── Current stream state preview ───────────────────────────────────────
+  const currentPreview = useMemo(() => {
+    if (!stream) return null;
+
+    const decimals =
+      typeof stream.mintDecimals === "number" ? stream.mintDecimals : 6;
+    const startTs = Number(stream.startTs ?? 0);
+    const endTs = Number(stream.endTs ?? 0);
+    const currentDuration = endTs - startTs;
+
+    const fmt = (v: any) =>
+      Number(
+        formatBaseUnitsToTokenAmount(parseBaseUnits(v), decimals)
+      ).toLocaleString(undefined, { maximumFractionDigits: decimals });
+
+    return {
+      totalAmount: fmt(stream.totalAmount),
+      withdrawn: fmt(stream.withdrawn ?? 0),
+      startTs,
+      endTs,
+      currentDuration,
+      decimals,
+      vestingType: Number(stream.vestingType ?? 0),
+      endDateStr: endTs > 0 ? new Date(endTs * 1000).toLocaleString() : "—",
+    };
+  }, [stream]);
+
+  // ── New end timestamp preview ──────────────────────────────────────────
+  const newEndPreview = useMemo(() => {
+    if (!currentPreview) return null;
+    const newDuration = Number(editLinearForm.newEndDuration ?? 0);
+    if (!Number.isFinite(newDuration) || newDuration <= 0) return null;
+    const newEndTs = currentPreview.startTs + newDuration;
+    const extensionSeconds = newEndTs - currentPreview.endTs;
+    return {
+      newEndTs,
+      newEndDateStr: new Date(newEndTs * 1000).toLocaleString(),
+      extensionSeconds,
+      isExtension: extensionSeconds > 0,
+      isShorter: extensionSeconds < 0,
+      isSame: extensionSeconds === 0,
+    };
+  }, [currentPreview, editLinearForm.newEndDuration]);
+
+  // ── Duration must be longer than current ──────────────────────────────
+  const durationNotExtended =
+    !!newEndPreview && !newEndPreview.isExtension;
+
+  // ── At least one of duration/topup must be provided ───────────────────
+  const neitherProvided =
+    !String(editLinearForm.newEndDuration ?? "").trim() &&
+    !String(editLinearForm.topupAmount ?? "").trim();
+
+  const isSubmitting = activeTxAction === "edit_linear" && !!activeTxPhase;
+
+  const getTxLabel = () => {
+    if (activeTxAction !== "edit_linear" || !activeTxPhase)
+      return "Update End Timeline & Top-up Stream";
+    if (activeTxPhase === "wallet_approval") return "Approve In Wallet...";
+    if (activeTxPhase === "sending") return "Sending Transaction...";
+    return "Confirming On-Chain...";
+  };
+
+  const canSubmit =
+    !!editLinearForm.streamId.trim() &&
+    !isCsvCreated &&
+    !isWrongWallet &&
+    !isWrongType &&
+    !isNotActive &&
+    !isExpired &&
+    !isSubmitting &&
+    !neitherProvided &&
+    !durationNotExtended &&
+    !editLinearExceedsBalance &&
+    connected;
+
+  return (
+    <div className="animate-in fade-in-30 duration-200">
+      <div className="border-b border-zinc-900 pb-4 mb-6">
+        <h2 className="text-2xl font-extrabold tracking-tight">
+          Edit Linear Timeline
+        </h2>
+        <p className="text-xs text-zinc-400">
+          Extend stream end date and/or top up token allocation
+        </p>
+      </div>
+
+      {/* CSV lock */}
+      {isCsvCreated && (
+        <div className="bg-red-950/45 border border-red-500/30 rounded-2xl p-5 text-red-300 flex items-start gap-4 mb-6">
+          <Lock className="w-6 h-6 text-red-400 shrink-0 mt-0.5" />
+          <div>
+            <h4 className="text-sm font-extrabold">Manual Edit Locked!</h4>
+            <p className="text-xs text-red-400/80 mt-1 leading-relaxed">
+              This stream was created via CSV Import. Edit it using the Bulk
+              Edit CSV console.
+            </p>
+          </div>
+        </div>
+      )}
+
+      {!isCsvCreated && (
+        <div className="grid gap-4">
+          {/* Stream ID */}
+          <div>
+            <label className="block text-xs font-semibold text-zinc-400 uppercase tracking-wider mb-1.5">
+              Stream ID (PDA Address)
+            </label>
+            <input
+              type="text"
+              value={editLinearForm.streamId}
+              onChange={(e) =>
+                setEditLinearForm({
+                  ...editLinearForm,
+                  streamId: e.target.value,
+                })
+              }
+              className="w-full bg-zinc-950 border border-zinc-800 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:border-indigo-500 font-mono"
+              placeholder="Paste stream PDA address"
+            />
+          </div>
+
+          {/* ── Wrong wallet ──────────────────────────────────────────── */}
+          {isWrongWallet && (
+            <div className="bg-amber-950/30 border border-amber-500/30 rounded-2xl p-4 flex items-start gap-3">
+              <AlertTriangle className="w-4 h-4 text-amber-400 shrink-0 mt-0.5" />
+              <div>
+                <p className="text-[11px] font-bold text-amber-300 mb-1">
+                  Wrong wallet connected
+                </p>
+                <p className="text-[11px] text-amber-300/70 leading-relaxed">
+                  Only the stream creator can edit. Creator is{" "}
+                  <span className="font-mono text-amber-300 break-all">
+                    {stream?.creator
+                      ? `${stream.creator.slice(0, 6)}…${stream.creator.slice(-4)}`
+                      : "unknown"}
+                  </span>
+                  , connected wallet is{" "}
+                  <span className="font-mono text-amber-300 break-all">
+                    {`${connectedWalletAddress!.slice(0, 6)}…${connectedWalletAddress!.slice(-4)}`}
+                  </span>
+                  .
+                </p>
+              </div>
+            </div>
+          )}
+
+          {/* ── Wrong type ────────────────────────────────────────────── */}
+          {isWrongType && (
+            <div className="bg-zinc-900/60 border border-zinc-700 rounded-2xl p-4 flex items-start gap-3">
+              <AlertTriangle className="w-4 h-4 text-zinc-400 shrink-0 mt-0.5" />
+              <div>
+                <p className="text-[11px] font-bold text-zinc-300 mb-1">
+                  Not a linear or cliff stream
+                </p>
+                <p className="text-[11px] text-zinc-500 leading-relaxed">
+                  edit_linear only applies to Linear (type 0) and Cliff (type
+                  1) streams. This stream is Milestone type.
+                </p>
+              </div>
+            </div>
+          )}
+
+          {/* ── Not active ────────────────────────────────────────────── */}
+          {isNotActive && !isWrongType && (
+            <div className="bg-rose-950/20 border border-rose-500/20 rounded-2xl p-4 flex items-start gap-3">
+              <AlertTriangle className="w-4 h-4 text-rose-400 shrink-0 mt-0.5" />
+              <p className="text-[11px] text-rose-300/80 leading-relaxed">
+                This stream is{" "}
+                <strong className="text-rose-300">
+                  {Number(stream?.status) === 2 ? "completed" : "cancelled"}
+                </strong>{" "}
+                and can no longer be edited.
+              </p>
+            </div>
+          )}
+
+          {/* ── Expired ───────────────────────────────────────────────── */}
+          {isExpired && !isNotActive && (
+            <div className="bg-amber-950/30 border border-amber-500/30 rounded-2xl p-4 flex items-start gap-3">
+              <AlertTriangle className="w-4 h-4 text-amber-400 shrink-0 mt-0.5" />
+              <p className="text-[11px] text-amber-300/80 leading-relaxed">
+                Stream end date has already passed — the stream has expired and
+                cannot be extended.
+              </p>
+            </div>
+          )}
+
+          {/* ── Current state preview ─────────────────────────────────── */}
+          {currentPreview && !isWrongType && (
+            <div className="rounded-2xl border border-zinc-800 overflow-hidden">
+              <div className="flex items-center gap-2 px-4 py-3 border-b border-zinc-900 bg-zinc-950/60">
+                <Settings className="w-3.5 h-3.5 text-indigo-400" />
+                <span className="text-[10px] font-black uppercase tracking-widest text-zinc-400">
+                  Current Stream State
+                </span>
+                <span className="ml-auto text-[10px] font-mono text-zinc-600">
+                  {currentPreview.vestingType === 0 ? "Linear" : "Cliff"}
+                </span>
+              </div>
+              <div className="divide-y divide-zinc-900/60">
+                <div className="flex items-center justify-between px-4 py-3">
+                  <span className="text-xs text-zinc-500">Total allocation</span>
+                  <span className="font-mono text-sm font-bold text-zinc-200">
+                    {currentPreview.totalAmount}
+                  </span>
+                </div>
+                <div className="flex items-center justify-between px-4 py-3">
+                  <span className="text-xs text-zinc-500">Already withdrawn</span>
+                  <span className="font-mono text-sm font-bold text-zinc-500">
+                    {currentPreview.withdrawn}
+                  </span>
+                </div>
+                <div className="flex items-center justify-between px-4 py-3">
+                  <span className="text-xs text-zinc-500">Current end date</span>
+                  <span className="font-mono text-sm font-bold text-zinc-300">
+                    {currentPreview.endDateStr}
+                  </span>
+                </div>
+                <div className="flex items-center justify-between px-4 py-3">
+                  <span className="text-xs text-zinc-500">
+                    Current duration (from start)
+                  </span>
+                  <span className="font-mono text-sm font-bold text-zinc-300">
+                    {currentPreview.currentDuration.toLocaleString()}s
+                  </span>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* ── New duration input ────────────────────────────────────── */}
+          <div>
+            <label className="block text-xs font-semibold text-zinc-400 uppercase tracking-wider mb-1.5">
+              New Stream Duration{" "}
+              <span className="text-zinc-600 normal-case font-normal">
+                (seconds from original start)
+              </span>
+            </label>
+            <div className="relative">
+              <input
+                type="number"
+                min="0"
+                value={editLinearForm.newEndDuration}
+                onChange={(e) =>
+                  setEditLinearForm({
+                    ...editLinearForm,
+                    newEndDuration: e.target.value,
+                  })
+                }
+                className={`w-full bg-zinc-950 border rounded-xl px-4 py-2.5 pr-12 text-sm focus:outline-none font-mono transition-colors ${
+                  durationNotExtended
+                    ? "border-rose-500/60 focus:border-rose-500"
+                    : "border-zinc-800 focus:border-indigo-500"
+                }`}
+                placeholder={
+                  currentPreview
+                    ? `Current: ${currentPreview.currentDuration}s — enter larger value`
+                    : "Seconds from start date"
+                }
+              />
+              <span className="absolute inset-y-0 right-3 flex items-center text-[10px] font-black uppercase tracking-wider text-zinc-500">
+                sec
+              </span>
+            </div>
+
+            {/* Quick preset buttons relative to current duration */}
+            {currentPreview && (
+              <div className="mt-2 flex flex-wrap gap-2">
+                {[
+                  { label: "+1M", add: 60 * 60 * 24 * 30 },
+                  { label: "+3M", add: 60 * 60 * 24 * 90 },
+                  { label: "+6M", add: 60 * 60 * 24 * 180 },
+                  { label: "+1Y", add: 60 * 60 * 24 * 365 },
+                ].map((p) => (
+                  <button
+                    key={p.label}
+                    type="button"
+                    onClick={() =>
+                      setEditLinearForm({
+                        ...editLinearForm,
+                        newEndDuration: String(
+                          currentPreview.currentDuration + p.add
+                        ),
+                      })
+                    }
+                    className="px-2.5 py-1 rounded-lg border border-zinc-800 bg-zinc-900 text-[10px] font-black uppercase text-zinc-300 hover:border-indigo-500 hover:text-white transition"
+                  >
+                    {p.label}
+                  </button>
+                ))}
+              </div>
+            )}
+
+            {/* New end date preview */}
+            {newEndPreview && (
+              <div
+                className={`mt-2 text-[10px] font-mono ${
+                  durationNotExtended ? "text-rose-400" : "text-zinc-500"
+                }`}
+              >
+                {durationNotExtended ? (
+                  <>
+                    ✕ New duration must be longer than current (
+                    {currentPreview?.currentDuration.toLocaleString()}s)
+                  </>
+                ) : (
+                  <>
+                    ≈ new end{" "}
+                    <span className="text-indigo-300">
+                      {newEndPreview.newEndDateStr}
+                    </span>
+                    {newEndPreview.extensionSeconds > 0 && (
+                      <span className="text-zinc-600 ml-2">
+                        (+{newEndPreview.extensionSeconds.toLocaleString()}s
+                        extension)
+                      </span>
+                    )}
+                  </>
+                )}
+              </div>
+            )}
+          </div>
+
+          {/* ── Top-up amount input ───────────────────────────────────── */}
+          <div>
+            <label className="block text-xs font-semibold text-zinc-400 uppercase tracking-wider mb-1.5">
+              Top-up Amount{" "}
+              <span className="text-zinc-600 normal-case font-normal">
+                (tokens to add — leave 0 to skip)
+              </span>
+            </label>
+            <input
+              type="number"
+              min="0"
+              value={editLinearForm.topupAmount}
+              onChange={(e) =>
+                setEditLinearForm({
+                  ...editLinearForm,
+                  topupAmount: e.target.value,
+                })
+              }
+              className={`w-full bg-zinc-950 border rounded-xl px-4 py-2.5 text-sm focus:outline-none font-mono transition-colors ${
+                editLinearExceedsBalance
+                  ? "border-rose-500/60 focus:border-rose-500"
+                  : "border-zinc-800 focus:border-indigo-500"
+              }`}
+              placeholder="0"
+            />
+
+            {/* Balance row */}
+            <div className="mt-1.5 flex items-center gap-2">
+              {!connected ? null : editLinearBalance.loading ? (
+                <span className="text-[10px] font-mono text-zinc-600 animate-pulse">
+                  fetching balance…
+                </span>
+              ) : editLinearBalance.error ? (
+                <span className="text-[10px] font-mono text-zinc-600">
+                  balance unavailable
+                </span>
+              ) : !editLinearMint ? null : editLinearBalance.balance !==
+                null ? (
+                <span
+                  className={`text-[10px] font-mono ${
+                    editLinearExceedsBalance
+                      ? "text-rose-400"
+                      : "text-zinc-500"
+                  }`}
+                >
+                  Balance:{" "}
+                  {editLinearBalance.balance.toLocaleString(undefined, {
+                    maximumFractionDigits: editLinearDecimals,
+                  })}
+                </span>
+              ) : null}
+            </div>
+
+            {editLinearExceedsBalance && (
+              <div className="mt-1 text-[10px] font-semibold text-rose-400">
+                Top-up amount exceeds wallet balance of{" "}
+                {editLinearBalance.balance!.toLocaleString(undefined, {
+                  maximumFractionDigits: editLinearDecimals,
+                })}{" "}
+                tokens.
+              </div>
+            )}
+          </div>
+
+          {/* ── Neither provided warning ──────────────────────────────── */}
+          {neitherProvided && editLinearForm.streamId.trim() && (
+            <div className="bg-zinc-900/40 border border-zinc-800 rounded-xl px-4 py-3 flex items-center gap-2">
+              <div className="w-1.5 h-1.5 rounded-full bg-zinc-600" />
+              <span className="text-[11px] text-zinc-500">
+                Provide a new duration, a top-up amount, or both.
+              </span>
+            </div>
+          )}
+
+          {/* ── Change summary ────────────────────────────────────────── */}
+          {currentPreview &&
+            !isWrongType &&
+            !isNotActive &&
+            !isExpired &&
+            (newEndPreview?.isExtension ||
+              (Number(editLinearForm.topupAmount) > 0 &&
+                !editLinearExceedsBalance)) && (
+              <div className="rounded-2xl border border-indigo-500/20 bg-indigo-950/10 overflow-hidden">
+                <div className="flex items-center gap-2 px-4 py-3 border-b border-indigo-500/10">
+                  <Check className="w-3.5 h-3.5 text-indigo-400" />
+                  <span className="text-[10px] font-black uppercase tracking-widest text-indigo-400/80">
+                    Changes Preview
+                  </span>
+                </div>
+                <div className="divide-y divide-indigo-500/10">
+                  {newEndPreview?.isExtension && (
+                    <div className="flex items-center justify-between px-4 py-3">
+                      <span className="text-xs text-zinc-400">
+                        End date
+                      </span>
+                      <div className="text-right">
+                        <div className="text-[10px] font-mono text-zinc-600 line-through">
+                          {currentPreview.endDateStr}
+                        </div>
+                        <div className="font-mono text-sm font-bold text-indigo-300">
+                          {newEndPreview.newEndDateStr}
+                        </div>
+                      </div>
+                    </div>
+                  )}
+                  {Number(editLinearForm.topupAmount) > 0 &&
+                    !editLinearExceedsBalance && (
+                      <div className="flex items-center justify-between px-4 py-3">
+                        <span className="text-xs text-zinc-400">
+                          Total allocation
+                        </span>
+                        <div className="text-right">
+                          <div className="text-[10px] font-mono text-zinc-600 line-through">
+                            {currentPreview.totalAmount}
+                          </div>
+                          <div className="font-mono text-sm font-bold text-emerald-300">
+                            +{editLinearForm.topupAmount} tokens added
+                          </div>
+                        </div>
+                      </div>
+                    )}
+                </div>
+              </div>
+            )}
+        </div>
+      )}
+
+      {/* Submit button */}
+      <button
+        disabled={!canSubmit}
+        onClick={() => handleAction("edit_linear", editLinearForm)}
+        className={`w-full mt-6 text-white font-bold text-xs py-3 rounded-xl transition-all shadow-lg flex items-center justify-center gap-2 ${
+          !canSubmit
+            ? "bg-zinc-800 text-zinc-500 cursor-not-allowed shadow-none"
+            : "bg-indigo-600 hover:bg-indigo-700 hover:shadow-indigo-500/20"
+        }`}
+      >
+        {isSubmitting ? (
+          <RefreshCw className="w-4 h-4 animate-spin" />
+        ) : (
+          <Settings className="w-4 h-4" />
+        )}
+        {!connected
+          ? "Connect wallet to edit"
+          : isCsvCreated
+          ? "Use CSV Console to edit"
+          : isWrongWallet
+          ? "Wrong wallet — switch to creator wallet"
+          : isWrongType
+          ? "Not a linear or cliff stream"
+          : isNotActive
+          ? Number(stream?.status) === 2
+            ? "Stream already completed"
+            : "Stream cancelled"
+          : isExpired
+          ? "Stream has expired"
+          : getTxLabel()}
+      </button>
+    </div>
+  );
 }
 // ──────────────────────────────────────────────────────────────────────────
 // ─── MilestoneAllocationCounter ──────────────────────────────────────────
