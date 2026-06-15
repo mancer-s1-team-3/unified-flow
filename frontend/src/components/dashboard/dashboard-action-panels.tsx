@@ -3072,125 +3072,23 @@ const editCsvDisabled =
   />
 )}
 
-      {activeTab === "edit_milestone" && (
-        <div className="animate-in fade-in-30 duration-200">
-          <div className="border-b border-zinc-900 pb-4 mb-6"><h2 className="text-2xl font-extrabold tracking-tight">Edit Milestone Structure</h2><p className="text-xs text-zinc-400">Modify milestone details or adjust allocated milestone target amounts</p></div>
-          {isStreamCsvCreated(editMilestoneForm.streamId) ? (
-            <div className="bg-red-950/45 border border-red-500/30 rounded-2xl p-5 text-red-300 flex items-start gap-4 mb-6">
-              <Lock className="w-6 h-6 text-red-400 shrink-0 mt-0.5" />
-              <div>
-                <h4 className="text-sm font-extrabold">Manual Edit Locked!</h4>
-                <p className="text-xs text-red-400/80 mt-1 leading-relaxed">This stream was created via CSV Import. To comply with consistency requirements, CSV-created streams must be edited exclusively using the Bulk Edit CSV console.</p>
-              </div>
-            </div>
-          ) : (
-            <div className="grid gap-4 sm:grid-cols-2">
-              <div className="sm:col-span-2">
-                <label className="block text-xs font-semibold text-zinc-400 uppercase tracking-wider mb-1.5">Stream ID (PDA Address)</label>
-                <input
-                  type="text"
-                    placeholder="Paste stream PDA address"
-                  value={editMilestoneForm.streamId}
-                  onChange={(e) => setEditMilestoneForm({ ...editMilestoneForm, streamId: e.target.value })}
-                  className="w-full bg-zinc-950 border border-zinc-800 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:border-indigo-500 font-mono"
-                />
-              </div>
-
-              {(Array.isArray(editMilestoneForm.amounts) ? editMilestoneForm.amounts : []).length > 0 && (
-                <div className="sm:col-span-2">
-                  <label className="block text-xs font-semibold text-zinc-400 uppercase tracking-wider mb-1.5">Total Amount</label>
-                  <input
-                    type="text"
-                    inputMode="decimal"
-                    lang="en"
-                    value={editTotalValue}
-                    onChange={(e) => {
-                      const normalized = normalizeDecimalInput(e.target.value);
-                      setEditTotalDraft(normalized);
-                      rescaleMilestonesToTotal(normalized === "" ? "0" : normalized);
-                    }}
-                    onBlur={() => setEditTotalDraft(null)}
-                    className="w-full bg-zinc-950 border border-indigo-500/40 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:border-indigo-500 font-mono"
-                    placeholder="0"
-                  />
-                  <p className="mt-1.5 text-[10px] text-zinc-500 leading-relaxed">
-                    Changing the total scales every milestone proportionally, keeping the ratio between milestones intact.
-                  </p>
-                </div>
-              )}
-
-              {(Array.isArray(editMilestoneForm.amounts) ? editMilestoneForm.amounts : []).map((amount: string, index: number) => (
-                <div key={index}>
-                  <label className="block text-xs font-semibold text-zinc-400 uppercase tracking-wider mb-1.5">Milestone #{index} Amount</label>
-                  <input
-                    type="text"
-                    inputMode="decimal"
-                    lang="en"
-                    value={amount}
-                    onChange={(e) => {
-                      const next = [...(Array.isArray(editMilestoneForm.amounts) ? editMilestoneForm.amounts : [])];
-                      const normalized = normalizeDecimalInput(e.target.value);
-                      next[index] = normalized === "" ? "0" : normalized;
-                      setEditTotalDraft(null);
-                      setEditMilestoneForm({ ...editMilestoneForm, amounts: next });
-                    }}
-                    className="w-full bg-zinc-950 border border-zinc-800 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:border-indigo-500 font-mono"
-                    placeholder="0"
-                  />
-                </div>
-              ))}
-{/* Balance info */}
-<div className="sm:col-span-2">
-  {editMilestoneBalance.loading ? (
-    <span className="text-[10px] font-mono text-zinc-600 animate-pulse">fetching balance…</span>
-  ) : editMilestoneBalance.error ? (
-    <span className="text-[10px] font-mono text-zinc-600">balance unavailable</span>
-  ) : editMilestoneMint && editMilestoneBalance.balance !== null ? (
-    <div className="flex items-center gap-2 px-1 mb-2">
-      <span className="text-[10px] font-mono text-zinc-500">
-        Wallet Balance: {editMilestoneBalance.balance.toLocaleString(undefined, {
-          maximumFractionDigits: editMilestoneBalanceDecimals,
-        })}{editMilestoneSymbol ? ` ${editMilestoneSymbol}` : ""}
-      </span>
-    </div>
-  ) : null}
-</div>
-             <div className="sm:col-span-2">
-  <MilestoneAllocationCounter
-    amounts={editMilestoneAmounts.map((v: string) =>
-      formatBaseUnitsToTokenAmount(
-        parseTokenAmountToBaseUnits(String(v || "0"), editMilestoneDecimals),
-        editMilestoneDecimals
-      )
-    )}
-    total={Number(
-      formatBaseUnitsToTokenAmount(editMilestoneTargetTotal, editMilestoneDecimals)
-    )}
-    hasInvalid={editMilestoneHasInvalidAmounts}
-    isMatch={editMilestoneMatchesTotal}
+     {activeTab === "edit_milestone" && (
+  <EditMilestonePanel
+    editMilestoneForm={editMilestoneForm}
+    setEditMilestoneForm={setEditMilestoneForm}
+    handleAction={handleAction}
+    streams={streams}
+    connectedWalletAddress={connectedWalletAddress}
+    activeTxAction={activeTxAction}
+    activeTxPhase={activeTxPhase}
+    connected={connected}
+    isStreamCsvCreated={isStreamCsvCreated}
+    isMilestoneUnlocked={isMilestoneUnlocked}
+    editMilestoneBalance={editMilestoneBalance}
+    editMilestoneBalanceDecimals={editMilestoneBalanceDecimals}
+    editMilestoneMint={editMilestoneMint}
   />
-</div>
-            </div>
-          )}
-          {editMilestoneAlreadyUnlocked && !isStreamCsvCreated(editMilestoneForm.streamId) && (
-            <div className="bg-amber-950/40 border border-amber-500/30 rounded-2xl p-4 text-amber-300 flex items-start gap-3 mt-6">
-              <Lock className="w-5 h-5 text-amber-400 shrink-0 mt-0.5" />
-              <div>
-                <h4 className="text-sm font-extrabold">Milestone Already Unlocked</h4>
-                <p className="text-xs text-amber-400/80 mt-1 leading-relaxed">At least one milestone on this stream has already been unlocked, so its milestone structure can no longer be edited.</p>
-              </div>
-            </div>
-          )}
-          <button
-            disabled={editMilestoneDisabled}
-            onClick={() => handleAction("edit_milestone", editMilestoneForm)}
-            className={`w-full mt-6 text-white font-bold text-xs py-3 rounded-xl transition-all shadow-lg flex items-center justify-center gap-2 ${editMilestoneDisabled ? "bg-zinc-850 border border-zinc-800 text-zinc-550 cursor-not-allowed opacity-50" : "bg-indigo-600 hover:bg-indigo-700 hover:shadow-indigo-500/20"}`}
-          >
-            {activeTxAction === "edit_milestone" && activeTxPhase ? <RefreshCw className="w-4 h-4 animate-spin" /> : null}
-            {getTxLabel("edit_milestone", "Apply All Milestone Edits")}
-          </button>
-        </div>
-      )}
+)}
 
     {activeTab === "edit_linear" && (
   <EditLinearPanel
@@ -3844,7 +3742,575 @@ function useCsvTotalByMint(csvText: string): Record<string, number> {
     return totals;
   }, [csvText]);
 }
+function EditMilestonePanel({
+  editMilestoneForm,
+  setEditMilestoneForm,
+  handleAction,
+  streams,
+  connectedWalletAddress,
+  activeTxAction,
+  activeTxPhase,
+  connected,
+  isStreamCsvCreated,
+  isMilestoneUnlocked,
+  editMilestoneBalance,
+  editMilestoneBalanceDecimals,
+  editMilestoneMint,
+}: {
+  editMilestoneForm: {
+    streamId: string;
+    amounts: string[];
+    totalAmount: string;
+    mintDecimals: number | null;
+  };
+  setEditMilestoneForm: (value: any) => void;
+  handleAction: (actionName: string, data: any) => Promise<void> | void;
+  streams: any[];
+  connectedWalletAddress: string | null;
+  activeTxAction: string | null;
+  activeTxPhase: "wallet_approval" | "sending" | "confirming" | null;
+  connected: boolean;
+  isStreamCsvCreated: (id: string) => boolean;
+  isMilestoneUnlocked: (id: string) => boolean;
+  editMilestoneBalance: {
+    balance: number | null;
+    loading: boolean;
+    error: string | null;
+    decimals?: number | null;
+  };
+  editMilestoneBalanceDecimals: number;
+  editMilestoneMint: string;
+}) {
+  // ── Local detail state ─────────────────────────────────────────────────
+  const [streamDetail, setStreamDetail] = useState<any | null>(null);
+  const [detailLoading, setDetailLoading] = useState(false);
+  const [detailError, setDetailError] = useState<string | null>(null);
 
+  // ── Total draft — saat user edit total, simpan sementara di sini ───────
+  const [editTotalDraft, setEditTotalDraft] = useState<string | null>(null);
+
+  // ── Debounced fetch ────────────────────────────────────────────────────
+  useEffect(() => {
+    const id = editMilestoneForm.streamId.trim();
+    setStreamDetail(null);
+    setDetailError(null);
+    setEditTotalDraft(null);
+    if (!id) return;
+
+    const timer = setTimeout(async () => {
+      setDetailLoading(true);
+      try {
+        const res = await api.get(`/streams/${id}`);
+        setStreamDetail(res.data);
+
+        const decimals =
+          typeof res.data.mintDecimals === "number"
+            ? res.data.mintDecimals
+            : 6;
+        const rawStr = String(res.data.milestones || "").trim();
+        const count = Number(res.data.milestoneCount ?? 0);
+
+        if (rawStr && count > 0) {
+          const parsed = rawStr.split(";").map((v: string) => {
+            try {
+              return formatBaseUnitsToTokenAmount(BigInt(v.trim()), decimals);
+            } catch { return "0"; }
+          });
+          while (parsed.length < count) parsed.push("0");
+          const trimmed = parsed.slice(0, count);
+
+          setEditMilestoneForm((prev: any) => ({
+            ...prev,
+            amounts: trimmed,
+            totalAmount: String(res.data.totalAmount ?? ""),
+            mintDecimals: decimals,
+          }));
+        }
+      } catch (err: any) {
+        setDetailError(
+          err?.response?.data?.error ||
+            err?.message ||
+            "Failed to fetch stream details."
+        );
+      } finally {
+        setDetailLoading(false);
+      }
+    }, 600);
+
+    return () => clearTimeout(timer);
+  }, [editMilestoneForm.streamId]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // ── Stream resolution ──────────────────────────────────────────────────
+  const streamSummary = useMemo(
+    () =>
+      streams.find(
+        (s) => String(s?.id || "") === editMilestoneForm.streamId.trim()
+      ) ?? null,
+    [streams, editMilestoneForm.streamId]
+  );
+  const stream = streamDetail ?? streamSummary;
+
+  // ── Guards ─────────────────────────────────────────────────────────────
+  const isCsvCreated = isStreamCsvCreated(editMilestoneForm.streamId);
+  const alreadyUnlocked = isMilestoneUnlocked(editMilestoneForm.streamId);
+  const isWrongWallet =
+    !!editMilestoneForm.streamId.trim() &&
+    !!stream &&
+    !!connectedWalletAddress &&
+    stream.creator?.toLowerCase() !== connectedWalletAddress.toLowerCase();
+  const isWrongType = !!stream && Number(stream.vestingType) !== 2;
+  const isNotActive = !!stream && Number(stream.status) !== 1;
+
+  // ── Decimals ───────────────────────────────────────────────────────────
+  const decimals =
+    typeof editMilestoneForm.mintDecimals === "number"
+      ? editMilestoneForm.mintDecimals
+      : editMilestoneBalanceDecimals;
+
+  // ── totalAmount sebagai bigint ─────────────────────────────────────────
+  const totalAmountBase = useMemo(() => {
+    const raw = editMilestoneForm.totalAmount;
+    if (!raw) return BigInt(0);
+    try { return BigInt(String(raw).trim()); } catch { return BigInt(0); }
+  }, [editMilestoneForm.totalAmount]);
+
+  // ── Display value untuk total input ───────────────────────────────────
+  // Saat user sedang ngetik (draft != null), tampilkan draft
+  // Saat blur atau tidak ada draft, tampilkan human-readable dari base units
+  const editTotalValue =
+    editTotalDraft !== null
+      ? editTotalDraft
+      : totalAmountBase > BigInt(0)
+      ? formatBaseUnitsToTokenAmount(totalAmountBase, decimals)
+      : "";
+
+  // ── Rescale semua milestone proportionally saat total diubah ──────────
+  const rescaleMilestonesToTotal = (newTotalHuman: string) => {
+    const amounts = Array.isArray(editMilestoneForm.amounts)
+      ? editMilestoneForm.amounts
+      : [];
+    if (amounts.length === 0) return;
+
+    const newTotalBase = parseTokenAmountToBaseUnits(newTotalHuman, decimals);
+    if (newTotalBase <= BigInt(0)) return;
+
+    // Hitung current sum untuk rasio
+    const currentSum = amounts.reduce(
+      (sum, v) =>
+        sum + parseTokenAmountToBaseUnits(String(v || "0"), decimals),
+      BigInt(0)
+    );
+
+    let rescaled: string[];
+    if (currentSum <= BigInt(0)) {
+      // Distribusi merata kalau semua 0
+      const base = newTotalBase / BigInt(amounts.length);
+      const remainder = newTotalBase % BigInt(amounts.length);
+      rescaled = amounts.map((_, i) =>
+        formatBaseUnitsToTokenAmount(
+          base + (BigInt(i) < remainder ? BigInt(1) : BigInt(0)),
+          decimals
+        )
+      );
+    } else {
+      // Scale proportionally, fix rounding di last item
+      const scaled = amounts.map((v) => {
+        const base = parseTokenAmountToBaseUnits(String(v || "0"), decimals);
+        return (base * newTotalBase) / currentSum;
+      });
+      // Fix rounding: adjust last item supaya sum = newTotalBase
+      const scaledSum = scaled.reduce((a, b) => a + b, BigInt(0));
+      const diff = newTotalBase - scaledSum;
+      if (scaled.length > 0) scaled[scaled.length - 1] += diff;
+      rescaled = scaled.map((v) =>
+        formatBaseUnitsToTokenAmount(v, decimals)
+      );
+    }
+
+    setEditMilestoneForm({
+      ...editMilestoneForm,
+      amounts: rescaled,
+      // Simpan base units di totalAmount
+      totalAmount: String(newTotalBase),
+    });
+  };
+
+  // ── Allocation validation ──────────────────────────────────────────────
+  const amounts = Array.isArray(editMilestoneForm.amounts)
+    ? editMilestoneForm.amounts
+    : [];
+
+  const milestoneAmountBases = useMemo(
+    () =>
+      amounts.map((v) => {
+        try {
+          return parseTokenAmountToBaseUnits(String(v || "0"), decimals);
+        } catch { return BigInt(0); }
+      }),
+    [amounts, decimals]
+  );
+
+  const milestoneSum = useMemo(
+    () => milestoneAmountBases.reduce((a, b) => a + b, BigInt(0)),
+    [milestoneAmountBases]
+  );
+
+  const hasInvalidAmounts = amounts.some(
+    (v) => !v || Number(v) <= 0 || !Number.isFinite(Number(v))
+  );
+
+  const matchesTotal =
+    totalAmountBase > BigInt(0) ? milestoneSum === totalAmountBase : true;
+
+  const isSubmitting = activeTxAction === "edit_milestone" && !!activeTxPhase;
+
+  const getTxLabel = () => {
+    if (activeTxAction !== "edit_milestone" || !activeTxPhase)
+      return "Apply All Milestone Edits";
+    if (activeTxPhase === "wallet_approval") return "Approve In Wallet...";
+    if (activeTxPhase === "sending") return "Sending Transaction...";
+    return "Confirming On-Chain...";
+  };
+
+  const canSubmit =
+    !!editMilestoneForm.streamId.trim() &&
+    !isCsvCreated &&
+    !isWrongWallet &&
+    !isWrongType &&
+    !isNotActive &&
+    !alreadyUnlocked &&
+    !detailLoading &&
+    !hasInvalidAmounts &&
+    matchesTotal &&
+    amounts.length > 0 &&
+    connected;
+
+  return (
+    <div className="animate-in fade-in-30 duration-200">
+      <div className="border-b border-zinc-900 pb-4 mb-6">
+        <h2 className="text-2xl font-extrabold tracking-tight">
+          Edit Milestone Structure
+        </h2>
+        <p className="text-xs text-zinc-400">
+          Modify milestone details or adjust allocated milestone target amounts
+        </p>
+      </div>
+
+      {/* CSV lock */}
+      {isCsvCreated && (
+        <div className="bg-red-950/45 border border-red-500/30 rounded-2xl p-5 text-red-300 flex items-start gap-4 mb-6">
+          <Lock className="w-6 h-6 text-red-400 shrink-0 mt-0.5" />
+          <div>
+            <h4 className="text-sm font-extrabold">Manual Edit Locked!</h4>
+            <p className="text-xs text-red-400/80 mt-1 leading-relaxed">
+              This stream was created via CSV Import. To comply with consistency
+              requirements, CSV-created streams must be edited exclusively using
+              the Bulk Edit CSV console.
+            </p>
+          </div>
+        </div>
+      )}
+
+      {!isCsvCreated && (
+        <div className="grid gap-4 sm:grid-cols-2">
+
+          {/* Stream ID — full width */}
+          <div className="sm:col-span-2">
+            <label className="block text-xs font-semibold text-zinc-400 uppercase tracking-wider mb-1.5">
+              Stream ID (PDA Address)
+            </label>
+            <div className="relative">
+              <input
+                type="text"
+                value={editMilestoneForm.streamId}
+                onChange={(e) =>
+                  setEditMilestoneForm({
+                    ...editMilestoneForm,
+                    streamId: e.target.value,
+                  })
+                }
+                placeholder="Paste stream PDA address"
+                className="w-full bg-zinc-950 border border-zinc-800 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:border-indigo-500 font-mono pr-10"
+              />
+              {detailLoading && (
+                <div className="absolute inset-y-0 right-3 flex items-center">
+                  <RefreshCw className="w-3.5 h-3.5 text-zinc-500 animate-spin" />
+                </div>
+              )}
+            </div>
+            {/* Fetch status */}
+            <div className="mt-1.5 h-4 flex items-center">
+              {detailLoading && (
+                <span className="text-[10px] font-mono text-zinc-600 animate-pulse">
+                  fetching stream details…
+                </span>
+              )}
+              {detailError && !detailLoading && (
+                <span className="text-[10px] font-semibold text-rose-400">
+                  {detailError}
+                </span>
+              )}
+              {streamDetail && !detailLoading && !detailError && (
+                <span className="text-[10px] font-mono text-emerald-600 flex items-center gap-1">
+                  <Check className="w-3 h-3" /> Stream loaded
+                </span>
+              )}
+            </div>
+          </div>
+
+          {/* ── Guards ──────────────────────────────────────────────── */}
+          {isWrongWallet && (
+            <div className="sm:col-span-2 bg-amber-950/30 border border-amber-500/30 rounded-2xl p-4 flex items-start gap-3">
+              <AlertTriangle className="w-4 h-4 text-amber-400 shrink-0 mt-0.5" />
+              <div>
+                <p className="text-[11px] font-bold text-amber-300 mb-1">
+                  Wrong wallet connected
+                </p>
+                <p className="text-[11px] text-amber-300/70 leading-relaxed">
+                  Only the stream creator can edit milestones. Creator is{" "}
+                  <span className="font-mono text-amber-300 break-all">
+                    {stream?.creator
+                      ? `${stream.creator.slice(0, 6)}…${stream.creator.slice(-4)}`
+                      : "unknown"}
+                  </span>
+                  , connected wallet is{" "}
+                  <span className="font-mono text-amber-300 break-all">
+                    {`${connectedWalletAddress!.slice(0, 6)}…${connectedWalletAddress!.slice(-4)}`}
+                  </span>
+                  .
+                </p>
+              </div>
+            </div>
+          )}
+
+          {isWrongType && (
+            <div className="sm:col-span-2 bg-zinc-900/60 border border-zinc-700 rounded-2xl p-4 flex items-start gap-3">
+              <AlertTriangle className="w-4 h-4 text-zinc-400 shrink-0 mt-0.5" />
+              <div>
+                <p className="text-[11px] font-bold text-zinc-300 mb-1">
+                  Not a milestone stream
+                </p>
+                <p className="text-[11px] text-zinc-500 leading-relaxed">
+                  edit_milestone only applies to Milestone type (type 2)
+                  streams. This stream is{" "}
+                  {Number(stream?.vestingType) === 0 ? "Linear" : "Cliff"}{" "}
+                  type.
+                </p>
+              </div>
+            </div>
+          )}
+
+          {isNotActive && !isWrongType && (
+            <div className="sm:col-span-2 bg-rose-950/20 border border-rose-500/20 rounded-2xl p-4 flex items-start gap-3">
+              <AlertTriangle className="w-4 h-4 text-rose-400 shrink-0 mt-0.5" />
+              <p className="text-[11px] text-rose-300/80 leading-relaxed">
+                This stream is{" "}
+                <strong className="text-rose-300">
+                  {Number(stream?.status) === 2 ? "completed" : "cancelled"}
+                </strong>{" "}
+                and can no longer be edited.
+              </p>
+            </div>
+          )}
+
+          {alreadyUnlocked && !isNotActive && !isWrongType && (
+            <div className="sm:col-span-2 bg-amber-950/40 border border-amber-500/30 rounded-2xl p-4 text-amber-300 flex items-start gap-3">
+              <Lock className="w-5 h-5 text-amber-400 shrink-0 mt-0.5" />
+              <div>
+                <h4 className="text-sm font-extrabold">
+                  Milestone Already Unlocked
+                </h4>
+                <p className="text-xs text-amber-400/80 mt-1 leading-relaxed">
+                  At least one milestone on this stream has already been
+                  unlocked, so its milestone structure can no longer be edited.
+                </p>
+              </div>
+            </div>
+          )}
+
+          {/* ── Total amount input — full width ───────────────────────── */}
+          {amounts.length > 0 && !isWrongType && (
+            <div className="sm:col-span-2">
+              <label className="block text-xs font-semibold text-zinc-400 uppercase tracking-wider mb-1.5">
+                Total Amount
+              </label>
+              <input
+                type="text"
+                inputMode="decimal"
+                lang="en"
+                value={editTotalValue}
+                onChange={(e) => {
+                  const normalized = normalizeDecimalInput(e.target.value);
+                  setEditTotalDraft(normalized);
+                  rescaleMilestonesToTotal(
+                    normalized === "" ? "0" : normalized
+                  );
+                }}
+                onBlur={() => setEditTotalDraft(null)}
+                className="w-full bg-zinc-950 border border-indigo-500/40 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:border-indigo-500 font-mono"
+                placeholder="0"
+              />
+              <p className="mt-1.5 text-[10px] text-zinc-500 leading-relaxed">
+                Changing the total scales every milestone proportionally,
+                keeping the ratio between milestones intact.
+              </p>
+            </div>
+          )}
+
+          {/* ── Per-milestone inputs ──────────────────────────────────── */}
+          {amounts.map((amount: string, index: number) => {
+            const val = Number(amount || 0);
+            const isEmpty = !amount || amount === "0";
+            const isInvalid =
+              isEmpty || val <= 0 || !Number.isFinite(val);
+            const pctOfTotal =
+              totalAmountBase > BigInt(0)
+                ? (
+                    (Number(milestoneAmountBases[index] ?? BigInt(0)) /
+                      Number(totalAmountBase)) *
+                    100
+                  ).toFixed(1)
+                : "0.0";
+
+            return (
+              <div key={index}>
+                <div className="flex items-center justify-between mb-1.5">
+                  <label className="block text-xs font-semibold text-zinc-400 uppercase tracking-wider">
+                    Milestone #{index}
+                  </label>
+                  <span
+                    className={`text-[9px] font-mono font-bold ${
+                      isInvalid ? "text-zinc-600" : "text-indigo-400"
+                    }`}
+                  >
+                    {isInvalid ? "—" : `${pctOfTotal}%`}
+                  </span>
+                </div>
+                <input
+                  type="text"
+                  inputMode="decimal"
+                  lang="en"
+                  value={amount}
+                  onChange={(e) => {
+                    const next = [
+                      ...(Array.isArray(editMilestoneForm.amounts)
+                        ? editMilestoneForm.amounts
+                        : []),
+                    ];
+                    const normalized = normalizeDecimalInput(e.target.value);
+                    next[index] = normalized === "" ? "0" : normalized;
+                    setEditTotalDraft(null);
+                    setEditMilestoneForm({
+                      ...editMilestoneForm,
+                      amounts: next,
+                    });
+                  }}
+                  className={`w-full bg-zinc-950 border rounded-xl px-4 py-2.5 text-sm focus:outline-none font-mono transition-colors ${
+                    isInvalid
+                      ? "border-rose-500/50 focus:border-rose-500"
+                      : "border-zinc-800 focus:border-indigo-500"
+                  }`}
+                  placeholder="0"
+                />
+              </div>
+            );
+          })}
+
+          {/* ── Balance row ───────────────────────────────────────────── */}
+          <div className="sm:col-span-2">
+            {editMilestoneBalance.loading ? (
+              <span className="text-[10px] font-mono text-zinc-600 animate-pulse">
+                fetching balance…
+              </span>
+            ) : editMilestoneBalance.error !== null ? (
+              <span className="text-[10px] font-mono text-zinc-600">
+                balance unavailable
+              </span>
+            ) : editMilestoneMint &&
+              editMilestoneBalance.balance !== null ? (
+              <div className="flex items-center gap-2 px-1 mb-2">
+                <span className="text-[10px] font-mono text-zinc-500">
+                  Wallet Balance:{" "}
+                  {editMilestoneBalance.balance.toLocaleString(undefined, {
+                    maximumFractionDigits: editMilestoneBalanceDecimals,
+                  })}
+                </span>
+              </div>
+            ) : null}
+          </div>
+
+          {/* ── Allocation counter ────────────────────────────────────── */}
+          <div className="sm:col-span-2">
+            <MilestoneAllocationCounter
+              amounts={amounts.map((v: string) =>
+                formatBaseUnitsToTokenAmount(
+                  parseTokenAmountToBaseUnits(
+                    String(v || "0"),
+                    decimals
+                  ),
+                  decimals
+                )
+              )}
+              total={Number(
+                formatBaseUnitsToTokenAmount(totalAmountBase, decimals)
+              )}
+              hasInvalid={hasInvalidAmounts}
+              isMatch={matchesTotal}
+            />
+          </div>
+
+          {/* Stream not found hint */}
+          {editMilestoneForm.streamId.trim() &&
+            !stream &&
+            !detailLoading &&
+            !detailError && (
+              <div className="sm:col-span-2 bg-zinc-900/40 border border-zinc-800 rounded-xl px-4 py-3 flex items-center gap-2">
+                <div className="w-1.5 h-1.5 rounded-full bg-zinc-600" />
+                <span className="text-[11px] text-zinc-500">
+                  Stream not found in index — preview unavailable until the
+                  indexer syncs.
+                </span>
+              </div>
+            )}
+        </div>
+      )}
+
+      {/* Submit button */}
+      <button
+        disabled={!canSubmit}
+        onClick={() => handleAction("edit_milestone", editMilestoneForm)}
+        className={`w-full mt-6 text-white font-bold text-xs py-3 rounded-xl transition-all shadow-lg flex items-center justify-center gap-2 ${
+          !canSubmit
+            ? "bg-zinc-850 border border-zinc-800 text-zinc-550 cursor-not-allowed opacity-50"
+            : "bg-indigo-600 hover:bg-indigo-700 hover:shadow-indigo-500/20"
+        }`}
+      >
+        {isSubmitting ? (
+          <RefreshCw className="w-4 h-4 animate-spin" />
+        ) : (
+          <Layers className="w-4 h-4" />
+        )}
+        {!connected
+          ? "Connect wallet to edit"
+          : isCsvCreated
+          ? "Use CSV Console to edit"
+          : isWrongWallet
+          ? "Wrong wallet — switch to creator wallet"
+          : isWrongType
+          ? "Not a milestone stream"
+          : isNotActive
+          ? Number(stream?.status) === 2
+            ? "Stream already completed"
+            : "Stream cancelled"
+          : alreadyUnlocked
+          ? "Cannot edit — milestone already unlocked"
+          : detailLoading
+          ? "Loading stream..."
+          : getTxLabel()}
+      </button>
+    </div>
+  );
+}
 // ─── Edit Cliff Panel ──────────────────────────────────────────────────────
 function EditCliffPanel({
   editCliffForm,
