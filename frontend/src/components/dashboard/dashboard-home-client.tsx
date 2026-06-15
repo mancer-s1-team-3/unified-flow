@@ -497,7 +497,10 @@ export default function Home({ initialStreams = [] }: Props) {
       ...prev,
       amounts:      buildMilestoneAmountsFromStream(stream),
       totalAmount:  String(stream?.totalAmount ?? ""),
-      mintDecimals: typeof stream?.mintDecimals === "number" ? stream.mintDecimals : null,
+      // MUST match the decimals buildMilestoneAmountsFromStream() used to build
+      // `amounts` (it falls back to 0). Storing null here let the panel re-parse
+      // those amounts at a different scale (6) → allocation counter showed wrong %.
+      mintDecimals: typeof stream?.mintDecimals === "number" ? stream.mintDecimals : 0,
     }));
   }, [activeTab, editMilestoneForm.streamId, editMilestoneForm.totalAmount, streams]);
 
@@ -906,7 +909,9 @@ export default function Home({ initialStreams = [] }: Props) {
     if (tab === "unlock_milestone") setUnlockForm({ streamId });
     if (tab === "edit_milestone") {
       setEditMilestoneForm(stream
-        ? { streamId, amounts: buildMilestoneAmountsFromStream(stream), totalAmount: String(stream?.totalAmount ?? ""), mintDecimals: typeof stream?.mintDecimals === "number" ? stream.mintDecimals : null }
+        // mintDecimals MUST equal the decimals buildMilestoneAmountsFromStream()
+        // used (fallback 0), so the panel parses `amounts` at the same scale.
+        ? { streamId, amounts: buildMilestoneAmountsFromStream(stream), totalAmount: String(stream?.totalAmount ?? ""), mintDecimals: typeof stream?.mintDecimals === "number" ? stream.mintDecimals : 0 }
         : { streamId, amounts: ["250", "250", "250", "250"], totalAmount: "", mintDecimals: null }
       );
     }
