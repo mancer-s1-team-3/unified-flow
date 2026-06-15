@@ -71,7 +71,7 @@ const TOOLS = [
         properties: {
           recipient: { type: "string", description: "Recipient wallet public key" },
           mint: { type: "string", description: "Token mint public key" },
-          amount: { type: "number", description: "Total token amount in base units" },
+          amount: { type: "number", description: "Total token amount in human-readable units (e.g. 1000 means 1000 tokens). The app converts to base units using the mint's on-chain decimals." },
           start_ts: { type: "number", description: "Stream start timestamp (Unix seconds)" },
           cliff_ts: { type: "number", description: "Cliff timestamp (Unix seconds); 0 if no cliff" },
           end_ts: { type: "number", description: "Stream end/expiry timestamp (Unix seconds)" },
@@ -82,7 +82,7 @@ const TOOLS = [
             items: {
               type: "object",
               properties: {
-                amount: { type: "number", description: "Token amount for this milestone" },
+                amount: { type: "number", description: "Token amount for this milestone, in human-readable units (the app converts using the mint's decimals)." },
               },
               required: ["amount"],
             },
@@ -148,7 +148,7 @@ const TOOLS = [
         properties: {
           stream_pda: { type: "string", description: "Stream account PDA public key" },
           milestone_index: { type: "number", description: "0-based index of the milestone to edit" },
-          new_amount: { type: "number", description: "New token amount in base units" },
+          new_amount: { type: "number", description: "New token amount in human-readable units (the app converts using the mint's decimals)." },
         },
         required: ["stream_pda", "milestone_index", "new_amount"],
       },
@@ -179,7 +179,7 @@ const TOOLS = [
         properties: {
           stream_pda: { type: "string", description: "Stream account PDA public key" },
           new_end_ts: { type: "number", description: "New end timestamp (Unix seconds)" },
-          topup_amount: { type: "number", description: "Additional tokens to deposit into vault (0 if only extending)" },
+          topup_amount: { type: "number", description: "Additional tokens to deposit into vault, in human-readable units (0 if only extending; the app converts using the mint's decimals)." },
         },
         required: ["stream_pda", "new_end_ts", "topup_amount"],
       },
