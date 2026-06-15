@@ -1,3 +1,5 @@
+import { PublicKey } from "@solana/web3.js";
+
 type CsvPrimitive = string | number | boolean | undefined;
 
 export interface CsvRow {
@@ -213,6 +215,156 @@ export function parseCsvText(csvText: string): CsvRow[] {
   }
 
   return rows;
+}
+
+const MAX_CSV_ROWS = 500;
+const BASE58_REGEX = /^[1-9A-HJ-NP-Za-km-z]{32,44}$/;
+
+function isValidPubkey(value: string): boolean {
+  const v = value.trim();
+  if (!BASE58_REGEX.test(v)) return false;
+  try {
+    new PublicKey(v);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Server-side content validation for uploaded CSV payloads. Mirrors (a loose
+ * superset of) the frontend checks so the backend never blindly persists garbage
+ * — but is deliberately a *subset* (skips per-mint precision / DB-aware duration
+ * rules) so any payload the gated UI accepts also passes here. Returns a list of
+ * human-readable error messages; empty array means valid.
+ */
+export function validateCsvContent(content: string, mode: "create" | "edit"): string[] {
+  const errors: string[] = [];
+  if (typeof content !== "string" || content.trim() === "") {
+    return ["CSV content is empty."];
+  }
+  if (content.charCodeAt(0) === 0xfeff) {
+    errors.push("File starts with a byte-order mark (BOM). Re-save as UTF-8 without BOM.");
+  }
+
+  const lines = content
+    .replace(/^﻿/, "")
+    .split(/\r?\n/)
+    .map((l) => l.trim())
+    .filter(Boolean);
+  if (lines.length < 2) {
+    errors.push("CSV must contain a header row and at least one data row.");
+    return errors;
+  }
+
+  const headerLine = lines[0];
+  if (!headerLine.includes(",") && /[;\t|]/.test(headerLine)) {
+    errors.push("CSV must be comma-delimited (found ';', tab, or '|' in the header).");
+    return errors;
+  }
+
+  const headers = headerLine.split(",").map((h) => h.trim().toLowerCase());
+  const at = (name: string) => headers.indexOf(name);
+  const recipientIdx = at("recipient");
+  const amountIdx = at("amount");
+  const typeIdx = at("type");
+  const mintIdx = at("mint");
+  const idIdx = at("id");
+  const milestonesIdx = at("milestones");
+
+  const missing: string[] = [];
+  if (mode === "create") {
+    if (recipientIdx === -1) missing.push("recipient");
+    if (amountIdx === -1) missing.push("amount");
+    if (typeIdx === -1) missing.push("type");
+  } else if (idIdx === -1 && recipientIdx === -1) {
+    missing.push("id (or recipient)");
+  }
+  if (missing.length) {
+    errors.push(`Missing required column(s): ${missing.join(", ")}.`);
+  }
+
+  const dataRows = lines.length - 1;
+  if (dataRows > MAX_CSV_ROWS) {
+    errors.push(`Too many rows (${dataRows}). Max ${MAX_CSV_ROWS} per upload.`);
+  }
+
+  const isNumeric = (raw: string) => /^\d+(\.\d+)?$/.test(raw.trim());
+  const minCols = milestonesIdx !== -1 ? milestonesIdx : headers.length;
+  const seenRow = new Map<string, number>();
+  const seenId = new Map<string, number>();
+
+  for (let i = 1; i < lines.length; i++) {
+    const rowNum = i;
+    const values = lines[i].split(",").map((v) => v.trim());
+
+    if (values.length < minCols) {
+      errors.push(`Row ${rowNum}: malformed — expected at least ${minCols} columns, found ${values.length}.`);
+      continue;
+    }
+
+    const typeRaw = typeIdx !== -1 ? values[typeIdx] ?? "" : "";
+
+    if (mode === "create") {
+      if (typeIdx !== -1 && !/^[012]$/.test(typeRaw)) {
+        errors.push(`Row ${rowNum}: type must be 0 (linear), 1 (cliff), or 2 (milestone).`);
+      }
+      const recipient = recipientIdx !== -1 ? values[recipientIdx] ?? "" : "";
+      if (!recipient.trim()) {
+        errors.push(`Row ${rowNum}: recipient is required.`);
+      } else if (!isValidPubkey(recipient)) {
+        errors.push(`Row ${rowNum}: recipient is not a valid Solana address.`);
+      }
+      const mintVal = mintIdx !== -1 ? values[mintIdx] ?? "" : "";
+      if (mintVal.trim() && !isValidPubkey(mintVal)) {
+        errors.push(`Row ${rowNum}: mint is not a valid Solana address.`);
+      }
+      const amtRaw = amountIdx !== -1 ? values[amountIdx] ?? "" : "";
+      if (!amtRaw.trim()) {
+        errors.push(`Row ${rowNum}: amount is required.`);
+      } else if (!isNumeric(amtRaw) || Number(amtRaw) <= 0) {
+        errors.push(`Row ${rowNum}: amount must be a positive number.`);
+      }
+      // Milestone (type 2): the milestone amounts must sum to the row amount.
+      if (typeRaw === "2" && milestonesIdx !== -1 && isNumeric(amtRaw)) {
+        const parts = values.slice(milestonesIdx).map((v) => v.trim()).filter(Boolean);
+        if (parts.length === 0) {
+          errors.push(`Row ${rowNum}: milestone stream requires milestone amounts.`);
+        } else if (!parts.every(isNumeric)) {
+          errors.push(`Row ${rowNum}: milestone amounts must all be positive numbers.`);
+        } else {
+          const sum = parts.reduce((acc, p) => acc + Number(p), 0);
+          if (Math.abs(sum - Number(amtRaw)) > 1e-6) {
+            errors.push(`Row ${rowNum}: milestone sum (${sum}) must equal amount (${amtRaw}).`);
+          }
+        }
+      }
+      const rowKey = values.join("|").toLowerCase();
+      if (seenRow.has(rowKey)) {
+        errors.push(`Row ${rowNum}: identical to row ${seenRow.get(rowKey)} — remove the duplicate.`);
+      } else {
+        seenRow.set(rowKey, rowNum);
+      }
+    } else {
+      if (typeIdx !== -1 && typeRaw.trim() && !/^[012]$/.test(typeRaw)) {
+        errors.push(`Row ${rowNum}: type must be 0, 1, or 2.`);
+      }
+      const amtRaw = amountIdx !== -1 ? values[amountIdx] ?? "" : "";
+      if (amtRaw.trim() && (!isNumeric(amtRaw) || Number(amtRaw) <= 0)) {
+        errors.push(`Row ${rowNum}: amount must be a positive number.`);
+      }
+      const id = idIdx !== -1 ? (values[idIdx] ?? "").trim() : "";
+      if (id) {
+        if (seenId.has(id)) {
+          errors.push(`Row ${rowNum}: duplicate id — already edited in row ${seenId.get(id)}.`);
+        } else {
+          seenId.set(id, rowNum);
+        }
+      }
+    }
+  }
+
+  return errors;
 }
 
 function pickFirstUnmatched(candidates: CsvDiffRecord[], matchedRefIds: Set<string>) {

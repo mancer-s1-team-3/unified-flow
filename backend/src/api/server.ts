@@ -17,7 +17,7 @@ import path from "node:path";
 
 import prisma from "../db/prisma";
 import { connection } from "../services/rpc";
-import { parseCsvText, computeCsvDiff, mapCsvRowsToStreams } from "../services/csvDiff";
+import { parseCsvText, computeCsvDiff, mapCsvRowsToStreams, validateCsvContent } from "../services/csvDiff";
 import { streamChat, isConfigured as isAiConfigured, type ChatContext } from "../services/aiChat";
 import idl from "../idl/unified_flow.json";
 
@@ -535,9 +535,24 @@ app.get("/csv/versions", async (req, res) => {
 
 // 2. Upload/Save a new CSV upload version
 app.post("/csv/upload", async (req, res) => {
-    const { content, filename, uploader } = req.body;
+    const { content, filename, uploader, mode } = req.body;
     if (!content) {
         return res.status(400).send({ error: "CSV content is required." });
+    }
+
+    // Validate CSV content instead of blindly persisting it. Mode is taken from
+    // the request when provided, else inferred from the conventional filename
+    // (bulk_edit_*) — defaulting to "create".
+    const resolvedMode: "create" | "edit" =
+        mode === "edit" || mode === "create"
+            ? mode
+            : /edit/i.test(String(filename ?? "")) ? "edit" : "create";
+    const validationErrors = validateCsvContent(String(content), resolvedMode);
+    if (validationErrors.length > 0) {
+        return res.status(400).send({
+            error: `CSV validation failed: ${validationErrors[0]}${validationErrors.length > 1 ? ` (+${validationErrors.length - 1} more)` : ""}`,
+            details: validationErrors,
+        });
     }
 
     try {

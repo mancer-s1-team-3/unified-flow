@@ -12,6 +12,7 @@ import { useTokenBalance } from "@/lib/use-token-balance";
 import { useAddressHistory } from "@/lib/use-address-history";
 import { parseBaseUnits } from "./dashboard-home-client";
 import { api } from "@/lib/api";
+import { PublicKey } from "@solana/web3.js";
 const QUICK_DURATIONS = [
   { label: "1M", value: 60 * 60 * 24 * 30 },
   { label: "3M", value: 60 * 60 * 24 * 90 },
@@ -1709,9 +1710,18 @@ type Props = {
 connectedWalletAddress: string | null;
 };
 const BASE58_REGEX = /^[1-9A-HJ-NP-Za-km-z]{32,44}$/;
+// Real pubkey validation: base58 pre-filter (cheap, avoids throwing on obvious
+// garbage) then an actual PublicKey decode so off-length / invalid-base58 inputs
+// that pass the regex are still rejected — not just a loose regex match.
 function isValidSolanaAddress(address: string): boolean {
-  if (!address?.trim()) return false;
-  return BASE58_REGEX.test(address.trim());
+  const a = address?.trim();
+  if (!a || !BASE58_REGEX.test(a)) return false;
+  try {
+    new PublicKey(a);
+    return true;
+  } catch {
+    return false;
+  }
 }
 export function DashboardActionPanels(props: Props) {
   const {
@@ -1950,11 +1960,25 @@ const csvExceedsBalance =
   tokenBalance.balance !== null &&
   (csvTotalByMint[createForm.mint] ?? 0) > tokenBalance.balance;
 
+// Same inputs the CsvValidationPanel uses, so the gate and the displayed
+// validation panel always agree on whether the CSV is acceptable.
+const csvWalletDecimals = tokenBalance.decimals ?? selectedMintPreset?.decimals ?? 6;
+const csvStructuralValidation = useCsvStructuralValidation(csvCreateText, "create", {
+  mintPresets,
+  selectedMint: createForm.mint,
+  fallbackDecimals: csvWalletDecimals,
+});
+const csvEditStructuralValidation = useCsvStructuralValidation(csvEditText, "edit", {
+  mintPresets,
+  knownStreams: streams,
+});
+
 const createCsvDisabled =
   !csvCreateText?.trim() ||
   activeTxAction === "create_stream_csv" ||
   csvMilestoneValidation.hasErrors ||
   csvDurationValidation.hasErrors || // ← validasi duration/cliff per baris
+  csvStructuralValidation.hasErrors || // ← validasi struktur/konten per baris
   csvExceedsBalance ||
   !createDiffFresh; // ← gate wajib: diff terkini harus ditinjau dulu
 const csvEditTotalByMint = useCsvEditTotalByMint(csvEditText);
@@ -1969,6 +1993,7 @@ const editCsvDisabled =
   csvEditMilestoneValidation.hasErrors ||
   csvEditIdValidation.hasErrors || // ← blok apply kalau ada id ngawur
   csvEditDurationValidation.hasErrors || // ← validasi duration/cliff per baris
+  csvEditStructuralValidation.hasErrors || // ← validasi struktur/konten per baris
   csvEditExceedsBalance ||
   !editDiffFresh; // ← gate wajib: diff terkini harus ditinjau dulu
 
@@ -2737,10 +2762,11 @@ const editCsvDisabled =
   walletMint={createForm.mint}
   walletMintLabel={selectedMintPreset?.label}
   walletDecimals={tokenBalance.decimals ?? selectedMintPreset?.decimals ?? 6}
+  mintPresets={mintPresets}
 />
               <CsvDiffPanel csvDiffResult={csvDiffResult} compareVersionSelected={compareVersionSelected} onClose={() => setCsvDiffResult(null)} />
 
-              {!createDiffFresh && csvCreateText?.trim() && !csvMilestoneValidation.hasErrors && !csvDurationValidation.hasErrors && !csvExceedsBalance && (
+              {!createDiffFresh && csvCreateText?.trim() && !csvMilestoneValidation.hasErrors && !csvDurationValidation.hasErrors && !csvStructuralValidation.hasErrors && !csvExceedsBalance && (
                 <div className="mt-4 bg-amber-950/20 border border-amber-500/25 rounded-xl px-4 py-3 flex items-center gap-2">
                   <Layers className="w-3.5 h-3.5 text-amber-400 shrink-0" />
                   <span className="text-[11px] text-amber-300/90 leading-relaxed">
@@ -2869,6 +2895,7 @@ const editCsvDisabled =
   editMode={true}              // ← flag supaya label lebih relevan
   editTotalByMint={csvEditTotalByMint}
   editStreams={streams}        // ← live DB untuk validasi kolom id
+  mintPresets={mintPresets}
 />
             <CsvDiffPanel
               csvDiffResult={csvDiffResult}
@@ -2876,7 +2903,7 @@ const editCsvDisabled =
               onClose={() => setCsvDiffResult(null)}
             />
 
-            {!editDiffFresh && csvEditText?.trim() && !csvEditMilestoneValidation.hasErrors && !csvEditIdValidation.hasErrors && !csvEditDurationValidation.hasErrors && !csvEditExceedsBalance && (
+            {!editDiffFresh && csvEditText?.trim() && !csvEditMilestoneValidation.hasErrors && !csvEditIdValidation.hasErrors && !csvEditDurationValidation.hasErrors && !csvEditStructuralValidation.hasErrors && !csvEditExceedsBalance && (
               <div className="mt-4 bg-amber-950/20 border border-amber-500/25 rounded-xl px-4 py-3 flex items-center gap-2">
                 <Layers className="w-3.5 h-3.5 text-amber-400 shrink-0" />
                 <span className="text-[11px] text-amber-300/90 leading-relaxed">
@@ -3510,6 +3537,176 @@ function useCsvDurationValidation(
   }, [csvText, mode, knownStreams]);
 }
 
+// ── Structural / content validation for CSV (create + edit) ─────────────────
+// Covers everything not handled by the milestone-sum / id / duration hooks:
+// BOM & delimiter, required header columns, malformed rows, row-count limit,
+// type ∈ {0,1,2}, REAL pubkey for recipient & mint, amount numeric/positive/
+// precision, and duplicate detection. Rejects garbage before it can reach the
+// chain (amount "abc" no longer silently coerces to 0).
+type CsvStructuralIssue = { rowNum: number; field: string; reason: string };
+const MAX_CSV_ROWS = 500;
+function useCsvStructuralValidation(
+  csvText: string,
+  mode: "create" | "edit",
+  opts?: {
+    mintPresets?: MintPreset[];
+    fallbackDecimals?: number;
+    selectedMint?: string | null;
+    knownStreams?: any[];
+  }
+): { issues: CsvStructuralIssue[]; hasErrors: boolean } {
+  const mintPresets = opts?.mintPresets;
+  const fallbackDecimals = opts?.fallbackDecimals;
+  const selectedMint = opts?.selectedMint;
+  const knownStreams = opts?.knownStreams;
+  return useMemo(() => {
+    if (!csvText?.trim()) return { issues: [], hasErrors: false };
+    const issues: CsvStructuralIssue[] = [];
+
+    // BOM / encoding
+    if (csvText.charCodeAt(0) === 0xfeff) {
+      issues.push({ rowNum: 0, field: "encoding", reason: "File starts with a byte-order mark (BOM). Re-save as UTF-8 without BOM." });
+    }
+
+    const lines = csvText.replace(/^﻿/, "").split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
+    if (lines.length < 2) return { issues, hasErrors: issues.length > 0 };
+
+    // Delimiter heuristic — bail early since the rest can't be parsed reliably.
+    const headerLine = lines[0];
+    if (!headerLine.includes(",") && /[;\t|]/.test(headerLine)) {
+      issues.push({ rowNum: 1, field: "delimiter", reason: "CSV must be comma-delimited (found ';', tab, or '|' in the header)." });
+      return { issues, hasErrors: true };
+    }
+
+    const headers = headerLine.split(",").map((h) => h.trim().toLowerCase());
+    const at = (name: string) => headers.indexOf(name);
+    const recipientIdx = at("recipient");
+    const amountIdx = at("amount");
+    const typeIdx = at("type");
+    const mintIdx = at("mint");
+    const idIdx = at("id");
+    const milestonesIdx = at("milestones");
+
+    // Required header columns
+    const missing: string[] = [];
+    if (mode === "create") {
+      if (recipientIdx === -1) missing.push("recipient");
+      if (amountIdx === -1) missing.push("amount");
+      if (typeIdx === -1) missing.push("type");
+    } else if (idIdx === -1 && recipientIdx === -1) {
+      missing.push("id (or recipient)");
+    }
+    if (missing.length) {
+      issues.push({ rowNum: 1, field: "header", reason: `Missing required column${missing.length > 1 ? "s" : ""}: ${missing.join(", ")}.` });
+    }
+
+    // Row-count limit
+    const dataRows = lines.length - 1;
+    if (dataRows > MAX_CSV_ROWS) {
+      issues.push({ rowNum: 0, field: "rows", reason: `Too many rows (${dataRows}). Max ${MAX_CSV_ROWS} per upload.` });
+    }
+
+    const presetDecimals = new Map<string, number>();
+    (mintPresets ?? []).forEach((p) => { if (p?.mint) presetDecimals.set(p.mint, p.decimals); });
+    const streamById = new Map<string, any>();
+    (knownStreams ?? []).forEach((s) => { const sid = String(s?.id ?? "").trim(); if (sid) streamById.set(sid, s); });
+
+    const createDecimalsFor = (mintVal: string): number | null => {
+      const m = mintVal.trim();
+      if (m && presetDecimals.has(m)) return presetDecimals.get(m)!;
+      if (!m && selectedMint && presetDecimals.has(selectedMint)) return presetDecimals.get(selectedMint)!;
+      if (!m && typeof fallbackDecimals === "number") return fallbackDecimals;
+      return null; // unknown mint → cannot check precision
+    };
+    const isNumeric = (raw: string) => /^\d+(\.\d+)?$/.test(raw.trim());
+    const fractionLen = (raw: string) => { const t = raw.trim(); const dot = t.indexOf("."); return dot === -1 ? 0 : t.length - dot - 1; };
+
+    // milestones may legitimately add columns beyond the header, so only count
+    // columns up to (not including) the milestones column for "malformed".
+    const minCols = milestonesIdx !== -1 ? milestonesIdx : headers.length;
+
+    const seenRowKey = new Map<string, number>(); // create: exact duplicate row
+    const seenId = new Map<string, number>();      // edit: duplicate id
+
+    for (let i = 1; i < lines.length; i++) {
+      const rowNum = i;
+      const values = lines[i].split(",").map((v) => v.trim());
+
+      if (values.length < minCols) {
+        issues.push({ rowNum, field: "row", reason: `Malformed row — expected at least ${minCols} columns, found ${values.length}.` });
+        continue;
+      }
+
+      const typeRaw = typeIdx !== -1 ? (values[typeIdx] ?? "") : "";
+
+      if (mode === "create") {
+        if (typeIdx !== -1 && !/^[012]$/.test(typeRaw)) {
+          issues.push({ rowNum, field: "type", reason: `type must be 0 (linear), 1 (cliff) or 2 (milestone) — got "${typeRaw || "(empty)"}".` });
+        }
+        const recipient = recipientIdx !== -1 ? (values[recipientIdx] ?? "") : "";
+        if (!recipient.trim()) {
+          issues.push({ rowNum, field: "recipient", reason: "recipient is required." });
+        } else if (!isValidSolanaAddress(recipient)) {
+          issues.push({ rowNum, field: "recipient", reason: "recipient is not a valid Solana address." });
+        }
+        const mintVal = mintIdx !== -1 ? (values[mintIdx] ?? "") : "";
+        if (mintVal.trim() && !isValidSolanaAddress(mintVal)) {
+          issues.push({ rowNum, field: "mint", reason: "mint is not a valid Solana address." });
+        }
+        const amtRaw = amountIdx !== -1 ? (values[amountIdx] ?? "") : "";
+        if (!amtRaw.trim()) {
+          issues.push({ rowNum, field: "amount", reason: "amount is required." });
+        } else if (!isNumeric(amtRaw)) {
+          issues.push({ rowNum, field: "amount", reason: `amount must be a positive number — got "${amtRaw}".` });
+        } else if (Number(amtRaw) <= 0) {
+          issues.push({ rowNum, field: "amount", reason: "amount must be greater than 0." });
+        } else {
+          const dec = createDecimalsFor(mintVal);
+          if (dec !== null && fractionLen(amtRaw) > dec) {
+            issues.push({ rowNum, field: "amount", reason: `amount has more than ${dec} decimal place${dec === 1 ? "" : "s"} allowed for this mint.` });
+          }
+        }
+        const rowKey = values.join("|").toLowerCase();
+        if (seenRowKey.has(rowKey)) {
+          issues.push({ rowNum, field: "duplicate", reason: `Identical to row #${seenRowKey.get(rowKey)} — remove the duplicate.` });
+        } else {
+          seenRowKey.set(rowKey, rowNum);
+        }
+      } else {
+        // edit
+        if (typeIdx !== -1 && typeRaw.trim() && !/^[012]$/.test(typeRaw)) {
+          issues.push({ rowNum, field: "type", reason: `type must be 0, 1 or 2 — got "${typeRaw}".` });
+        }
+        const amtRaw = amountIdx !== -1 ? (values[amountIdx] ?? "") : "";
+        if (amtRaw.trim()) {
+          if (!isNumeric(amtRaw)) {
+            issues.push({ rowNum, field: "amount", reason: `amount must be a positive number — got "${amtRaw}".` });
+          } else if (Number(amtRaw) <= 0) {
+            issues.push({ rowNum, field: "amount", reason: "amount must be greater than 0." });
+          } else {
+            const id = idIdx !== -1 ? (values[idIdx] ?? "").trim() : "";
+            const stream = id ? streamById.get(id) : null;
+            const dec = stream && typeof stream.mintDecimals === "number" ? stream.mintDecimals : null;
+            if (dec !== null && fractionLen(amtRaw) > dec) {
+              issues.push({ rowNum, field: "amount", reason: `amount has more than ${dec} decimal places allowed for this stream's mint.` });
+            }
+          }
+        }
+        const id = idIdx !== -1 ? (values[idIdx] ?? "").trim() : "";
+        if (id) {
+          if (seenId.has(id)) {
+            issues.push({ rowNum, field: "duplicate", reason: `Duplicate id — already edited in row #${seenId.get(id)}.` });
+          } else {
+            seenId.set(id, rowNum);
+          }
+        }
+      }
+    }
+
+    return { issues, hasErrors: issues.length > 0 };
+  }, [csvText, mode, mintPresets, fallbackDecimals, selectedMint, knownStreams]);
+}
+
 function CsvValidationPanel({
   csvText,
   walletBalance,
@@ -3519,6 +3716,7 @@ function CsvValidationPanel({
   editMode,
   editTotalByMint,
   editStreams,
+  mintPresets,
 }: {
   csvText: string;
   walletBalance: number | null;
@@ -3528,6 +3726,7 @@ function CsvValidationPanel({
   editMode?: boolean;           // ← baru
   editTotalByMint?: Record<string, number>; // ← baru, override total calculation
   editStreams?: any[];          // ← baru, daftar stream live DB untuk validasi id
+  mintPresets?: MintPreset[];   // ← baru, untuk cek presisi amount per mint
 }) {
   const { rows, hasErrors } = useCsvMilestoneValidation(csvText);
   const { issues: idIssues, hasErrors: hasIdErrors } = useCsvIdValidation(
@@ -3537,6 +3736,13 @@ function CsvValidationPanel({
   );
   const { issues: durationIssues, hasErrors: hasDurationErrors } =
     useCsvDurationValidation(csvText, editMode ? "edit" : "create", editStreams);
+  const { issues: structuralIssues, hasErrors: hasStructuralErrors } =
+    useCsvStructuralValidation(csvText, editMode ? "edit" : "create", {
+      mintPresets,
+      fallbackDecimals: walletDecimals,
+      selectedMint: walletMint,
+      knownStreams: editStreams,
+    });
   const totalByMint = useCsvTotalByMint(csvText);
 
   // ── Per-mint balance check ─────────────────────────────────────────────
@@ -3557,9 +3763,9 @@ const mintExceedsBalance =
   walletBalance !== null &&
   csvTotalForMint > walletBalance;
 
-  const hasAnyError = hasErrors || !!mintExceedsBalance || hasIdErrors || hasDurationErrors;
+  const hasAnyError = hasErrors || !!mintExceedsBalance || hasIdErrors || hasDurationErrors || hasStructuralErrors;
 
-  if (rows.length === 0 && !mintExceedsBalance && idIssues.length === 0 && durationIssues.length === 0) return null;
+  if (rows.length === 0 && !mintExceedsBalance && idIssues.length === 0 && durationIssues.length === 0 && structuralIssues.length === 0) return null;
 
   const allGood = !hasAnyError;
 
@@ -3585,6 +3791,7 @@ const mintExceedsBalance =
             ? "All checks passed"
             : [
                 mintExceedsBalance && "insufficient balance",
+                hasStructuralErrors && `${structuralIssues.length} format issue${structuralIssues.length > 1 ? "s" : ""}`,
                 hasIdErrors && `${idIssues.length} invalid id${idIssues.length > 1 ? "s" : ""}`,
                 hasDurationErrors && `${durationIssues.length} duration issue${durationIssues.length > 1 ? "s" : ""}`,
                 hasErrors && `${rows.filter((r) => !r.isMatch || r.hasInvalid).length} unbalanced`,
@@ -3645,6 +3852,28 @@ const mintExceedsBalance =
                 </div>
                 <div className="text-[10px] font-mono text-rose-400/80 break-all mb-0.5">
                   {issue.id}
+                </div>
+                <div className="text-[10px] text-rose-300/70">{issue.reason}</div>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* ── Structural / content issues (create + edit) ──────────────────── */}
+      {structuralIssues.length > 0 && (
+        <div className="border-b border-rose-500/20">
+          {structuralIssues.map((issue, k) => (
+            <div
+              key={`struct-${issue.rowNum}-${issue.field}-${k}`}
+              className="px-4 py-3 bg-rose-950/20 flex items-start gap-3 border-b border-rose-500/10 last:border-b-0"
+            >
+              <AlertTriangle className="w-4 h-4 text-rose-400 shrink-0 mt-0.5" />
+              <div className="flex-1 min-w-0">
+                <div className="text-[11px] font-bold text-rose-300 mb-0.5">
+                  {issue.field === "header" || issue.field === "delimiter" || issue.field === "encoding" || issue.field === "rows"
+                    ? "CSV format"
+                    : `Row #${issue.rowNum} · ${issue.field}`}
                 </div>
                 <div className="text-[10px] text-rose-300/70">{issue.reason}</div>
               </div>
@@ -3776,7 +4005,9 @@ const mintExceedsBalance =
   <div className="px-4 py-3 border-t border-rose-500/20 bg-rose-950/10 flex items-start gap-2">
     <span className="text-rose-400 text-[10px]">⚠</span>
     <p className="text-[10px] text-rose-300/80 leading-relaxed">
-      {hasIdErrors
+      {hasStructuralErrors
+        ? "Fix the highlighted format issues before applying. Every row needs valid columns, a real recipient/mint address, a positive numeric amount, and type 0/1/2 — comma-delimited, UTF-8, no duplicates."
+        : hasIdErrors
         ? "Fix the invalid id column before applying. Each edit row must reference an existing CSV-created stream id, or leave id blank to match by recipient."
         : hasDurationErrors
         ? "Fix the highlighted duration / cliff_duration values before applying. Durations must be whole positive seconds, and edits must extend the end (linear) or keep the cliff within the stream."
