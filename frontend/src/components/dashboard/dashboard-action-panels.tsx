@@ -8,7 +8,6 @@ import { AlertTriangle, Check, ChevronDown, Shield, Download, Layers, Lock, Refr
 import { CsvDiffPanel } from "@/components/dashboard/csv-diff-panel";
 import type { MintPreset } from "@/components/dashboard/token-mints";
 import { PreflightChecklist } from "./preflight-checklist";
-import { shorten } from "@/components/dashboard/utils";
 import { useTokenBalance } from "@/lib/use-token-balance";
 import { useAddressHistory } from "@/lib/use-address-history";
 import { parseBaseUnits } from "./dashboard-home-client";
@@ -198,25 +197,8 @@ function formatBaseUnitsToTokenAmount(amount: bigint, decimals: number) {
 }
 
 // Format a duration (in seconds) into a compact "Xd Yh Zm" string. Pure: takes
-// an explicit number so it is safe to call during render.
-function formatDurationSecs(totalSecs: number) {
-  if (!Number.isFinite(totalSecs) || totalSecs <= 0) return "0m";
-  const days = Math.floor(totalSecs / 86400);
-  const hours = Math.floor((totalSecs % 86400) / 3600);
-  const mins = Math.floor((totalSecs % 3600) / 60);
-  const parts: string[] = [];
-  if (days > 0) parts.push(`${days}d`);
-  if (hours > 0) parts.push(`${hours}h`);
-  if (mins > 0 && days === 0) parts.push(`${mins}m`);
-  return parts.length > 0 ? parts.join(" ") : "0m";
-}
 
-// Format a unix-seconds timestamp into a readable local date/time. Pure: the
-// timestamp is explicit (no Date.now()), so this is safe during render.
-function formatUnixTs(ts: number) {
-  if (!Number.isFinite(ts) || ts <= 0) return "—";
-  return new Date(ts * 1000).toLocaleString();
-}
+
 // ─── Unlock Milestone Panel ────────────────────────────────────────────────
 function UnlockMilestonePanel({
   unlockForm,
@@ -227,7 +209,6 @@ function UnlockMilestonePanel({
   activeTxAction,
   activeTxPhase,
   connected,
-  endpoint,
 }: {
   unlockForm: { streamId: string };
   setUnlockForm: (value: { streamId: string }) => void;
@@ -1742,7 +1723,6 @@ export function DashboardActionPanels(props: Props) {
     editCliffForm,
     setEditCliffForm,
     isStreamCsvCreated,
-    isCliffPassed,
     isMilestoneUnlocked,
     activeTxAction,
     activeTxPhase,
@@ -1786,14 +1766,6 @@ const editMilestoneBalanceDecimals = typeof editMilestoneStream?.mintDecimals ==
 const editLinearBalance = useTokenBalance(editLinearMint, endpoint, editLinearDecimals);
 const editMilestoneBalance = useTokenBalance(editMilestoneMint, endpoint, editMilestoneBalanceDecimals);
 
-// Asset code shown next to balances. Prefer the preset label; fall back to a
-// shortened mint address so the unit is never ambiguous for custom tokens.
-const shortenMint = (mint: string) =>
-  mint ? `${mint.slice(0, 4)}…${mint.slice(-4)}` : "";
-const editLinearSymbol =
-  mintPresets.find((p) => p.mint === editLinearMint)?.label ?? shortenMint(editLinearMint);
-const editMilestoneSymbol =
-  mintPresets.find((p) => p.mint === editMilestoneMint)?.label ?? shortenMint(editMilestoneMint);
 
 // ── Validasi topup linear ─────────────────────────────────────────────────
 const editLinearTopupNum = parseFloat(String(editLinearForm.topupAmount ?? "")) || 0;
@@ -1802,60 +1774,8 @@ const editLinearExceedsBalance =
   editLinearTopupNum > 0 &&
   editLinearTopupNum > editLinearBalance.balance;
 
-// ── Validasi topup pada Edit Cliff ────────────────────────────────────────
-// Cliff stream juga bisa di-topup (program menerima edit_linear untuk tipe
-// cliff). Resolve mint & saldo dari stream yang sedang diedit.
-const editCliffStream = useMemo(
-  () => streams.find((s) => String(s?.id || "") === editCliffForm.streamId) ?? null,
-  [streams, editCliffForm.streamId]
-);
-const editCliffMint = editCliffStream?.mint ?? "";
-const editCliffDecimals = typeof editCliffStream?.mintDecimals === "number"
-  ? editCliffStream.mintDecimals : 6;
-const editCliffBalance = useTokenBalance(editCliffMint, endpoint, editCliffDecimals);
-const editCliffSymbol =
-  mintPresets.find((p) => p.mint === editCliffMint)?.label ?? shortenMint(editCliffMint);
-const editCliffTopupNum = parseFloat(String(editCliffForm.topupAmount ?? "")) || 0;
-const editCliffExceedsBalance =
-  editCliffBalance.balance !== null &&
-  editCliffTopupNum > 0 &&
-  editCliffTopupNum > editCliffBalance.balance;
-// Cliff dianggap "diubah" hanya jika durasi baru berbeda dari yang sekarang.
-// Membiarkan nilai prefilled (sama dengan sekarang) = niat topup saja.
-const editCliffCurrentDuration =
-  editCliffStream?.cliffTs && editCliffStream?.startTs
-    ? String(Number(editCliffStream.cliffTs) - Number(editCliffStream.startTs))
-    : "";
-const editCliffNewDuration = String(editCliffForm.newCliffDuration ?? "").trim();
-const editCliffWantsChange =
-  editCliffNewDuration !== "" && editCliffNewDuration !== editCliffCurrentDuration;
-const editCliffHasTopup = editCliffTopupNum > 0;
 
-// ── Info stream & estimasi untuk panel Edit Cliff ─────────────────────────
-const toBigIntSafe = (raw: any) => {
-  try { return BigInt(String(raw ?? "0")); } catch { return BigInt(0); }
-};
-const editCliffWrongType = Boolean(editCliffStream) && editCliffStream.vestingType !== 1;
-const editCliffTotalBase = toBigIntSafe(editCliffStream?.totalAmount);
-const editCliffWithdrawnBase = toBigIntSafe(editCliffStream?.withdrawn);
-const editCliffHasWithdrawals = editCliffWithdrawnBase > BigInt(0);
-const editCliffStartTsNum = Number(editCliffStream?.startTs ?? 0);
-const editCliffEndTsNum = Number(editCliffStream?.endTs ?? 0);
-const editCliffCurrentCliffTsNum = Number(editCliffStream?.cliffTs ?? 0);
 
-// Feature 1 — total terkunci setelah top-up (base units → display).
-const editCliffTopupBase = parseTokenAmountToBaseUnits(String(editCliffForm.topupAmount ?? "0"), editCliffDecimals);
-const editCliffNewTotalBase = editCliffTotalBase + editCliffTopupBase;
-
-// Feature 3 — cliff timestamp baru (start + durasi) + apakah di luar rentang.
-const editCliffNewDurationNum = Number(editCliffNewDuration);
-const editCliffNewCliffTs =
-  editCliffStream && editCliffNewDuration !== "" && Number.isFinite(editCliffNewDurationNum)
-    ? editCliffStartTsNum + editCliffNewDurationNum
-    : null;
-const editCliffNewCliffOutOfRange =
-  editCliffNewCliffTs !== null &&
-  (editCliffNewCliffTs < editCliffStartTsNum || editCliffNewCliffTs > editCliffEndTsNum);
 
 
 // edit_milestone tidak transfer token baru (redistribute saja)
@@ -1986,8 +1906,6 @@ const createDisabled =
   recipientInvalid ||   // ← tambah ini
   (createForm.type === "2" && (hasInvalidMilestones || !milestonesMatchTotal)) ||
   activeTxAction === "create_stream";
-  const withdrawDisabled = !withdrawForm.streamId?.trim() || activeTxAction === "withdraw";
-  const unlockDisabled = !unlockForm.streamId?.trim() || activeTxAction === "unlock_milestone";
 const csvTotalByMint = useCsvTotalByMint(csvCreateText);
 const csvExceedsBalance =
   !!createForm.mint &&
@@ -2012,26 +1930,9 @@ const editCsvDisabled =
   csvEditIdValidation.hasErrors || // ← blok apply kalau ada id ngawur
   csvEditExceedsBalance; // ← tambah ini
 
- const editLinearDisabled =
-  isStreamCsvCreated(editLinearForm.streamId) ||
-  !editLinearForm.streamId?.trim() ||
-  !String(editLinearForm.newEndDuration ?? "").trim() ||
-  !String(editLinearForm.topupAmount ?? "").trim() ||
-  editLinearExceedsBalance ||   // ← tambah ini
-  activeTxAction === "edit_linear";
-  const editCliffPeriodOver = isCliffPassed(editCliffForm.streamId);
-  // Setelah cliff lewat, program tidak mengizinkan ubah cliff. Selama field New
-  // Cliff Duration masih terisi, tombol di-disable; kosongkan field untuk lanjut
-  // top-up saja (top-up tetap didukung program lewat edit_linear).
-  const editCliffBlockedByPeriod = editCliffPeriodOver && editCliffNewDuration !== "";
-  const editCliffDisabled =
-    isStreamCsvCreated(editCliffForm.streamId) ||
-    !editCliffForm.streamId?.trim() ||
-    (!editCliffWantsChange && !editCliffHasTopup) ||   // butuh minimal satu aksi
-    editCliffBlockedByPeriod ||                          // cliff sudah lewat & field belum dikosongkan
-    (editCliffWantsChange && editCliffNewCliffOutOfRange) || // cliff di luar rentang start–end
-    editCliffExceedsBalance ||
-    activeTxAction === "edit_cliff";
+
+
+
 
   useEffect(() => {
     const handlePointerDown = (event: MouseEvent | PointerEvent) => {
@@ -3711,13 +3612,13 @@ function EditMilestonePanel({
         setStreamDetail(res.data);
 
         const decimals =
-          typeof res.data.mintDecimals === "number"
+          typeof res.data?.mintDecimals === "number"
             ? res.data.mintDecimals
             : 6;
-        const rawStr = String(res.data.milestones || "").trim();
-        const count = Number(res.data.milestoneCount ?? 0);
+        const rawStr = String(res.data?.milestones || "").trim();
+        const count = Number(res.data?.milestoneCount ?? 0);
 
-        if (rawStr && count > 0) {
+        if (res.data && rawStr && count > 0) {
           const parsed = rawStr.split(";").map((v: string) => {
             try {
               return formatBaseUnitsToTokenAmount(BigInt(v.trim()), decimals);
@@ -3767,6 +3668,36 @@ function EditMilestonePanel({
     stream.creator?.toLowerCase() !== connectedWalletAddress.toLowerCase();
   const isWrongType = !!stream && Number(stream.vestingType) !== 2;
   const isNotActive = !!stream && Number(stream.status) !== 1;
+
+  // ── Current state preview ──────────────────────────────────────────────
+  const currentPreview = useMemo(() => {
+    if (!stream) return null;
+
+    const streamDecimals = typeof stream.mintDecimals === "number" ? stream.mintDecimals : 6;
+    const milestoneCount = Number(stream.milestoneCount ?? 0);
+    const rawStr = String(stream.milestones || "").trim();
+    const rawAmounts = rawStr ? rawStr.split(";").map((v: string) => {
+      try { return BigInt(v.trim()); } catch { return BigInt(0); }
+    }) : [];
+    
+    const totalBase = parseBaseUnits(stream.totalAmount);
+    let currentAmounts: bigint[];
+    if (rawAmounts.length === milestoneCount) {
+      currentAmounts = rawAmounts;
+    } else {
+      const base = totalBase / BigInt(milestoneCount || 1);
+      const remainder = totalBase % BigInt(milestoneCount || 1);
+      currentAmounts = Array.from({ length: milestoneCount }, (_, i) =>
+        base + (BigInt(i) < remainder ? BigInt(1) : BigInt(0))
+      );
+    }
+
+    return {
+      totalAmount: formatBaseUnitsToTokenAmount(totalBase, streamDecimals),
+      milestoneCount,
+      amounts: currentAmounts.map((a: bigint) => formatBaseUnitsToTokenAmount(a, streamDecimals)),
+    };
+  }, [stream]);
 
   // ── Decimals ───────────────────────────────────────────────────────────
 // Ganti baris decimals constant
@@ -4046,6 +3977,34 @@ const editTotalValue =
             </div>
           )}
 
+          {/* ── Current state preview ─────────────────────────────────── */}
+          {currentPreview && !isWrongType && (
+            <div className="sm:col-span-2 rounded-2xl border border-zinc-800 overflow-hidden mb-2">
+              <div className="flex items-center gap-2 px-4 py-3 border-b border-zinc-900 bg-zinc-950/60">
+                <Lock className="w-3.5 h-3.5 text-violet-400" />
+                <span className="text-[10px] font-black uppercase tracking-widest text-zinc-400">
+                  Current Milestone State
+                </span>
+              </div>
+              <div className="p-4 bg-zinc-950/30">
+                <div className="flex items-center justify-between mb-2">
+                  <span className="text-xs text-zinc-500">Total Allocation</span>
+                  <span className="font-mono text-sm font-bold text-zinc-200">
+                    {currentPreview.totalAmount}
+                  </span>
+                </div>
+                <div className="space-y-1">
+                  {currentPreview.amounts.map((amt, idx) => (
+                    <div key={idx} className="flex justify-between items-center py-1 border-t border-zinc-900/50">
+                      <span className="text-xs text-zinc-500">Milestone #{idx}</span>
+                      <span className="font-mono text-xs text-zinc-400">{amt}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+          )}
+
           {/* ── Total amount input — full width ───────────────────────── */}
           {amounts.length > 0 && !isWrongType && (
             <div className="sm:col-span-2">
@@ -4190,6 +4149,42 @@ const editTotalValue =
                 </span>
               </div>
             )}
+        </div>
+      )}
+
+      {/* ── Changes preview ───────────────────────────────────────── */}
+      {!isCsvCreated && currentPreview && amounts.length > 0 && !isWrongType && (
+        <div className="mt-6 rounded-2xl border border-indigo-900/30 overflow-hidden">
+          <div className="flex items-center gap-2 px-4 py-3 border-b border-indigo-900/30 bg-indigo-950/20">
+            <Layers className="w-3.5 h-3.5 text-indigo-400" />
+            <span className="text-[10px] font-black uppercase tracking-widest text-indigo-400">
+              Changes Preview
+            </span>
+          </div>
+          <div className="p-4 bg-indigo-950/10">
+            <div className="space-y-1">
+              {amounts.map((amt: string, idx: number) => {
+                const oldAmt = currentPreview.amounts[idx] || "0";
+                const isChanged = amt !== oldAmt;
+                return (
+                  <div key={idx} className="flex justify-between items-center py-1 border-t border-indigo-900/20">
+                    <span className="text-xs text-zinc-400">Milestone #{idx}</span>
+                    <div className="flex items-center gap-2 font-mono text-xs">
+                      {isChanged ? (
+                        <>
+                          <span className="text-zinc-500 line-through">{oldAmt}</span>
+                          <span className="text-zinc-600">→</span>
+                          <span className="text-indigo-400 font-bold">{amt}</span>
+                        </>
+                      ) : (
+                        <span className="text-zinc-500">{amt}</span>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
         </div>
       )}
 
