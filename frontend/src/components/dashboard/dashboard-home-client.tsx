@@ -375,6 +375,9 @@ export default function Home({ initialStreams = [] }: Props) {
   const [compareVersionSelected, setCompareVersionSelected] = useState<string>("0");
   const [csvDiffResult,         setCsvDiffResult]        = useState<any | null>(null);
   const [loadingDiff,           setLoadingDiff]          = useState(false);
+  // Snapshot of exactly what was diffed (text + mode + compared version), so we
+  // can tell whether the displayed diff still reflects the current payload.
+  const [diffSnapshot, setDiffSnapshot] = useState<{ text: string; mode: "create" | "edit"; version: string } | null>(null);
 
   const fetchCsvVersions = useCallback(async () => {
     try {
@@ -410,11 +413,27 @@ export default function Home({ initialStreams = [] }: Props) {
       if (compareVersionSelected !== "0") payload.compareVersion = Number(compareVersionSelected);
       const res = await api.post("/csv/diff", payload);
       setCsvDiffResult({ ...res.data, mode });
+      setDiffSnapshot({ text: csvText, mode, version: compareVersionSelected });
       showNotification("success", "CSV structural diff computed successfully!");
     } catch (err: any) {
       showNotification("error", err.response?.data?.error || "Failed to calculate CSV diff.");
     } finally { setLoadingDiff(false); }
   };
+
+  // A diff is "fresh" only when the currently displayed result matches the
+  // current payload text, mode, and compared version. Editing the CSV or
+  // switching the compare version invalidates it — which re-gates Apply so the
+  // user must review an up-to-date diff before sending the transaction.
+  const createDiffFresh =
+    !!csvDiffResult && csvDiffResult.mode === "create" &&
+    !!diffSnapshot && diffSnapshot.mode === "create" &&
+    diffSnapshot.text === csvCreateText &&
+    diffSnapshot.version === compareVersionSelected;
+  const editDiffFresh =
+    !!csvDiffResult && csvDiffResult.mode === "edit" &&
+    !!diffSnapshot && diffSnapshot.mode === "edit" &&
+    diffSnapshot.text === csvEditText &&
+    diffSnapshot.version === compareVersionSelected;
 
   const fetchStreamDetails = useCallback(async (id: string) => {
     setLoadingDetails(true);
@@ -954,6 +973,7 @@ connectedWalletAddress={connectedWalletAddress}  // ← tambah ini
                 compareVersionSelected={compareVersionSelected} setCompareVersionSelected={setCompareVersionSelected}
                 csvVersions={csvVersions} handleDeleteCsvVersion={handleDeleteCsvVersion}
                 csvDiffResult={csvDiffResult} setCsvDiffResult={setCsvDiffResult}
+                createDiffFresh={createDiffFresh} editDiffFresh={editDiffFresh}
                 loadingDiff={loadingDiff} handleAnalyzeDiff={handleAnalyzeDiff}
                 handleAction={handleAction} downloadTemplate={downloadTemplate}
                 fileInputCreateRef={fileInputCreateRef} fileInputEditRef={fileInputEditRef}

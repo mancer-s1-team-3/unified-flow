@@ -196,8 +196,40 @@ function formatBaseUnitsToTokenAmount(amount: bigint, decimals: number) {
   return `${negative ? "-" : ""}${whole}${fraction ? `.${fraction}` : ""}`;
 }
 
-// Format a duration (in seconds) into a compact "Xd Yh Zm" string. Pure: takes
+// ── Date & duration formatting (shared across instruction forms) ────────────
+// A compact, human-readable date label, e.g. "17 Jun 2026". Returns "—" for
+// missing/invalid timestamps so summaries never render "Invalid Date".
+function formatDateLabel(unixSeconds: number): string {
+  if (!Number.isFinite(unixSeconds) || unixSeconds <= 0) return "—";
+  return new Date(unixSeconds * 1000).toLocaleDateString(undefined, {
+    day: "numeric",
+    month: "short",
+    year: "numeric",
+  });
+}
 
+// Format a duration (in seconds) as human-readable dates-equivalent, e.g.
+// "92 days" / "8 hours" — never just raw seconds. Returns "—" when ≤ 0.
+function formatDuration(seconds: number): string {
+  const s = Math.round(Number(seconds));
+  if (!Number.isFinite(s) || s <= 0) return "—";
+  const DAY = 86400;
+  const HOUR = 3600;
+  const MIN = 60;
+  if (s >= DAY) {
+    const days = s % DAY === 0 ? s / DAY : Math.round((s / DAY) * 10) / 10;
+    return `${days.toLocaleString()} day${days === 1 ? "" : "s"}`;
+  }
+  if (s >= HOUR) {
+    const hours = s % HOUR === 0 ? s / HOUR : Math.round((s / HOUR) * 10) / 10;
+    return `${hours.toLocaleString()} hour${hours === 1 ? "" : "s"}`;
+  }
+  if (s >= MIN) {
+    const mins = Math.round(s / MIN);
+    return `${mins.toLocaleString()} min`;
+  }
+  return `${s.toLocaleString()}s`;
+}
 
 // ─── Unlock Milestone Panel ────────────────────────────────────────────────
 function UnlockMilestonePanel({
@@ -1645,6 +1677,8 @@ type Props = {
   handleDeleteCsvVersion: () => void;
   csvDiffResult: any;
   setCsvDiffResult: (value: any) => void;
+  createDiffFresh: boolean;
+  editDiffFresh: boolean;
   loadingDiff: boolean;
   handleAnalyzeDiff: (mode: "create" | "edit") => void;
   handleAction: (actionName: string, data: any) => void;
@@ -1703,6 +1737,8 @@ export function DashboardActionPanels(props: Props) {
     handleDeleteCsvVersion,
     csvDiffResult,
     setCsvDiffResult,
+    createDiffFresh,
+    editDiffFresh,
     loadingDiff,
     handleAnalyzeDiff,
     handleAction,
@@ -1916,7 +1952,8 @@ const createCsvDisabled =
   !csvCreateText?.trim() ||
   activeTxAction === "create_stream_csv" ||
   csvMilestoneValidation.hasErrors ||
-  csvExceedsBalance; // ← tambah ini
+  csvExceedsBalance ||
+  !createDiffFresh; // ← gate wajib: diff terkini harus ditinjau dulu
 const csvEditTotalByMint = useCsvEditTotalByMint(csvEditText);
 const csvEditExceedsBalance =
   !!createForm.mint &&
@@ -1928,7 +1965,8 @@ const editCsvDisabled =
   activeTxAction === "edit_stream_csv" ||
   csvEditMilestoneValidation.hasErrors ||
   csvEditIdValidation.hasErrors || // ← blok apply kalau ada id ngawur
-  csvEditExceedsBalance; // ← tambah ini
+  csvEditExceedsBalance ||
+  !editDiffFresh; // ← gate wajib: diff terkini harus ditinjau dulu
 
 
 
@@ -2698,6 +2736,15 @@ const editCsvDisabled =
 />
               <CsvDiffPanel csvDiffResult={csvDiffResult} compareVersionSelected={compareVersionSelected} onClose={() => setCsvDiffResult(null)} />
 
+              {!createDiffFresh && csvCreateText?.trim() && !csvMilestoneValidation.hasErrors && !csvExceedsBalance && (
+                <div className="mt-4 bg-amber-950/20 border border-amber-500/25 rounded-xl px-4 py-3 flex items-center gap-2">
+                  <Layers className="w-3.5 h-3.5 text-amber-400 shrink-0" />
+                  <span className="text-[11px] text-amber-300/90 leading-relaxed">
+                    Run <strong className="font-bold">Analyze Diff</strong> to review the up-to-date change summary before applying. Editing the CSV resets this.
+                  </span>
+                </div>
+              )}
+
               <button
                 disabled={createCsvDisabled}
                 onClick={() => handleAction("create_stream_csv", null)}
@@ -2824,6 +2871,15 @@ const editCsvDisabled =
               compareVersionSelected={compareVersionSelected}
               onClose={() => setCsvDiffResult(null)}
             />
+
+            {!editDiffFresh && csvEditText?.trim() && !csvEditMilestoneValidation.hasErrors && !csvEditIdValidation.hasErrors && !csvEditExceedsBalance && (
+              <div className="mt-4 bg-amber-950/20 border border-amber-500/25 rounded-xl px-4 py-3 flex items-center gap-2">
+                <Layers className="w-3.5 h-3.5 text-amber-400 shrink-0" />
+                <span className="text-[11px] text-amber-300/90 leading-relaxed">
+                  Run <strong className="font-bold">Analyze Diff</strong> to review the up-to-date change summary before applying. Editing the CSV resets this.
+                </span>
+              </div>
+            )}
 
             <button
               disabled={editCsvDisabled}
@@ -3692,10 +3748,17 @@ function EditMilestonePanel({
       );
     }
 
+    const startTs = Number(stream.startTs ?? 0);
+    const endTs = Number(stream.endTs ?? 0);
+
     return {
       totalAmount: formatBaseUnitsToTokenAmount(totalBase, streamDecimals),
       milestoneCount,
       amounts: currentAmounts.map((a: bigint) => formatBaseUnitsToTokenAmount(a, streamDecimals)),
+      recipient: String(stream.recipient ?? ""),
+      startDateStr: formatDateLabel(startTs),
+      endDateLabel: formatDateLabel(endTs),
+      durationStr: formatDuration(endTs - startTs),
     };
   }, [stream]);
 
@@ -4167,6 +4230,44 @@ const editTotalValue =
         </div>
       )}
 
+      {/* ── Stream summary (recipient · amount · start→end) ──────────── */}
+      {!isCsvCreated && currentPreview && !isWrongType && (
+        <div className="mt-6 rounded-2xl border border-zinc-800 overflow-hidden">
+          <div className="flex items-center gap-2 px-4 py-3 border-b border-zinc-900 bg-zinc-950/60">
+            <Settings className="w-3.5 h-3.5 text-indigo-400" />
+            <span className="text-[10px] font-black uppercase tracking-widest text-zinc-400">
+              Current Stream State
+            </span>
+            <span className="ml-auto text-[10px] font-mono text-zinc-600">Milestone</span>
+          </div>
+          <div className="divide-y divide-zinc-900/60">
+            {currentPreview.recipient && (
+              <div className="flex items-center justify-between px-4 py-3 gap-3">
+                <span className="text-xs text-zinc-500 shrink-0">Recipient</span>
+                <span className="font-mono text-xs font-bold text-zinc-300 truncate select-all">
+                  {currentPreview.recipient}
+                </span>
+              </div>
+            )}
+            <div className="flex items-center justify-between px-4 py-3">
+              <span className="text-xs text-zinc-500">Total allocation</span>
+              <span className="font-mono text-sm font-bold text-zinc-200">
+                {Number(currentPreview.totalAmount).toLocaleString()}
+              </span>
+            </div>
+            <div className="flex items-center justify-between px-4 py-3">
+              <span className="text-xs text-zinc-500">Start → End</span>
+              <span className="font-mono text-xs font-bold text-zinc-300 text-right">
+                {currentPreview.startDateStr} → {currentPreview.endDateLabel}
+                <span className="block text-[10px] font-semibold text-zinc-500">
+                  duration {currentPreview.durationStr}
+                </span>
+              </span>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* ── Changes preview ───────────────────────────────────────── */}
       {!isCsvCreated && currentPreview && amounts.length > 0 && !isWrongType && (
         <div className="mt-6 rounded-2xl border border-indigo-900/30 overflow-hidden">
@@ -4318,6 +4419,11 @@ function EditCliffPanel({
       endTs,
       cliffTs,
       currentCliffDuration,
+      recipient: String(stream.recipient ?? ""),
+      startDateStr: formatDateLabel(startTs),
+      endDateLabel: formatDateLabel(endTs),
+      streamDurationStr: formatDuration(endTs - startTs),
+      cliffDurationStr: formatDuration(currentCliffDuration),
       cliffDateStr:
         cliffTs > 0 ? new Date(cliffTs * 1000).toLocaleString() : "—",
       endDateStr:
@@ -4539,34 +4645,40 @@ function EditCliffPanel({
                 </span>
               </div>
               <div className="divide-y divide-zinc-900/60">
-                <div className="flex items-center justify-between px-4 py-3">
-                  <span className="text-xs text-zinc-500">
-                    Current cliff date
-                  </span>
-                  <span className="font-mono text-sm font-bold text-violet-300">
-                    {currentPreview.cliffDateStr}
-                  </span>
-                </div>
-                <div className="flex items-center justify-between px-4 py-3">
-                  <span className="text-xs text-zinc-500">
-                    Cliff duration (from start)
-                  </span>
-                  <span className="font-mono text-sm font-bold text-zinc-300">
-                    {currentPreview.currentCliffDuration.toLocaleString()}s
-                  </span>
-                </div>
-                <div className="flex items-center justify-between px-4 py-3">
-                  <span className="text-xs text-zinc-500">Stream end date</span>
-                  <span className="font-mono text-sm font-bold text-zinc-500">
-                    {currentPreview.endDateStr}
-                  </span>
-                </div>
+                {currentPreview.recipient && (
+                  <div className="flex items-center justify-between px-4 py-3 gap-3">
+                    <span className="text-xs text-zinc-500 shrink-0">Recipient</span>
+                    <span className="font-mono text-xs font-bold text-zinc-300 truncate select-all">
+                      {currentPreview.recipient}
+                    </span>
+                  </div>
+                )}
                 <div className="flex items-center justify-between px-4 py-3">
                   <span className="text-xs text-zinc-500">
                     Total allocation
                   </span>
                   <span className="font-mono text-sm font-bold text-zinc-200">
                     {currentPreview.totalAmount}
+                  </span>
+                </div>
+                <div className="flex items-center justify-between px-4 py-3">
+                  <span className="text-xs text-zinc-500">Start → End</span>
+                  <span className="font-mono text-xs font-bold text-zinc-300 text-right">
+                    {currentPreview.startDateStr} → {currentPreview.endDateLabel}
+                    <span className="block text-[10px] font-semibold text-zinc-500">
+                      duration {currentPreview.streamDurationStr}
+                    </span>
+                  </span>
+                </div>
+                <div className="flex items-center justify-between px-4 py-3">
+                  <span className="text-xs text-zinc-500">
+                    Current cliff date
+                  </span>
+                  <span className="font-mono text-sm font-bold text-violet-300 text-right">
+                    {currentPreview.cliffDateStr}
+                    <span className="block text-[10px] font-semibold text-zinc-500">
+                      {currentPreview.cliffDurationStr} from start
+                    </span>
                   </span>
                 </div>
               </div>
@@ -4830,6 +4942,10 @@ editLinearBalance: { balance: number | null; loading: boolean; error: string | n
       currentDuration,
       decimals,
       vestingType: Number(stream.vestingType ?? 0),
+      recipient: String(stream.recipient ?? ""),
+      startDateStr: formatDateLabel(startTs),
+      endDateLabel: formatDateLabel(endTs),
+      durationStr: formatDuration(currentDuration),
       endDateStr: endTs > 0 ? new Date(endTs * 1000).toLocaleString() : "—",
     };
   }, [stream]);
@@ -5008,6 +5124,14 @@ editLinearBalance: { balance: number | null; loading: boolean; error: string | n
                 </span>
               </div>
               <div className="divide-y divide-zinc-900/60">
+                {currentPreview.recipient && (
+                  <div className="flex items-center justify-between px-4 py-3 gap-3">
+                    <span className="text-xs text-zinc-500 shrink-0">Recipient</span>
+                    <span className="font-mono text-xs font-bold text-zinc-300 truncate select-all">
+                      {currentPreview.recipient}
+                    </span>
+                  </div>
+                )}
                 <div className="flex items-center justify-between px-4 py-3">
                   <span className="text-xs text-zinc-500">Total allocation</span>
                   <span className="font-mono text-sm font-bold text-zinc-200">
@@ -5021,17 +5145,12 @@ editLinearBalance: { balance: number | null; loading: boolean; error: string | n
                   </span>
                 </div>
                 <div className="flex items-center justify-between px-4 py-3">
-                  <span className="text-xs text-zinc-500">Current end date</span>
-                  <span className="font-mono text-sm font-bold text-zinc-300">
-                    {currentPreview.endDateStr}
-                  </span>
-                </div>
-                <div className="flex items-center justify-between px-4 py-3">
-                  <span className="text-xs text-zinc-500">
-                    Current duration (from start)
-                  </span>
-                  <span className="font-mono text-sm font-bold text-zinc-300">
-                    {currentPreview.currentDuration.toLocaleString()}s
+                  <span className="text-xs text-zinc-500">Start → End</span>
+                  <span className="font-mono text-xs font-bold text-zinc-300 text-right">
+                    {currentPreview.startDateStr} → {currentPreview.endDateLabel}
+                    <span className="block text-[10px] font-semibold text-zinc-500">
+                      duration {currentPreview.durationStr}
+                    </span>
                   </span>
                 </div>
               </div>
