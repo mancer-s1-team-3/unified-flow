@@ -2,7 +2,7 @@
 
 import { memo, useEffect } from "react";
 import { createPortal } from "react-dom";
-import { ArrowDownRight, ArrowUpRight, Calendar, Check, Copy, FileText, History, Settings, Unlock, XCircle } from "lucide-react";
+import { ArrowDownRight, ArrowUpRight, Calendar, Check, Copy, FileText, History, Settings, Unlock, XCircle,Lock } from "lucide-react";
 import { formatDate, formatTokenAmount, getAmountUnitLabel, getMilestoneAllocations, shorten } from "./utils";
 import { getExplorerClusterParam } from "@/lib/solana/network-config";
 
@@ -407,23 +407,45 @@ const hasClaimable = selectedStream.vestingType === 2
       )
     )}
 
-    {isCancelled || isEnded ? (
-      <div className="sm:col-span-2 flex items-center justify-center gap-1.5 bg-zinc-900 text-zinc-500 border border-zinc-800 py-2.5 rounded-xl text-center">
-        <Settings className="w-3.5 h-3.5" />
-        Modify Disabled
-      </div>
-    ) : (
-      <button
-        onClick={() => {
-          const tab = selectedStream.vestingType === 0 ? "edit_linear" : selectedStream.vestingType === 1 ? "edit_cliff" : "edit_milestone";
-          prefillAction(tab, tab === "edit_milestone" ? selectedStream : selectedStream.id);
-        }}
-        className="sm:col-span-2 flex items-center justify-center gap-1.5 bg-zinc-900 hover:bg-zinc-800 text-zinc-400 hover:text-zinc-200 border border-zinc-850 hover:border-zinc-750 py-2.5 rounded-xl transition-all"
-      >
-        <Settings className="w-3.5 h-3.5" />
-        Modify Vesting Structure
-      </button>
-    )}
+   {isCancelled || isEnded ? (
+  <div className="sm:col-span-2 flex items-center justify-center gap-1.5 bg-zinc-900 text-zinc-500 border border-zinc-800 py-2.5 rounded-xl text-center">
+    <Settings className="w-3.5 h-3.5" />
+    Modify Disabled
+  </div>
+) : selectedStream.vestingType === 1 ? (
+  <>
+    <button
+      onClick={() => prefillAction("edit_linear", selectedStream.id)}
+      className="flex items-center justify-center gap-1.5 bg-zinc-900 hover:bg-zinc-800 text-zinc-400 hover:text-zinc-200 border border-zinc-800 hover:border-zinc-700 py-2.5 rounded-xl transition-all"
+    >
+      <Settings className="w-3.5 h-3.5" />
+      Edit Duration
+    </button>
+    <button
+      onClick={() => prefillAction("edit_cliff", selectedStream.id)}
+      className="flex items-center justify-center gap-1.5 bg-zinc-900 hover:bg-zinc-800 text-violet-400 hover:text-violet-300 border border-zinc-800 hover:border-zinc-700 py-2.5 rounded-xl transition-all"
+    >
+      <Lock className="w-3.5 h-3.5" />
+      Edit Cliff
+    </button>
+  </>
+) : selectedStream.vestingType === 0 ? (
+  <button
+    onClick={() => prefillAction("edit_linear", selectedStream.id)}
+    className="sm:col-span-2 flex items-center justify-center gap-1.5 bg-zinc-900 hover:bg-zinc-800 text-zinc-400 hover:text-zinc-200 border border-zinc-800 hover:border-zinc-700 py-2.5 rounded-xl transition-all"
+  >
+    <Settings className="w-3.5 h-3.5" />
+    Modify Vesting Structure
+  </button>
+) : (
+  <button
+    onClick={() => prefillAction("edit_milestone", selectedStream)}
+    className="sm:col-span-2 flex items-center justify-center gap-1.5 bg-zinc-900 hover:bg-zinc-800 text-zinc-400 hover:text-zinc-200 border border-zinc-800 hover:border-zinc-700 py-2.5 rounded-xl transition-all"
+  >
+    <Settings className="w-3.5 h-3.5" />
+    Modify Vesting Structure
+  </button>
+)}
   </>
 ) : null}
             </div>
