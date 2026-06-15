@@ -63,6 +63,28 @@ function getWsEndpoints(httpEndpoints: string[]): string[] {
         .map(normalizeHttpUrl));
 }
 
+export type BackendCluster = "devnet" | "mainnet" | "testnet";
+
+function inferClusterFromUrl(url: string): BackendCluster {
+    const u = (url || "").toLowerCase();
+    if (u.includes("mainnet")) return "mainnet";
+    if (u.includes("testnet")) return "testnet";
+    return "devnet";
+}
+
+// The cluster this backend indexes/serves. Explicit CLUSTER env wins; otherwise
+// it's inferred from the primary RPC URL. Lets the frontend confirm it's talking
+// to a backend on the same network (avoids mixing devnet data into mainnet UI).
+export function getActiveCluster(): BackendCluster {
+    const raw = (process.env.CLUSTER || "").trim().toLowerCase();
+    if (raw === "devnet" || raw === "mainnet" || raw === "testnet") return raw;
+    return inferClusterFromUrl(process.env.RPC_HTTP || DEFAULT_HTTP);
+}
+
+export function getPrimaryRpcEndpoint(): string {
+    return normalizeHttpUrl(process.env.RPC_HTTP || DEFAULT_HTTP);
+}
+
 function isPromiseLike<T>(value: unknown): value is Promise<T> {
     return !!value && typeof value === "object" && typeof (value as Promise<T>).then === "function";
 }

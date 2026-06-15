@@ -16,7 +16,7 @@ import fs from "node:fs/promises";
 import path from "node:path";
 
 import prisma from "../db/prisma";
-import { connection } from "../services/rpc";
+import { connection, getActiveCluster, getPrimaryRpcEndpoint } from "../services/rpc";
 import { parseCsvText, computeCsvDiff, mapCsvRowsToStreams, validateCsvContent } from "../services/csvDiff";
 import { streamChat, isConfigured as isAiConfigured, type ChatContext } from "../services/aiChat";
 import idl from "../idl/unified_flow.json";
@@ -377,6 +377,16 @@ app.get("/skills", async (_, res) => {
     } catch (err: any) {
         res.status(500).json({ error: err.message || "Failed to load skills documentation." });
     }
+});
+
+// Network indicator — lets the frontend confirm which cluster this backend is
+// indexing/serving, so it can warn when the UI cluster and backend cluster differ.
+app.get("/network", (_req, res) => {
+    res.json({
+        cluster: getActiveCluster(),
+        rpc: getPrimaryRpcEndpoint(),
+        programId: process.env.PROGRAM_ID || PROGRAM_ID.toBase58(),
+    });
 });
 
 // Create Manual Stream

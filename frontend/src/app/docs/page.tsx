@@ -3,6 +3,7 @@
 import React, { useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
+import { useNetwork } from "@/components/wallet/network-context";
 import {
   BookOpen,
   Terminal,
@@ -301,6 +302,7 @@ const CliCard = ({ cmd, desc, example }: { cmd: string; desc: string; example?: 
 // ============================================================================
 export default function DocsPage() {
   const router = useRouter();
+  const { cluster, network } = useNetwork();
 const [activeTab, setActiveTab] = useState<
   "overview" | "sdk" | "api" | "mcp" | "cli"
 >("overview");
@@ -773,7 +775,7 @@ RPC_URL=https://api.devnet.solana.com`}
                       <span className="font-semibold text-zinc-300">Sequential Milestones Approvals:</span> Milestone index <code className="text-amber-300 font-mono">i</code> must be unlocked before index <code className="text-amber-300 font-mono">i+1</code> can be processed.
                     </li>
                     <li>
-                      <span className="font-semibold text-zinc-300">Oracle Staleness Limit:</span> Devnet oracle feed read will block claims if data updates are older than 1 hour.
+                      <span className="font-semibold text-zinc-300">Oracle Staleness Limit:</span> The SOL/USD oracle feed read will block claims if data updates are older than 1 hour.
                     </li>
                     <li>
                       <span className="font-semibold text-zinc-300">Cancel Authorization:</span> Only the stream creator can cancel. Unvested tokens are returned — withdrawn amounts are non-refundable.
@@ -801,18 +803,22 @@ RPC_URL=https://api.devnet.solana.com`}
               <div className="space-y-3.5">
                 <div className="flex justify-between items-center text-xs">
                   <span className="text-zinc-500">Network</span>
-                  <span className="font-mono text-zinc-300 font-semibold">Devnet</span>
+                  <span className="font-mono text-zinc-300 font-semibold">{network.label}</span>
                 </div>
                 <div className="flex justify-between items-center text-xs">
                   <span className="text-zinc-500">Chainlink Feed</span>
-                  <span className="font-mono text-zinc-300 text-indigo-400 truncate max-w-[120px]" title="99B2bTijsU6f1GCT73HmdR7HCFFjGMBcPZY6jZ96ynrR">
-                    99B2bT...rR
-                  </span>
+                  {cluster === "devnet" ? (
+                    <span className="font-mono text-zinc-300 text-indigo-400 truncate max-w-[120px]" title="99B2bTijsU6f1GCT73HmdR7HCFFjGMBcPZY6jZ96ynrR">
+                      99B2bT...rR
+                    </span>
+                  ) : (
+                    <span className="font-mono text-amber-400/80 text-[11px]">Devnet only</span>
+                  )}
                 </div>
                 <div className="flex justify-between items-center text-xs">
                   <span className="text-zinc-500">Program ID</span>
-                  <span className="font-mono text-zinc-300 text-indigo-400 truncate max-w-[120px]" title="8M5yieUh7pxwUi1YBByDF82nqoorZwaKi8dBoMVpurFa">
-                    8M5yie...Fa
+                  <span className="font-mono text-zinc-300 text-indigo-400 truncate max-w-[120px]" title={network.programId}>
+                    {network.programId.slice(0, 6)}...{network.programId.slice(-2)}
                   </span>
                 </div>
                 <div className="flex justify-between items-center text-xs">

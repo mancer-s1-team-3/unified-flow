@@ -20,11 +20,34 @@ import {
 } from "@solana/kit";
 import { type Commitment, Connection, PublicKey, SystemProgram, VersionedTransaction } from "@solana/web3.js";
 import type { WalletSession } from "@solana/client";
-import { getExplorerClusterParam, getProgramIdForEndpoint } from "@/lib/solana/network-config";
+import { getExplorerClusterParam, getProgramIdForEndpoint, getNetworkByEndpoint } from "@/lib/solana/network-config";
+import type { ClusterKey } from "@/lib/solana/network-config";
 
 const TOKEN_PROGRAM_ID = new PublicKey(TOKEN_PROGRAM_ADDRESS);
 const ASSOCIATED_TOKEN_PROGRAM_ID = new PublicKey(ASSOCIATED_TOKEN_PROGRAM_ADDRESS);
-const CHAINLINK_FEED = new PublicKey("99B2bTijsU6f1GCT73HmdR7HCFFjGMBcPZY6jZ96ynrR");
+
+// Chainlink SOL/USD feed per cluster. The on-chain program currently pins the
+// devnet feed (programs/unified-flow/src/oracle.rs), so withdraw is devnet-only
+// until that constant is made per-cluster and the program is redeployed. We map
+// it explicitly here and fail loudly on clusters without a supported feed
+// instead of surfacing an opaque on-chain constraint error.
+const SOL_USD_FEEDS: Partial<Record<ClusterKey, string>> = {
+  devnet: "99B2bTijsU6f1GCT73HmdR7HCFFjGMBcPZY6jZ96ynrR",
+  // mainnet / testnet: intentionally absent — see note above.
+};
+
+function resolveChainlinkFeed(endpoint: string): PublicKey {
+  const cluster = getNetworkByEndpoint(endpoint)?.cluster ?? null;
+  // Unknown/custom RPC (e.g. local validator forking devnet) → assume devnet feed.
+  const feed = cluster ? SOL_USD_FEEDS[cluster] : SOL_USD_FEEDS.devnet;
+  if (!feed) {
+    throw new Error(
+      `Withdraw is not available on ${cluster ?? "this network"} yet: the on-chain program pins the devnet SOL/USD Chainlink feed. ` +
+        `Switch to devnet to withdraw, or upgrade & redeploy the program with a ${cluster ?? "matching"} oracle feed.`,
+    );
+  }
+  return new PublicKey(feed);
+}
 const TOKEN_ACCOUNT_SIZE = 165;
 const CHAINLINK_FEED_LEN = 248;
 const CHAINLINK_FEED_DECIMALS_OFFSET = 0x8a;
@@ -205,6 +228,9 @@ export async function withdrawFromStreamOnChain({
 }): Promise<WithdrawStreamResult> {
   onStatus?.("wallet_approval");
   const PROGRAM_ID = getProgramIdForEndpoint(endpoint);
+  // Resolve (and gate) the price feed before doing any work, so unsupported
+  // clusters fail with a clear message rather than a cryptic on-chain error.
+  const chainlinkFeed = resolveChainlinkFeed(endpoint);
   const recipient = new PublicKey(wallet.account.address.toString());
   const streamAddress = parsePublicKey(input.streamAddress, "stream address");
   const { signer: walletSigner, mode: walletSignerMode } = createWalletTransactionSigner(wallet);
@@ -267,7 +293,7 @@ export async function withdrawFromStreamOnChain({
 
   const { blockhash, lastValidBlockHeight } = await connection.getLatestBlockhash(commitment);
 
-  const feedInfo = await connection.getAccountInfo(CHAINLINK_FEED, commitment);
+  const feedInfo = await connection.getAccountInfo(chainlinkFeed, commitment);
   if (!feedInfo?.data) {
     throw new Error("Unable to read the SOL price feed.");
   }
@@ -319,7 +345,7 @@ export async function withdrawFromStreamOnChain({
       vault: streamState.vault,
       recipientAta,
       feeReceiver,
-      chainlinkFeed: CHAINLINK_FEED,
+      chainlinkFeed,
       tokenProgram: TOKEN_PROGRAM_ID,
       systemProgram: SystemProgram.programId,
     })
@@ -335,7 +361,7 @@ export async function withdrawFromStreamOnChain({
       { address: streamState.vault.toBase58(), role: AccountRole.WRITABLE },
       { address: recipientAta.toBase58(), role: AccountRole.WRITABLE },
       { address: feeReceiver.toBase58(), role: AccountRole.WRITABLE },
-      { address: CHAINLINK_FEED.toBase58(), role: AccountRole.READONLY },
+      { address: chainlinkFeed.toBase58(), role: AccountRole.READONLY },
       { address: TOKEN_PROGRAM_ID.toBase58(), role: AccountRole.READONLY },
       { address: SystemProgram.programId.toBase58(), role: AccountRole.READONLY },
     ],

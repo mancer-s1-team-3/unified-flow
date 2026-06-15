@@ -99,11 +99,19 @@ export function getDefaultMint(endpoint: string) {
 
 export function buildCreateStreamCsvTemplate(endpoint: string) {
   const defaultMint = getDefaultMint(endpoint);
+  const cluster = getClusterKey(endpoint);
+  // The prefilled recipient is a devnet test wallet. On mainnet/testnet use a
+  // clear placeholder so a test address is never streamed to by accident — the
+  // user must replace it (CSV validation will flag it until they do).
+  const recipient =
+    cluster === "devnet" || cluster === null
+      ? "AoFGFuBasrNZ7bs9XddzyvMvYhZPGJHpWKGLG2CU62EY"
+      : "RECIPIENT_WALLET_ADDRESS";
 
   return [
     "recipient,amount,mint,type,duration,cliff_duration,milestones",
-    `AoFGFuBasrNZ7bs9XddzyvMvYhZPGJHpWKGLG2CU62EY,2,${defaultMint},0,7200,0,`,
-    `AoFGFuBasrNZ7bs9XddzyvMvYhZPGJHpWKGLG2CU62EY,2,${defaultMint},1,15000,3600,`,
-    `AoFGFuBasrNZ7bs9XddzyvMvYhZPGJHpWKGLG2CU62EY,2,${defaultMint},2,9000,0,0.5,0.5,0.5,0.5`,
+    `${recipient},2,${defaultMint},0,7200,0,`,
+    `${recipient},2,${defaultMint},1,15000,3600,`,
+    `${recipient},2,${defaultMint},2,9000,0,0.5,0.5,0.5,0.5`,
   ].join("\n");
 }

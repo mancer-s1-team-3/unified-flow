@@ -2049,7 +2049,10 @@ const editCsvDisabled =
 
       {activeTab === "create_streams" && (
         <div className="animate-in fade-in-30 duration-200 overflow-x-hidden max-w-full">
-          <PreflightChecklist endpoint={endpoint} />  
+          {/* Devnet-only: faucets / test-token guidance don't apply on mainnet/testnet. */}
+          {(endpoint.includes("devnet") || endpoint.includes("localhost") || endpoint.includes("127.0.0.1")) && (
+            <PreflightChecklist endpoint={endpoint} />
+          )}
           <div className="flex flex-col gap-4 border-b border-zinc-900 pb-4 mb-6 sm:flex-row sm:items-center sm:justify-between max-w-full min-w-0">
             <div className="min-w-0 max-w-full">
               <h2 className="text-2xl font-extrabold tracking-tight">Create Stream</h2>

@@ -87,13 +87,14 @@ export function classifyConnector(name: string | undefined | null): WalletKind {
 // ---------------------------------------------------------------------------
 
 function SupportedWalletsTooltip({ onClose }: { onClose: () => void }) {
+  const { network } = useNetwork();
   return (
     <div className="absolute right-0 top-full z-[60] mt-3 w-72 max-w-[calc(100vw-2rem)] overflow-hidden rounded-2xl border border-zinc-800 bg-zinc-950/98 shadow-2xl backdrop-blur-xl animate-in fade-in slide-in-from-top-2 duration-150">
       <div className="flex items-center justify-between border-b border-zinc-900 px-4 py-3">
         <div className="flex items-center gap-2">
           <Shield className="h-3.5 w-3.5 text-indigo-400" />
           <span className="text-xs font-bold uppercase tracking-widest text-zinc-300">
-            Supported Wallets · Devnet
+            Supported Wallets · {network.label}
           </span>
         </div>
         <button

@@ -22,7 +22,7 @@ import { cancelStreamOnChain } from "@/lib/solana/cancel";
 import { unlockMilestoneOnChain } from "@/lib/solana/unlock-milestone";
 import { parseTransactionError } from "@/lib/parse-tx-error";
 import { useNotifications } from "@/lib/notification-context";
-import { getExplorerClusterParam } from "@/lib/solana/network-config";
+import { getExplorerClusterParam, getNetworkByEndpoint } from "@/lib/solana/network-config";
 import {
   buildCreateStreamCsvTemplate,
   getClusterLabel,
@@ -925,7 +925,17 @@ export default function Home({ initialStreams = [] }: Props) {
     }
     setSelectedStream(null);
   };
-  const network = WalletAdapterNetwork.Devnet;
+  // Map the active cluster (from the network switcher) to the wallet-adapter
+  // network instead of pinning Devnet, so deep-link/explorer behaviour follows
+  // whichever cluster the user selected.
+  const network = useMemo(() => {
+    const c = getNetworkByEndpoint(endpoint)?.cluster;
+    return c === "mainnet"
+      ? WalletAdapterNetwork.Mainnet
+      : c === "testnet"
+      ? WalletAdapterNetwork.Testnet
+      : WalletAdapterNetwork.Devnet;
+  }, [endpoint]);
   const wallets = useMemo(() => [new SolflareWalletAdapter()], [network]);
 
   // ── Render ────────────────────────────────────────────────────────────────
