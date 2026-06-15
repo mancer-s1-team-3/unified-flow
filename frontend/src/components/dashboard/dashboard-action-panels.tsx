@@ -3211,88 +3211,19 @@ const editCsvDisabled =
   />
 )}
 
-      {activeTab === "edit_cliff" && (
-        <div className="animate-in fade-in-30 duration-200">
-          <div className="border-b border-zinc-900 pb-4 mb-6"><div className="flex items-center gap-2"><h2 className="text-2xl font-extrabold tracking-tight">Edit Cliff Conditions</h2></div><p className="text-xs text-zinc-400">Modify cliff release durations or shift lockup parameters</p></div>
-          {isStreamCsvCreated(editCliffForm.streamId) ? <div className="bg-red-950/45 border border-red-500/30 rounded-2xl p-5 text-red-300 flex items-start gap-4 mb-6"><Lock className="w-6 h-6 text-red-400 shrink-0 mt-0.5" /><div><h4 className="text-sm font-extrabold">Manual Edit Locked!</h4><p className="text-xs text-red-400/80 mt-1 leading-relaxed">This stream was created via CSV Import. To comply with consistency requirements, CSV-created streams must be edited exclusively using the Bulk Edit CSV console.</p></div></div> : <div className="grid gap-4"><div><label className="block text-xs font-semibold text-zinc-400 uppercase tracking-wider mb-1.5">Stream ID (PDA Address)</label><input type="text" value={editCliffForm.streamId}   placeholder="Paste stream PDA address" onChange={(e) => setEditCliffForm({ ...editCliffForm, streamId: e.target.value })} className="w-full bg-zinc-950 border border-zinc-800 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:border-indigo-500 font-mono" /></div><div><label className="block text-xs font-semibold text-zinc-400 uppercase tracking-wider mb-1.5">New Cliff Duration (Seconds from Start)</label><input type="number" value={editCliffForm.newCliffDuration} onChange={(e) => setEditCliffForm({ ...editCliffForm, newCliffDuration: e.target.value })} className="w-full bg-zinc-950 border border-zinc-800 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:border-indigo-500 font-mono" />
-              {editCliffNewCliffTs !== null && (
-                <div className={`mt-1.5 text-[10px] font-mono ${editCliffNewCliffOutOfRange ? "text-rose-400" : "text-zinc-500"}`}>
-                  {editCliffNewCliffOutOfRange
-                    ? "Cliff falls outside the stream window — must be between start and end."
-                    : <>Cliff unlocks {formatDurationSecs(editCliffNewDurationNum)} after start → <span className="text-zinc-300">{formatUnixTs(editCliffNewCliffTs)}</span></>}
-                </div>
-              )}</div>
-            <div>
-              <label className="block text-xs font-semibold text-zinc-400 uppercase tracking-wider mb-1.5">Top-up Amount (Tokens to Add) — Optional</label>
-              <input
-                type="number"
-                value={editCliffForm.topupAmount}
-                onChange={(e) => setEditCliffForm({ ...editCliffForm, topupAmount: e.target.value })}
-                className={`w-full bg-zinc-950 border rounded-xl px-4 py-2.5 text-sm focus:outline-none font-mono transition-colors ${editCliffExceedsBalance ? "border-rose-500/60 focus:border-rose-500" : "border-zinc-800 focus:border-indigo-500"}`}
-              />
-              <div className="mt-1.5 flex items-center gap-2">
-                {!connected ? null
-                : editCliffBalance.loading ? (
-                  <span className="text-[10px] font-mono text-zinc-600 animate-pulse">fetching balance…</span>
-                ) : editCliffBalance.error ? (
-                  <span className="text-[10px] font-mono text-zinc-600">balance unavailable</span>
-                ) : !editCliffMint ? null
-                : editCliffBalance.balance !== null ? (
-                  <span className={`text-[10px] font-mono ${editCliffExceedsBalance ? "text-rose-400" : "text-zinc-500"}`}>
-                    Balance: {editCliffBalance.balance.toLocaleString(undefined, { maximumFractionDigits: editCliffDecimals })}{editCliffSymbol ? ` ${editCliffSymbol}` : ""}
-                  </span>
-                ) : null}
-              </div>
-              {editCliffExceedsBalance && (
-                <div className="mt-1 text-[10px] font-semibold text-rose-400">
-                  Top-up amount exceeds wallet balance of {editCliffBalance.balance!.toLocaleString(undefined, { maximumFractionDigits: editCliffDecimals })}{editCliffSymbol ? ` ${editCliffSymbol}` : ""}.
-                </div>
-              )}
-              <p className="mt-1.5 text-[10px] text-zinc-600 leading-relaxed">Adds tokens to this cliff stream. Allowed even after the cliff has passed or tokens were withdrawn. Leave empty to only adjust the cliff.</p>
-              {editCliffHasTopup && editCliffStream && (
-                <div className="mt-1.5 text-[10px] font-mono text-emerald-400/90">
-                  Total locked after top-up: <span className="font-semibold">{formatBaseUnitsToTokenAmount(editCliffNewTotalBase, editCliffDecimals)}{editCliffSymbol ? ` ${editCliffSymbol}` : ""}</span>
-                  <span className="text-zinc-600"> (was {formatBaseUnitsToTokenAmount(editCliffTotalBase, editCliffDecimals)})</span>
-                </div>
-              )}
-            </div></div>}
-          {editCliffStream && !isStreamCsvCreated(editCliffForm.streamId) && (
-            <div className="mt-4 bg-zinc-950/60 border border-zinc-800 rounded-2xl p-4">
-              <div className="flex items-center justify-between mb-3">
-                <h4 className="text-[11px] font-bold uppercase tracking-wider text-zinc-400">Stream Info</h4>
-                <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${editCliffWrongType ? "bg-rose-500/15 text-rose-300" : "bg-indigo-500/15 text-indigo-300"}`}>
-                  {editCliffStream.vestingType === 0 ? "Linear" : editCliffStream.vestingType === 1 ? "Cliff" : "Milestone"}
-                </span>
-              </div>
-              <div className="grid grid-cols-2 gap-x-4 gap-y-2 text-[11px]">
-                <div className="flex flex-col"><span className="text-zinc-600">Recipient</span><span className="font-mono text-zinc-300">{shorten(String(editCliffStream.recipient || "")) || "—"}</span></div>
-                <div className="flex flex-col"><span className="text-zinc-600">Asset</span><span className="font-mono text-zinc-300">{editCliffSymbol || "—"}</span></div>
-                <div className="flex flex-col"><span className="text-zinc-600">Total Locked</span><span className="font-mono text-zinc-300">{formatBaseUnitsToTokenAmount(editCliffTotalBase, editCliffDecimals)}{editCliffSymbol ? ` ${editCliffSymbol}` : ""}</span></div>
-                <div className="flex flex-col"><span className="text-zinc-600">Withdrawn</span><span className={`font-mono ${editCliffHasWithdrawals ? "text-amber-300" : "text-zinc-300"}`}>{formatBaseUnitsToTokenAmount(editCliffWithdrawnBase, editCliffDecimals)}{editCliffSymbol ? ` ${editCliffSymbol}` : ""}</span></div>
-                <div className="flex flex-col"><span className="text-zinc-600">Start</span><span className="font-mono text-zinc-300">{formatUnixTs(editCliffStartTsNum)}</span></div>
-                <div className="flex flex-col"><span className="text-zinc-600">Current Cliff</span><span className="font-mono text-zinc-300">{formatUnixTs(editCliffCurrentCliffTsNum)}</span></div>
-                <div className="flex flex-col col-span-2"><span className="text-zinc-600">End</span><span className="font-mono text-zinc-300">{formatUnixTs(editCliffEndTsNum)}</span></div>
-              </div>
-              {editCliffWrongType && (
-                <p className="mt-3 text-[10px] font-semibold text-rose-400 leading-relaxed">This is not a cliff stream — its cliff duration cannot be edited here. Use the edit panel that matches its vesting type.</p>
-              )}
-              {editCliffHasWithdrawals && !editCliffWrongType && (
-                <p className="mt-3 text-[10px] text-amber-400/80 leading-relaxed">Tokens have already been withdrawn, so the cliff date is locked. Top-up is still available.</p>
-              )}
-            </div>
-          )}
-          {editCliffPeriodOver && !isStreamCsvCreated(editCliffForm.streamId) && (
-            <div className="bg-amber-950/40 border border-amber-500/30 rounded-2xl p-4 text-amber-300 flex items-start gap-3 mt-6">
-              <Lock className="w-5 h-5 text-amber-400 shrink-0 mt-0.5" />
-              <div>
-                <h4 className="text-sm font-extrabold">Cliff Period Ended</h4>
-                <p className="text-xs text-amber-400/80 mt-1 leading-relaxed">The cliff timestamp for this stream has already elapsed, so the cliff itself can no longer be adjusted. {editCliffNewDuration !== "" ? "Clear the New Cliff Duration field above to enable a top-up." : "You can still add tokens using the top-up field above."}</p>
-              </div>
-            </div>
-          )}
-          <button disabled={editCliffDisabled} onClick={() => handleAction("edit_cliff", editCliffForm)} className={`w-full mt-6 text-white font-bold text-xs py-3 rounded-xl transition-all shadow-lg flex items-center justify-center gap-2 ${editCliffDisabled ? "bg-zinc-850 border border-zinc-800 text-zinc-550 cursor-not-allowed opacity-50" : "bg-indigo-600 hover:bg-indigo-700 hover:shadow-indigo-500/20"}`}>{activeTxAction === "edit_cliff" && activeTxPhase ? <RefreshCw className="w-4 h-4 animate-spin" /> : null}{getTxLabel("edit_cliff", "Apply Cliff & Top-up")}</button>
-        </div>
-      )}
+     {activeTab === "edit_cliff" && (
+  <EditCliffPanel
+    editCliffForm={editCliffForm}
+    setEditCliffForm={setEditCliffForm}
+    handleAction={handleAction}
+    streams={streams}
+    connectedWalletAddress={connectedWalletAddress}
+    activeTxAction={activeTxAction}
+    activeTxPhase={activeTxPhase}
+    connected={connected}
+    isStreamCsvCreated={isStreamCsvCreated}
+  />
+)}
 
       <div className={`mt-12 bg-zinc-950 border border-zinc-900 rounded-2xl p-4 font-mono text-[11px] relative overflow-hidden ${mobileNarrowFormClass}`}>
         <div className="absolute top-0 right-0 p-3 flex gap-2"><span className="w-2.5 h-2.5 rounded-full bg-red-500/60" /><span className="w-2.5 h-2.5 rounded-full bg-amber-500/60" /><span className="w-2.5 h-2.5 rounded-full bg-green-500/60" /></div>
@@ -3912,6 +3843,508 @@ function useCsvTotalByMint(csvText: string): Record<string, number> {
     }
     return totals;
   }, [csvText]);
+}
+
+// ─── Edit Cliff Panel ──────────────────────────────────────────────────────
+function EditCliffPanel({
+  editCliffForm,
+  setEditCliffForm,
+  handleAction,
+  streams,
+  connectedWalletAddress,
+  activeTxAction,
+  activeTxPhase,
+  connected,
+  isStreamCsvCreated,
+}: {
+  editCliffForm: { streamId: string; newCliffDuration: string };
+  setEditCliffForm: (value: any) => void;
+  handleAction: (actionName: string, data: any) => Promise<void> | void;
+  streams: any[];
+  connectedWalletAddress: string | null;
+  activeTxAction: string | null;
+  activeTxPhase: "wallet_approval" | "sending" | "confirming" | null;
+  connected: boolean;
+  isStreamCsvCreated: (id: string) => boolean;
+}) {
+  const nowTs = Math.floor(Date.now() / 1000);
+
+  // ── Resolve stream ─────────────────────────────────────────────────────
+  const stream = useMemo(
+    () =>
+      streams.find(
+        (s) => String(s?.id || "") === editCliffForm.streamId.trim()
+      ) ?? null,
+    [streams, editCliffForm.streamId]
+  );
+
+  // ── Guards ─────────────────────────────────────────────────────────────
+  const isCsvCreated = isStreamCsvCreated(editCliffForm.streamId);
+
+  const isWrongWallet =
+    !!editCliffForm.streamId.trim() &&
+    !!stream &&
+    !!connectedWalletAddress &&
+    stream.creator?.toLowerCase() !== connectedWalletAddress.toLowerCase();
+
+  const isWrongType =
+    !!stream && Number(stream.vestingType) !== 1;
+
+  const isNotActive =
+    !!stream && Number(stream.status) !== 1;
+
+  const isCliffExpired =
+    !!stream &&
+    Number(stream.cliffTs ?? 0) > 0 &&
+    nowTs >= Number(stream.cliffTs);
+
+  const isStreamExpired =
+    !!stream &&
+    Number(stream.endTs ?? 0) > 0 &&
+    nowTs >= Number(stream.endTs);
+
+  const hasWithdrawn =
+    !!stream && parseBaseUnits(stream.withdrawn ?? 0) > BigInt(0);
+
+  // ── Current state preview ──────────────────────────────────────────────
+  const currentPreview = useMemo(() => {
+    if (!stream) return null;
+
+    const decimals =
+      typeof stream.mintDecimals === "number" ? stream.mintDecimals : 6;
+    const startTs = Number(stream.startTs ?? 0);
+    const endTs = Number(stream.endTs ?? 0);
+    const cliffTs = Number(stream.cliffTs ?? 0);
+    const currentCliffDuration = cliffTs - startTs;
+
+    return {
+      startTs,
+      endTs,
+      cliffTs,
+      currentCliffDuration,
+      cliffDateStr:
+        cliffTs > 0 ? new Date(cliffTs * 1000).toLocaleString() : "—",
+      endDateStr:
+        endTs > 0 ? new Date(endTs * 1000).toLocaleString() : "—",
+      totalAmount: Number(
+        formatBaseUnitsToTokenAmount(parseBaseUnits(stream.totalAmount), decimals)
+      ).toLocaleString(undefined, { maximumFractionDigits: decimals }),
+    };
+  }, [stream]);
+
+  // ── New cliff preview ──────────────────────────────────────────────────
+  const newCliffPreview = useMemo(() => {
+    if (!currentPreview) return null;
+    const newDuration = Number(editCliffForm.newCliffDuration ?? 0);
+    if (!Number.isFinite(newDuration) || newDuration < 0) return null;
+
+    const newCliffTs = currentPreview.startTs + newDuration;
+    const newCliffDateStr = new Date(newCliffTs * 1000).toLocaleString();
+    const isSame = newCliffTs === currentPreview.cliffTs;
+    const isBeforeNow = newCliffTs <= nowTs;
+    const isAfterEnd = newCliffTs > currentPreview.endTs;
+    const diffSeconds = newCliffTs - currentPreview.cliffTs;
+
+    return {
+      newCliffTs,
+      newCliffDateStr,
+      isSame,
+      isBeforeNow,
+      isAfterEnd,
+      diffSeconds,
+      isValid: !isSame && !isBeforeNow && !isAfterEnd,
+    };
+  }, [currentPreview, editCliffForm.newCliffDuration, nowTs]);
+
+  // ── Input-level validation ─────────────────────────────────────────────
+  const newDurationEmpty = !String(editCliffForm.newCliffDuration ?? "").trim();
+  const cliffBeforeNow = !!newCliffPreview?.isBeforeNow;
+  const cliffAfterEnd = !!newCliffPreview?.isAfterEnd;
+  const cliffSameAsCurrent = !!newCliffPreview?.isSame;
+
+  const isSubmitting = activeTxAction === "edit_cliff" && !!activeTxPhase;
+
+  const getTxLabel = () => {
+    if (activeTxAction !== "edit_cliff" || !activeTxPhase)
+      return "Adjust Cliff Timestamp";
+    if (activeTxPhase === "wallet_approval") return "Approve In Wallet...";
+    if (activeTxPhase === "sending") return "Sending Transaction...";
+    return "Confirming On-Chain...";
+  };
+
+  const canSubmit =
+    !!editCliffForm.streamId.trim() &&
+    !isCsvCreated &&
+    !isWrongWallet &&
+    !isWrongType &&
+    !isNotActive &&
+    !isCliffExpired &&
+    !isStreamExpired &&
+    !hasWithdrawn &&
+    !newDurationEmpty &&
+    !cliffBeforeNow &&
+    !cliffAfterEnd &&
+    !cliffSameAsCurrent &&
+    !isSubmitting &&
+    connected;
+
+  return (
+    <div className="animate-in fade-in-30 duration-200">
+      <div className="border-b border-zinc-900 pb-4 mb-6">
+        <h2 className="text-2xl font-extrabold tracking-tight">
+          Edit Cliff Conditions
+        </h2>
+        <p className="text-xs text-zinc-400">
+          Modify cliff release duration or shift lockup parameters
+        </p>
+      </div>
+
+      {/* CSV lock */}
+      {isCsvCreated && (
+        <div className="bg-red-950/45 border border-red-500/30 rounded-2xl p-5 text-red-300 flex items-start gap-4 mb-6">
+          <Lock className="w-6 h-6 text-red-400 shrink-0 mt-0.5" />
+          <div>
+            <h4 className="text-sm font-extrabold">Manual Edit Locked!</h4>
+            <p className="text-xs text-red-400/80 mt-1 leading-relaxed">
+              This stream was created via CSV Import. Edit it using the Bulk
+              Edit CSV console.
+            </p>
+          </div>
+        </div>
+      )}
+
+      {!isCsvCreated && (
+        <div className="grid gap-4">
+          {/* Stream ID */}
+          <div>
+            <label className="block text-xs font-semibold text-zinc-400 uppercase tracking-wider mb-1.5">
+              Stream ID (PDA Address)
+            </label>
+            <input
+              type="text"
+              value={editCliffForm.streamId}
+              onChange={(e) =>
+                setEditCliffForm({
+                  ...editCliffForm,
+                  streamId: e.target.value,
+                })
+              }
+              className="w-full bg-zinc-950 border border-zinc-800 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:border-indigo-500 font-mono"
+              placeholder="Paste stream PDA address"
+            />
+          </div>
+
+          {/* ── Wrong wallet ──────────────────────────────────────────── */}
+          {isWrongWallet && (
+            <div className="bg-amber-950/30 border border-amber-500/30 rounded-2xl p-4 flex items-start gap-3">
+              <AlertTriangle className="w-4 h-4 text-amber-400 shrink-0 mt-0.5" />
+              <div>
+                <p className="text-[11px] font-bold text-amber-300 mb-1">
+                  Wrong wallet connected
+                </p>
+                <p className="text-[11px] text-amber-300/70 leading-relaxed">
+                  Only the stream creator can edit the cliff. Creator is{" "}
+                  <span className="font-mono text-amber-300 break-all">
+                    {stream?.creator
+                      ? `${stream.creator.slice(0, 6)}…${stream.creator.slice(-4)}`
+                      : "unknown"}
+                  </span>
+                  , connected wallet is{" "}
+                  <span className="font-mono text-amber-300 break-all">
+                    {`${connectedWalletAddress!.slice(0, 6)}…${connectedWalletAddress!.slice(-4)}`}
+                  </span>
+                  .
+                </p>
+              </div>
+            </div>
+          )}
+
+          {/* ── Wrong type ────────────────────────────────────────────── */}
+          {isWrongType && (
+            <div className="bg-zinc-900/60 border border-zinc-700 rounded-2xl p-4 flex items-start gap-3">
+              <AlertTriangle className="w-4 h-4 text-zinc-400 shrink-0 mt-0.5" />
+              <div>
+                <p className="text-[11px] font-bold text-zinc-300 mb-1">
+                  Not a cliff stream
+                </p>
+                <p className="text-[11px] text-zinc-500 leading-relaxed">
+                  edit_cliff only applies to Cliff type (type 1) streams. This
+                  stream is{" "}
+                  {Number(stream?.vestingType) === 0
+                    ? "Linear"
+                    : "Milestone"}{" "}
+                  type.
+                </p>
+              </div>
+            </div>
+          )}
+
+          {/* ── Not active ────────────────────────────────────────────── */}
+          {isNotActive && !isWrongType && (
+            <div className="bg-rose-950/20 border border-rose-500/20 rounded-2xl p-4 flex items-start gap-3">
+              <AlertTriangle className="w-4 h-4 text-rose-400 shrink-0 mt-0.5" />
+              <p className="text-[11px] text-rose-300/80 leading-relaxed">
+                This stream is{" "}
+                <strong className="text-rose-300">
+                  {Number(stream?.status) === 2 ? "completed" : "cancelled"}
+                </strong>{" "}
+                and can no longer be edited.
+              </p>
+            </div>
+          )}
+
+          {/* ── Cliff already expired ─────────────────────────────────── */}
+          {isCliffExpired && !isNotActive && !isWrongType && (
+            <div className="bg-amber-950/30 border border-amber-500/30 rounded-2xl p-4 flex items-start gap-3">
+              <Lock className="w-4 h-4 text-amber-400 shrink-0 mt-0.5" />
+              <div>
+                <p className="text-[11px] font-bold text-amber-300 mb-1">
+                  Cliff period has already passed
+                </p>
+                <p className="text-[11px] text-amber-300/70 leading-relaxed">
+                  The cliff timestamp{" "}
+                  <span className="font-mono text-amber-300">
+                    {currentPreview?.cliffDateStr}
+                  </span>{" "}
+                  has already elapsed — the cliff can no longer be adjusted.
+                </p>
+              </div>
+            </div>
+          )}
+
+          {/* ── Stream expired ────────────────────────────────────────── */}
+          {isStreamExpired && !isNotActive && !isWrongType && (
+            <div className="bg-amber-950/30 border border-amber-500/30 rounded-2xl p-4 flex items-start gap-3">
+              <AlertTriangle className="w-4 h-4 text-amber-400 shrink-0 mt-0.5" />
+              <p className="text-[11px] text-amber-300/80 leading-relaxed">
+                Stream end date has already passed — the stream has expired.
+              </p>
+            </div>
+          )}
+
+          {/* ── Already withdrawn ─────────────────────────────────────── */}
+          {hasWithdrawn && !isNotActive && !isWrongType && !isCliffExpired && (
+            <div className="bg-rose-950/20 border border-rose-500/20 rounded-2xl p-4 flex items-start gap-3">
+              <Lock className="w-4 h-4 text-rose-400 shrink-0 mt-0.5" />
+              <p className="text-[11px] text-rose-300/80 leading-relaxed">
+                Tokens have already been withdrawn from this stream — the cliff
+                timestamp can no longer be modified.
+              </p>
+            </div>
+          )}
+
+          {/* ── Current state preview ─────────────────────────────────── */}
+          {currentPreview && !isWrongType && (
+            <div className="rounded-2xl border border-zinc-800 overflow-hidden">
+              <div className="flex items-center gap-2 px-4 py-3 border-b border-zinc-900 bg-zinc-950/60">
+                <Lock className="w-3.5 h-3.5 text-violet-400" />
+                <span className="text-[10px] font-black uppercase tracking-widest text-zinc-400">
+                  Current Cliff State
+                </span>
+              </div>
+              <div className="divide-y divide-zinc-900/60">
+                <div className="flex items-center justify-between px-4 py-3">
+                  <span className="text-xs text-zinc-500">
+                    Current cliff date
+                  </span>
+                  <span className="font-mono text-sm font-bold text-violet-300">
+                    {currentPreview.cliffDateStr}
+                  </span>
+                </div>
+                <div className="flex items-center justify-between px-4 py-3">
+                  <span className="text-xs text-zinc-500">
+                    Cliff duration (from start)
+                  </span>
+                  <span className="font-mono text-sm font-bold text-zinc-300">
+                    {currentPreview.currentCliffDuration.toLocaleString()}s
+                  </span>
+                </div>
+                <div className="flex items-center justify-between px-4 py-3">
+                  <span className="text-xs text-zinc-500">Stream end date</span>
+                  <span className="font-mono text-sm font-bold text-zinc-500">
+                    {currentPreview.endDateStr}
+                  </span>
+                </div>
+                <div className="flex items-center justify-between px-4 py-3">
+                  <span className="text-xs text-zinc-500">
+                    Total allocation
+                  </span>
+                  <span className="font-mono text-sm font-bold text-zinc-200">
+                    {currentPreview.totalAmount}
+                  </span>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* ── New cliff duration input ──────────────────────────────── */}
+          <div>
+            <label className="block text-xs font-semibold text-zinc-400 uppercase tracking-wider mb-1.5">
+              New Cliff Duration{" "}
+              <span className="text-zinc-600 normal-case font-normal">
+                (seconds from original start)
+              </span>
+            </label>
+            <div className="relative">
+              <input
+                type="number"
+                min="0"
+                value={editCliffForm.newCliffDuration}
+                onChange={(e) =>
+                  setEditCliffForm({
+                    ...editCliffForm,
+                    newCliffDuration: e.target.value,
+                  })
+                }
+                className={`w-full bg-zinc-950 border rounded-xl px-4 py-2.5 pr-12 text-sm focus:outline-none font-mono transition-colors ${
+                  (cliffBeforeNow || cliffAfterEnd || cliffSameAsCurrent) &&
+                  !newDurationEmpty
+                    ? "border-rose-500/60 focus:border-rose-500"
+                    : "border-zinc-800 focus:border-indigo-500"
+                }`}
+                placeholder={
+                  currentPreview
+                    ? `Current: ${currentPreview.currentCliffDuration}s`
+                    : "Seconds from start date"
+                }
+              />
+              <span className="absolute inset-y-0 right-3 flex items-center text-[10px] font-black uppercase tracking-wider text-zinc-500">
+                sec
+              </span>
+            </div>
+
+            {/* Quick presets relative to current cliff duration */}
+            {currentPreview && (
+              <div className="mt-2 flex flex-wrap gap-2">
+                {[
+                  { label: "+1M", add: 60 * 60 * 24 * 30 },
+                  { label: "+3M", add: 60 * 60 * 24 * 90 },
+                  { label: "+6M", add: 60 * 60 * 24 * 180 },
+                  { label: "+1Y", add: 60 * 60 * 24 * 365 },
+                ].map((p) => (
+                  <button
+                    key={p.label}
+                    type="button"
+                    onClick={() =>
+                      setEditCliffForm({
+                        ...editCliffForm,
+                        newCliffDuration: String(
+                          currentPreview.currentCliffDuration + p.add
+                        ),
+                      })
+                    }
+                    className="px-2.5 py-1 rounded-lg border border-zinc-800 bg-zinc-900 text-[10px] font-black uppercase text-zinc-300 hover:border-violet-500 hover:text-white transition"
+                  >
+                    {p.label}
+                  </button>
+                ))}
+              </div>
+            )}
+
+            {/* Validation messages */}
+            {!newDurationEmpty && newCliffPreview && (
+              <div className="mt-2 text-[10px] font-mono">
+                {cliffBeforeNow ? (
+                  <span className="text-rose-400">
+                    ✕ New cliff timestamp would be in the past — must be after
+                    now.
+                  </span>
+                ) : cliffAfterEnd ? (
+                  <span className="text-rose-400">
+                    ✕ New cliff must be before stream end date (
+                    {currentPreview?.endDateStr}).
+                  </span>
+                ) : cliffSameAsCurrent ? (
+                  <span className="text-zinc-500">
+                    Same as current cliff — change the value to proceed.
+                  </span>
+                ) : (
+                  <span className="text-zinc-500">
+                    ≈ new cliff{" "}
+                    <span className="text-violet-300">
+                      {newCliffPreview.newCliffDateStr}
+                    </span>
+                    {newCliffPreview.diffSeconds !== 0 && (
+                      <span className="text-zinc-600 ml-2">
+                        ({newCliffPreview.diffSeconds > 0 ? "+" : ""}
+                        {newCliffPreview.diffSeconds.toLocaleString()}s from
+                        current)
+                      </span>
+                    )}
+                  </span>
+                )}
+              </div>
+            )}
+          </div>
+
+          {/* ── Changes preview card ──────────────────────────────────── */}
+          {currentPreview &&
+            !isWrongType &&
+            !isNotActive &&
+            !isCliffExpired &&
+            !isStreamExpired &&
+            !hasWithdrawn &&
+            newCliffPreview?.isValid && (
+              <div className="rounded-2xl border border-violet-500/20 bg-violet-950/10 overflow-hidden">
+                <div className="flex items-center gap-2 px-4 py-3 border-b border-violet-500/10">
+                  <Check className="w-3.5 h-3.5 text-violet-400" />
+                  <span className="text-[10px] font-black uppercase tracking-widest text-violet-400/80">
+                    Changes Preview
+                  </span>
+                </div>
+                <div className="flex items-center justify-between px-4 py-3">
+                  <span className="text-xs text-zinc-400">Cliff date</span>
+                  <div className="text-right">
+                    <div className="text-[10px] font-mono text-zinc-600 line-through">
+                      {currentPreview.cliffDateStr}
+                    </div>
+                    <div className="font-mono text-sm font-bold text-violet-300">
+                      {newCliffPreview.newCliffDateStr}
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
+        </div>
+      )}
+
+      {/* Submit button */}
+      <button
+        disabled={!canSubmit}
+        onClick={() => handleAction("edit_cliff", editCliffForm)}
+        className={`w-full mt-6 text-white font-bold text-xs py-3 rounded-xl transition-all shadow-lg flex items-center justify-center gap-2 ${
+          !canSubmit
+            ? "bg-zinc-800 text-zinc-500 cursor-not-allowed shadow-none"
+            : "bg-indigo-600 hover:bg-indigo-700 hover:shadow-indigo-500/20"
+        }`}
+      >
+        {isSubmitting ? (
+          <RefreshCw className="w-4 h-4 animate-spin" />
+        ) : (
+          <Lock className="w-4 h-4" />
+        )}
+        {!connected
+          ? "Connect wallet to edit"
+          : isCsvCreated
+          ? "Use CSV Console to edit"
+          : isWrongWallet
+          ? "Wrong wallet — switch to creator wallet"
+          : isWrongType
+          ? "Not a cliff stream"
+          : isNotActive
+          ? Number(stream?.status) === 2
+            ? "Stream already completed"
+            : "Stream cancelled"
+          : isCliffExpired
+          ? "Cliff period has already passed"
+          : isStreamExpired
+          ? "Stream has expired"
+          : hasWithdrawn
+          ? "Cannot edit — tokens already withdrawn"
+          : getTxLabel()}
+      </button>
+    </div>
+  );
 }
 // ─── Edit Linear Panel ─────────────────────────────────────────────────────
 function EditLinearPanel({
