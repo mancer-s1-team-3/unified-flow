@@ -10,3 +10,4 @@ docker-compose.yml
 dist
 .env.local
 fuzz_0-coverage-report.json
+issue/
