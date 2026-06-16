@@ -100,6 +100,17 @@ function toUnixSeconds(value: unknown, label: string): BN {
   return new BN(n);
 }
 
+// Whole, non-negative number of seconds — a relative span to add, not an
+// absolute time. The model supplies durations (which it computes reliably);
+// the app derives any absolute timestamp itself.
+function toDurationSeconds(value: unknown, label: string): BN {
+  const n = typeof value === "string" ? Number(value) : value;
+  if (typeof n !== "number" || !Number.isFinite(n) || !Number.isInteger(n) || n < 0) {
+    throw new Error(`Invalid ${label} (expected a whole number of seconds).`);
+  }
+  return new BN(n);
+}
+
 function toNonce(value: unknown): BN {
   if (typeof value === "number" && Number.isFinite(value) && value >= 0) {
     return new BN(Math.trunc(value));
@@ -271,7 +282,7 @@ const executeToolWithFeedback = async (toolName: string, args: string) => {
   // explicit SDK arg, the decimals to convert human amounts to base units).
   const fetchStreamMintInfo = async (
     streamPda: string
-  ): Promise<{ mint: PublicKey; decimals: number }> => {
+  ): Promise<{ mint: PublicKey; decimals: number; endTs: BN }> => {
     const stream = await getStream(streamPda);
     if (!stream || !stream.mint) throw new Error("Stream not found.");
     const mint = new PublicKey(stream.mint);
@@ -279,7 +290,8 @@ const executeToolWithFeedback = async (toolName: string, args: string) => {
       typeof stream.mintDecimals === "number"
         ? stream.mintDecimals
         : await fetchMintDecimals(mint);
-    return { mint, decimals };
+    const endTs = new BN(String(stream.endTs ?? "0"));
+    return { mint, decimals, endTs };
   };
 
   // ─── Execute tool call ────────────────────────────────────────────────────
@@ -399,16 +411,29 @@ const executeToolWithFeedback = async (toolName: string, args: string) => {
         }
 
         case "edit_linear": {
-          const { stream_pda, new_end_ts, topup_amount } = parsedArgs;
+          const { stream_pda, extend_seconds, topup_amount } = parsedArgs;
           const streamPk = toPublicKey(stream_pda, "stream");
-          const endBn = toUnixSeconds(new_end_ts, "end time");
-          const { decimals } = await fetchStreamMintInfo(String(stream_pda).trim());
-          const result = await client.editLinear(
-            streamPk,
-            endBn,
-            toBaseUnitsBN(topup_amount, decimals, "top-up", true)
-          );
-          return { success: true, message: `Stream extended! Tx: ${result.signature}` };
+          const { decimals, endTs } = await fetchStreamMintInfo(String(stream_pda).trim());
+
+          // The model supplies a RELATIVE extension (seconds to add). We read the
+          // stream's current end and compute the absolute new end ourselves — the
+          // model can't reliably know "now" or the stream's end, so it must never
+          // hand us an absolute timestamp (that silently no-ops on-chain when the
+          // value isn't strictly later than the current end).
+          const extendBn = toDurationSeconds(extend_seconds, "extension duration");
+          const topupBn = toBaseUnitsBN(topup_amount, decimals, "top-up", true);
+
+          if (extendBn.lten(0) && topupBn.lten(0)) {
+            return {
+              success: false,
+              message: "Nothing to update: provide a positive extension duration, a top-up amount, or both.",
+            };
+          }
+
+          const newEndBn = endTs.add(extendBn);
+          const result = await client.editLinear(streamPk, newEndBn, topupBn);
+          const extendedNote = extendBn.gtn(0) ? ` Extended by ${extendBn.toString()}s.` : "";
+          return { success: true, message: `Stream updated!${extendedNote} Tx: ${result.signature}` };
         }
 
         default:
