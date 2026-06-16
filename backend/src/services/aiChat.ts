@@ -52,6 +52,7 @@ Important guidelines:
 - If you don't know something, admit it and suggest alternatives
 - Keep responses under 200 words when possible
 - Use emojis sparingly but effectively
+- If a required detail for an action is missing from the user's request (e.g. recipient address, stream address, or amount), ASK for it in plain text. Never call a tool with an empty, placeholder, or guessed value for a field the user must supply.
 
 Technical details:
 - Streams use PDAs (Program Derived Addresses) as identifiers
@@ -70,7 +71,7 @@ const TOOLS = [
         type: "object",
         properties: {
           recipient: { type: "string", description: "Recipient wallet public key" },
-          mint: { type: "string", description: "Token mint public key" },
+          mint: { type: "string", description: "Token symbol (e.g. 'USDC', 'SOL') or mint address. Prefer the symbol — the app resolves it to the correct mint for the active cluster (devnet/mainnet). Never guess a mint address for a well-known token; the same token has different mints per cluster." },
           amount: { type: "number", description: "Total token amount in human-readable units (e.g. 1000 means 1000 tokens). The app converts to base units using the mint's on-chain decimals." },
           start_ts: { type: "number", description: "Stream start timestamp (Unix seconds)" },
           cliff_ts: { type: "number", description: "Cliff timestamp (Unix seconds); 0 if no cliff" },
