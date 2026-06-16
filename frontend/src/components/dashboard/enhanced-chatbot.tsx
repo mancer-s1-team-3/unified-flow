@@ -20,6 +20,7 @@ import { Connection, PublicKey } from "@solana/web3.js";
 import { BN } from "@coral-xyz/anchor";
 import { useClusterState, useWalletConnection } from "@solana/react-hooks";
 import { useUnifiedFlowClient } from "@/lib/useUnifiedFlowClient";
+import { resolveMintInput } from "@/components/dashboard/token-mints";
 import { useNetwork } from "@/components/wallet/network-context";
 import type { MilestoneInput } from "@unifiedflow/unified-flow-sdk";
 import { getStream } from "@/lib/api";
@@ -325,7 +326,9 @@ const executeToolWithFeedback = async (toolName: string, args: string) => {
           } = parsedArgs;
 
           const recipientPk = toPublicKey(recipient, "recipient");
-          const mintPk = toPublicKey(mint, "mint");
+          // The model may give a symbol ("USDC") or a mainnet address while we're
+          // on devnet — resolve to the active cluster's real mint before use.
+          const mintPk = toPublicKey(resolveMintInput(String(mint ?? ""), endpoint), "mint");
 
           const vestingType = Number(vesting_type);
           if (![0, 1, 2].includes(vestingType)) {
@@ -548,6 +551,49 @@ edit_linear:    { label: "Extend Stream",    icon: "📈", color: "bg-teal-600" 
     return { ...info, args: toolCall.arguments };
   };
 
+  // Deterministic backstop: never offer to run an action whose required, user-
+  // supplied fields are missing/malformed (the model sometimes emits a tool call
+  // with a blank or placeholder recipient). Returns the human-readable names of
+  // whatever is still needed; an empty array means the call is runnable.
+  const getMissingToolArgs = (toolCall: { name: string; arguments: string }): string[] => {
+    let args: Record<string, unknown> = {};
+    try {
+      args = JSON.parse(toolCall.arguments || "{}") as Record<string, unknown>;
+    } catch {
+      return ["valid arguments"];
+    }
+    const isPubkey = (v: unknown): boolean => {
+      if (typeof v !== "string" || !v.trim()) return false;
+      try {
+        new PublicKey(v.trim());
+        return true;
+      } catch {
+        return false;
+      }
+    };
+    const isPositiveNumber = (v: unknown): boolean => {
+      const n = typeof v === "string" ? Number(v) : v;
+      return typeof n === "number" && Number.isFinite(n) && n > 0;
+    };
+    const missing: string[] = [];
+    switch (toolCall.name) {
+      case "create_stream":
+        if (!isPubkey(args.recipient)) missing.push("recipient address");
+        if (typeof args.mint !== "string" || !String(args.mint).trim()) missing.push("token");
+        if (!isPositiveNumber(args.amount)) missing.push("amount");
+        break;
+      case "withdraw_stream":
+      case "cancel_stream":
+      case "unlock_milestone":
+      case "edit_milestone":
+      case "edit_cliff":
+      case "edit_linear":
+        if (!isPubkey(args.stream_pda)) missing.push("stream address");
+        break;
+    }
+    return missing;
+  };
+
   // ─── Render ───────────────────────────────────────────────────────────────
   const widget = (
     <div className="fixed bottom-[calc(4rem_+_env(safe-area-inset-bottom)_+_1.5rem)] right-6 z-50 flex flex-col items-end gap-3 md:bottom-6">
@@ -658,6 +704,18 @@ edit_linear:    { label: "Extend Stream",    icon: "📈", color: "bg-teal-600" 
                           {(() => {
                             const toolInfo = getToolCallInfo(message.toolCall);
                             if (!toolInfo) return null;
+                            const missing = getMissingToolArgs(message.toolCall!);
+                            if (missing.length > 0) {
+                              return (
+                                <div className="flex items-start gap-2 px-3 py-2.5 rounded-xl bg-amber-500/10 border border-amber-500/30 text-amber-300/90 text-[11px] leading-relaxed">
+                                  <span className="text-sm">⚠️</span>
+                                  <span>
+                                    Can&apos;t run <strong>{toolInfo.label}</strong> yet — still need:{" "}
+                                    <strong>{missing.join(", ")}</strong>. Please provide it and try again.
+                                  </span>
+                                </div>
+                              );
+                            }
                             return (
                               <button
                                 onClick={() =>

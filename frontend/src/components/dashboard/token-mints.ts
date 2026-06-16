@@ -97,6 +97,40 @@ export function getDefaultMint(endpoint: string) {
   return getMintPresets(endpoint)[0]?.mint ?? WSOL_MINT;
 }
 
+// Resolve a user/LLM-supplied token reference — a symbol like "USDC"/"SOL" or a
+// raw mint address — to the correct mint for the *active* cluster. This guards
+// the common failure where an assistant emits a well-known mainnet address
+// (e.g. USDC `EPjFW…`) while the app is on devnet: we remap it by label to the
+// active cluster's equivalent. Unknown addresses pass through untouched so
+// on-chain validation can reject genuinely-bad mints.
+export function resolveMintInput(input: string, endpoint: string): string {
+  const raw = (input ?? "").trim();
+  const presets = getMintPresets(endpoint);
+  if (!raw) return getDefaultMint(endpoint);
+
+  // 1) Symbol / label match (case-insensitive): "usdc", "wrapped sol", …
+  const norm = raw.toLowerCase();
+  const bySymbol = presets.find((p) => p.label.toLowerCase() === norm);
+  if (bySymbol) return bySymbol.mint;
+  if (norm === "sol" || norm === "wsol") {
+    const wsol = presets.find((p) => p.mint === WSOL_MINT);
+    if (wsol) return wsol.mint;
+  }
+
+  // 2) Already a valid preset address for THIS cluster → use as-is.
+  if (presets.some((p) => p.mint === raw)) return raw;
+
+  // 3) A known preset address from ANOTHER cluster → remap by label.
+  const foreign = [...DEVNET_MINT_PRESETS, ...MAINNET_MINT_PRESETS].find((p) => p.mint === raw);
+  if (foreign) {
+    const local = presets.find((p) => p.label === foreign.label);
+    if (local) return local.mint;
+  }
+
+  // 4) Unknown — assume it's a raw mint address; let on-chain validation decide.
+  return raw;
+}
+
 export function buildCreateStreamCsvTemplate(endpoint: string) {
   const defaultMint = getDefaultMint(endpoint);
   const cluster = getClusterKey(endpoint);
