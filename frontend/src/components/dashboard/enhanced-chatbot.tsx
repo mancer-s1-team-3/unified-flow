@@ -21,8 +21,9 @@ import { BN } from "@coral-xyz/anchor";
 import { useClusterState, useWalletConnection } from "@solana/react-hooks";
 import { useUnifiedFlowClient } from "@/lib/useUnifiedFlowClient";
 import { resolveMintInput } from "@/components/dashboard/token-mints";
+import { createStreamOnChain } from "@/lib/solana/create-stream";
+import type { WalletSession } from "@solana/client";
 import { useNetwork } from "@/components/wallet/network-context";
-import type { MilestoneInput } from "@unifiedflow/unified-flow-sdk";
 import { getStream } from "@/lib/api";
 
 // ─── Enhanced Suggestions ────────────────────────────────────────────────────
@@ -110,16 +111,6 @@ function toDurationSeconds(value: unknown, label: string): BN {
     throw new Error(`Invalid ${label} (expected a whole number of seconds).`);
   }
   return new BN(n);
-}
-
-function toNonce(value: unknown): BN {
-  if (typeof value === "number" && Number.isFinite(value) && value >= 0) {
-    return new BN(Math.trunc(value));
-  }
-  if (typeof value === "string" && /^\d+$/.test(value.trim())) {
-    return new BN(value.trim());
-  }
-  throw new Error("Invalid nonce.");
 }
 
 function toIndex(value: unknown, label: string): number {
@@ -322,53 +313,60 @@ const executeToolWithFeedback = async (toolName: string, args: string) => {
             end_ts,
             vesting_type = 0,
             milestones = [],
-            nonce,
           } = parsedArgs;
-
-          const recipientPk = toPublicKey(recipient, "recipient");
-          // The model may give a symbol ("USDC") or a mainnet address while we're
-          // on devnet — resolve to the active cluster's real mint before use.
-          const mintPk = toPublicKey(resolveMintInput(String(mint ?? ""), endpoint), "mint");
 
           const vestingType = Number(vesting_type);
           if (![0, 1, 2].includes(vestingType)) {
             return { success: false, message: "Invalid vesting type (expected 0=linear, 1=cliff, 2=milestone)." };
           }
 
-          const startBn = toUnixSeconds(start_ts, "start time");
-          const cliffBn = toUnixSeconds(cliff_ts, "cliff time");
-          const endBn = toUnixSeconds(end_ts, "end time");
-          if (endBn.lte(startBn)) {
+          // Validate recipient up front; resolve the mint to the active cluster's
+          // real address (handles "USDC"/symbols and mainnet-vs-devnet addresses).
+          const recipientStr = String(recipient ?? "").trim();
+          toPublicKey(recipientStr, "recipient");
+          const resolvedMint = resolveMintInput(String(mint ?? ""), endpoint);
+
+          // The model hands absolute timestamps; we trust only the relative span
+          // (end - start) and start "now". Route through the dashboard's proven
+          // createStreamOnChain so we reuse browser-safe PDA derivation, balance
+          // checks, wSOL auto-wrap and ATA handling — none of which the SDK's
+          // createStream does (that path kept failing: swapped accounts, the
+          // writeBigUInt64LE nonce bug, missing-ATA, etc.).
+          const startNum = toUnixSeconds(start_ts, "start time").toNumber();
+          const endNum = toUnixSeconds(end_ts, "end time").toNumber();
+          const durationSecs = endNum - startNum;
+          if (durationSecs <= 0) {
             return { success: false, message: "End time must be after start time." };
           }
-          const nonceBn = toNonce(nonce);
+          const cliffNum = cliff_ts != null ? toUnixSeconds(cliff_ts, "cliff time").toNumber() : 0;
+          const cliffDuration = vestingType === 1 ? Math.max(cliffNum - startNum, 0) : 0;
 
-          // LLM provides human-readable amounts; convert with the mint's decimals.
-          const decimals = await fetchMintDecimals(mintPk);
-          const amountBn = toBaseUnitsBN(amount, decimals, "total");
-
-          let milestoneInputs: MilestoneInput[] = [];
-          if (vestingType === 2) {
-            if (!Array.isArray(milestones) || milestones.length === 0) {
-              return { success: false, message: "Milestone vesting requires a non-empty milestones array." };
-            }
-            milestoneInputs = (milestones as unknown[]).map((m, i) => {
-              const amt = m && typeof m === "object" ? (m as Record<string, unknown>).amount : m;
-              return { amount: toBaseUnitsBN(amt, decimals, `milestone #${i}`) };
-            });
+          if (vestingType === 2 && (!Array.isArray(milestones) || milestones.length === 0)) {
+            return { success: false, message: "Milestone vesting requires a non-empty milestones array." };
           }
+          const milestoneAmounts =
+            vestingType === 2 && Array.isArray(milestones)
+              ? (milestones as unknown[]).map((m) => {
+                  const amt = m && typeof m === "object" ? (m as Record<string, unknown>).amount : m;
+                  return String(amt ?? "0");
+                })
+              : [];
 
-          const result = await client.createStream(
-            recipientPk,
-            mintPk,
-            amountBn,
-            startBn,
-            cliffBn,
-            endBn,
-            vestingType,
-            milestoneInputs,
-            nonceBn
-          );
+          const result = await createStreamOnChain({
+            wallet: wallet as unknown as WalletSession,
+            endpoint,
+            input: {
+              recipient: recipientStr,
+              amount: String(amount ?? ""),
+              mint: resolvedMint,
+              type: String(vestingType),
+              startDate: "", // start ~now; avoids drift from the model's clock
+              duration: String(durationSecs),
+              cliffDuration: String(cliffDuration),
+              milestoneCount: String(milestoneAmounts.length),
+              milestoneAmounts,
+            },
+          });
           return { success: true, message: `Stream created! Tx: ${result.signature}` };
         }
 
