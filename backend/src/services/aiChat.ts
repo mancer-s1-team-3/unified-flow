@@ -173,15 +173,15 @@ const TOOLS = [
     type: "function",
     function: {
       name: "edit_linear",
-      description: "Extend end date and/or top-up token amount for a linear stream in a single transaction.",
+      description: "Extend the end date and/or top-up token amount for a linear stream in a single transaction. To extend, give how many seconds to ADD to the stream's current end — the app reads the current end on-chain and computes the new end itself. Never compute or pass an absolute timestamp.",
       parameters: {
         type: "object",
         properties: {
           stream_pda: { type: "string", description: "Stream account PDA public key" },
-          new_end_ts: { type: "number", description: "New end timestamp (Unix seconds)" },
+          extend_seconds: { type: "number", description: "Number of seconds to extend the end time by, relative to the stream's current end (e.g. 1 day = 86400, 30 days = 2592000). Use 0 if only topping up." },
           topup_amount: { type: "number", description: "Additional tokens to deposit into vault, in human-readable units (0 if only extending; the app converts using the mint's decimals)." },
         },
-        required: ["stream_pda", "new_end_ts", "topup_amount"],
+        required: ["stream_pda", "extend_seconds", "topup_amount"],
       },
     },
   },
@@ -222,6 +222,14 @@ function buildContextInfo(context: ChatContext): string {
 
 function buildMessages(userMessage: string, context: ChatContext): ChatMessage[] {
   const messages: ChatMessage[] = [{ role: "system", content: SYSTEM_PROMPT }];
+
+  // Anchor the model to real wall-clock time. Without this it falls back to its
+  // training-cutoff date and produces wildly wrong absolute timestamps for
+  // create_stream / edit_cliff (and any date math the user asks for).
+  messages.push({
+    role: "system",
+    content: `Current time (Unix seconds): ${Math.floor(Date.now() / 1000)}. Treat this as "now" for all date and duration math. Never infer the current date from prior knowledge.`,
+  });
 
   if (context.userProfile) {
     const contextInfo = buildContextInfo(context);
