@@ -90,7 +90,7 @@ const TOOLS = [
           },
           nonce: { type: "number", description: "Unique nonce to derive stream PDA" },
         },
-        required: ["recipient", "mint", "amount", "start_ts", "cliff_ts", "end_ts", "vesting_type", "nonce"],
+        required: ["recipient", "mint", "amount", "start_ts", "cliff_ts", "end_ts", "vesting_type"],
       },
     },
   },
