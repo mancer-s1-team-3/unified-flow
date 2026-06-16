@@ -57,4 +57,9 @@ USER nodejs
 
 EXPOSE 3000
 
+# Container-level liveness probe. Uses node (already present) so no curl/wget dep
+# is needed; a non-200 from /health marks the container unhealthy.
+HEALTHCHECK --interval=30s --timeout=5s --start-period=40s --retries=3 \
+    CMD node -e "require('http').get('http://127.0.0.1:3000/health',r=>process.exit(r.statusCode===200?0:1)).on('error',()=>process.exit(1))"
+
 ENTRYPOINT ["/usr/bin/tini", "--", "/usr/local/bin/docker-entrypoint.sh"]
