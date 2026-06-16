@@ -380,10 +380,9 @@ const executeToolWithFeedback = async (toolName: string, args: string) => {
           const { stream_pda, milestone_index, new_amount } = parsedArgs;
           const streamPk = toPublicKey(stream_pda, "stream");
           const index = toIndex(milestone_index, "milestone index");
-          const { mint, decimals } = await fetchStreamMintInfo(String(stream_pda).trim());
+          const { decimals } = await fetchStreamMintInfo(String(stream_pda).trim());
           const result = await client.editMilestone(
             streamPk,
-            mint,
             index,
             toBaseUnitsBN(new_amount, decimals, "milestone")
           );
@@ -403,10 +402,9 @@ const executeToolWithFeedback = async (toolName: string, args: string) => {
           const { stream_pda, new_end_ts, topup_amount } = parsedArgs;
           const streamPk = toPublicKey(stream_pda, "stream");
           const endBn = toUnixSeconds(new_end_ts, "end time");
-          const { mint, decimals } = await fetchStreamMintInfo(String(stream_pda).trim());
+          const { decimals } = await fetchStreamMintInfo(String(stream_pda).trim());
           const result = await client.editLinear(
             streamPk,
-            mint,
             endBn,
             toBaseUnitsBN(topup_amount, decimals, "top-up", true)
           );
