@@ -440,7 +440,8 @@ const hasClaimable = selectedStream.vestingType === 2
 ) : (
   <button
     onClick={() => prefillAction("edit_milestone", selectedStream)}
-    className="sm:col-span-2 flex items-center justify-center gap-1.5 bg-zinc-900 hover:bg-zinc-800 text-zinc-400 hover:text-zinc-200 border border-zinc-800 hover:border-zinc-700 py-2.5 rounded-xl transition-all"
+    disabled={unlocked > 0}
+    className="sm:col-span-2 flex items-center justify-center gap-1.5 bg-zinc-900 hover:bg-zinc-800 text-zinc-400 hover:text-zinc-200 border border-zinc-800 hover:border-zinc-700 py-2.5 rounded-xl transition-all disabled:opacity-50 disabled:cursor-not-allowed disabled:pointer-events-none disabled:hover:bg-zinc-900 disabled:hover:text-zinc-400 disabled:hover:border-zinc-800"
   >
     <Settings className="w-3.5 h-3.5" />
     Modify Vesting Structure

@@ -4,14 +4,35 @@ import { startIndexer }
 import { backfill }
   from "./services/backfill";
 
+import { logger, captureException }
+  from "./services/logger";
+
 import "./api/server";
 
-async function main() {
-  // historical sync
-  await backfill();
+// Last-resort safety nets so an unhandled async error is logged/tracked instead
+// of silently killing the process with no trace.
+process.on("unhandledRejection", (reason) => {
+  captureException(reason, { kind: "unhandledRejection" });
+});
+process.on("uncaughtException", (err) => {
+  captureException(err, { kind: "uncaughtException" });
+});
 
-  // realtime indexing
+async function main() {
+  // Historical sync. A backfill failure must not prevent realtime indexing from
+  // starting — log it and continue.
+  try {
+    await backfill();
+  } catch (err) {
+    captureException(err, { where: "backfill" });
+    logger.warn("backfill failed — continuing to realtime indexing");
+  }
+
+  // Realtime indexing (self-healing: reconnects + heartbeat watchdog inside).
   await startIndexer();
 }
 
-main();
+main().catch((err) => {
+  captureException(err, { where: "main" });
+  process.exit(1);
+});

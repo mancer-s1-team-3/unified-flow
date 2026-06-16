@@ -14,10 +14,13 @@ import {
 import cors from "cors";
 import fs from "node:fs/promises";
 import path from "node:path";
+import { randomUUID } from "node:crypto";
 
 import prisma from "../db/prisma";
-import { connection } from "../services/rpc";
-import { parseCsvText, computeCsvDiff, mapCsvRowsToStreams } from "../services/csvDiff";
+import { connection, getActiveCluster, getPrimaryRpcEndpoint } from "../services/rpc";
+import { logger, captureException } from "../services/logger";
+import { indexerState } from "../services/indexerState";
+import { parseCsvText, computeCsvDiff, mapCsvRowsToStreams, validateCsvContent } from "../services/csvDiff";
 import { streamChat, isConfigured as isAiConfigured, type ChatContext } from "../services/aiChat";
 import idl from "../idl/unified_flow.json";
 
@@ -44,6 +47,31 @@ app.use(
     }),
 );
 app.use(express.json());
+
+// Per-request id + structured access logging. The id is echoed back via the
+// x-request-id header and threaded into error logs so a client error can be
+// traced to a single server log line. Health/readiness probes are skipped to
+// avoid log spam.
+app.use((req, res, next) => {
+    const requestId = (req.headers["x-request-id"] as string) || randomUUID();
+    (req as any).requestId = requestId;
+    res.setHeader("x-request-id", requestId);
+
+    const startedAt = Date.now();
+    res.on("finish", () => {
+        if (req.path === "/health" || req.path === "/ready") return;
+        const level = res.statusCode >= 500 ? "error" : res.statusCode >= 400 ? "warn" : "info";
+        logger[level]("request", {
+            requestId,
+            method: req.method,
+            path: req.path,
+            status: res.statusCode,
+            ms: Date.now() - startedAt,
+        });
+    });
+
+    next();
+});
 
 // =====================================================
 // CONSTANTS & SETUP
@@ -379,6 +407,77 @@ app.get("/skills", async (_, res) => {
     }
 });
 
+// Network indicator — lets the frontend confirm which cluster this backend is
+// indexing/serving, so it can warn when the UI cluster and backend cluster differ.
+app.get("/network", (_req, res) => {
+    res.json({
+        cluster: getActiveCluster(),
+        rpc: getPrimaryRpcEndpoint(),
+        programId: process.env.PROGRAM_ID || PROGRAM_ID.toBase58(),
+    });
+});
+
+// ── Monitoring: health & readiness ───────────────────────────────────────────
+function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T> {
+    return Promise.race([
+        promise,
+        new Promise<T>((_, reject) => setTimeout(() => reject(new Error(`timeout after ${ms}ms`)), ms)),
+    ]);
+}
+
+async function checkDb(): Promise<boolean> {
+    try {
+        await withTimeout(prisma.$queryRaw`SELECT 1`, 3000);
+        return true;
+    } catch {
+        return false;
+    }
+}
+
+async function checkRpcSlot(): Promise<number | null> {
+    try {
+        return await withTimeout(connection.getSlot("confirmed"), 3000);
+    } catch {
+        return null;
+    }
+}
+
+// Liveness + dependency health. 200 when DB and RPC are reachable, 503 otherwise.
+// Indexer liveness (subscribed / last-indexed slot+time / staleness) is reported
+// for observability and to drive external alerting.
+app.get("/health", async (_req, res) => {
+    const [dbUp, rpcSlot] = await Promise.all([checkDb(), checkRpcSlot()]);
+    const rpcUp = rpcSlot !== null;
+    const healthy = dbUp && rpcUp;
+    const staleSeconds = indexerState.lastIndexedAt
+        ? Math.round((Date.now() - Date.parse(indexerState.lastIndexedAt)) / 1000)
+        : null;
+
+    res.status(healthy ? 200 : 503).json({
+        status: healthy ? "ok" : "degraded",
+        db: dbUp ? "up" : "down",
+        rpc: rpcUp ? "up" : "down",
+        cluster: getActiveCluster(),
+        rpcSlot,
+        indexer: {
+            subscribed: indexerState.subscribed,
+            lastIndexedSlot: indexerState.lastIndexedSlot,
+            lastIndexedAt: indexerState.lastIndexedAt,
+            lastHeartbeatAt: indexerState.lastHeartbeatAt,
+            reconnects: indexerState.reconnects,
+            staleSeconds,
+            lastError: indexerState.lastError,
+        },
+    });
+});
+
+// Readiness: is the service able to serve API traffic (DB reachable)? Used by
+// orchestrators to gate traffic separately from liveness.
+app.get("/ready", async (_req, res) => {
+    const dbUp = await checkDb();
+    res.status(dbUp ? 200 : 503).json({ status: dbUp ? "ready" : "unready", db: dbUp ? "up" : "down" });
+});
+
 // Create Manual Stream
 app.post("/streams", async (req, res) => {
     const data = req.body;
@@ -535,9 +634,24 @@ app.get("/csv/versions", async (req, res) => {
 
 // 2. Upload/Save a new CSV upload version
 app.post("/csv/upload", async (req, res) => {
-    const { content, filename, uploader } = req.body;
+    const { content, filename, uploader, mode } = req.body;
     if (!content) {
         return res.status(400).send({ error: "CSV content is required." });
+    }
+
+    // Validate CSV content instead of blindly persisting it. Mode is taken from
+    // the request when provided, else inferred from the conventional filename
+    // (bulk_edit_*) — defaulting to "create".
+    const resolvedMode: "create" | "edit" =
+        mode === "edit" || mode === "create"
+            ? mode
+            : /edit/i.test(String(filename ?? "")) ? "edit" : "create";
+    const validationErrors = validateCsvContent(String(content), resolvedMode);
+    if (validationErrors.length > 0) {
+        return res.status(400).send({
+            error: `CSV validation failed: ${validationErrors[0]}${validationErrors.length > 1 ? ` (+${validationErrors.length - 1} more)` : ""}`,
+            details: validationErrors,
+        });
     }
 
     try {
@@ -847,6 +961,20 @@ app.post("/ai/chat", async (req, res) => {
     }
 });
 
+// Global error handler — must be the LAST middleware and take 4 args for Express
+// to treat it as an error handler. Funnels anything thrown in a route to the
+// structured logger / error tracker and returns a traceable response.
+app.use((err: any, req: express.Request, res: express.Response, _next: express.NextFunction) => {
+    captureException(err, {
+        where: "express",
+        requestId: (req as any).requestId,
+        method: req.method,
+        path: req.path,
+    });
+    if (res.headersSent) return;
+    res.status(500).json({ error: "Internal server error", requestId: (req as any).requestId });
+});
+
 app.listen(3000, () => {
-    console.log("API running on 3000");
+    logger.info("API running", { port: 3000, cluster: getActiveCluster() });
 });

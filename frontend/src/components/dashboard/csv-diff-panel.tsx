@@ -4,6 +4,26 @@ import { memo } from "react";
 import { Layers, X } from "lucide-react";
 import { shorten } from "./utils";
 
+// Render a relative duration (seconds) as a human-readable dates-equivalent
+// — "92 days" / "8 hours" — instead of raw seconds. Returns "—" for ≤ 0.
+function formatDuration(seconds: unknown): string {
+  const s = Math.round(Number(seconds));
+  if (!Number.isFinite(s) || s <= 0) return "—";
+  const DAY = 86400;
+  const HOUR = 3600;
+  const MIN = 60;
+  if (s >= DAY) {
+    const days = s % DAY === 0 ? s / DAY : Math.round((s / DAY) * 10) / 10;
+    return `${days.toLocaleString()} day${days === 1 ? "" : "s"}`;
+  }
+  if (s >= HOUR) {
+    const hours = s % HOUR === 0 ? s / HOUR : Math.round((s / HOUR) * 10) / 10;
+    return `${hours.toLocaleString()} hour${hours === 1 ? "" : "s"}`;
+  }
+  if (s >= MIN) return `${Math.round(s / MIN).toLocaleString()} min`;
+  return `${s.toLocaleString()}s`;
+}
+
 export const CsvDiffPanel = memo(function CsvDiffPanel({
   csvDiffResult,
   compareVersionSelected,
@@ -43,7 +63,7 @@ export const CsvDiffPanel = memo(function CsvDiffPanel({
     if (field === "type") return formatType(value);
     if (field === "cancelable") return value ? "true" : "false";
     if (field === "milestones") return value || "None";
-    if (field === "duration" || field === "cliffDuration") return `${Number(value || 0)}s`;
+    if (field === "duration" || field === "cliffDuration") return formatDuration(value);
     return String(value ?? "None");
   };
 
@@ -118,13 +138,13 @@ export const CsvDiffPanel = memo(function CsvDiffPanel({
                   {!isMilestoneType(item.type) && (
                     <div>
                       <span className="block text-[9px] text-zinc-500 font-black uppercase">Duration</span>
-                      <span className="block text-xs font-bold text-zinc-350">{item.duration}s</span>
+                      <span className="block text-xs font-bold text-zinc-350">{formatDuration(item.duration)}</span>
                     </div>
                   )}
                   {isCliffType(item.type) && (
                     <div>
                       <span className="block text-[9px] text-zinc-500 font-black uppercase">Cliff Duration</span>
-                      <span className="block text-xs font-bold text-zinc-350">{item.cliffDuration}s</span>
+                      <span className="block text-xs font-bold text-zinc-350">{formatDuration(item.cliffDuration)}</span>
                     </div>
                   )}
                   {Number(item.type) === 2 && (
@@ -164,13 +184,13 @@ export const CsvDiffPanel = memo(function CsvDiffPanel({
                   {!isMilestoneType(item.details?.type ?? item.type) && (
                     <div>
                       <span className="block text-[9px] text-zinc-500 font-black uppercase">Current Duration</span>
-                      <span className="block text-xs font-bold text-zinc-300">{Number(item.details?.duration ?? item.duration ?? 0)}s</span>
+                      <span className="block text-xs font-bold text-zinc-300">{formatDuration(item.details?.duration ?? item.duration ?? 0)}</span>
                     </div>
                   )}
                   {isCliffType(item.details?.type ?? item.type) && (
                     <div>
                       <span className="block text-[9px] text-zinc-500 font-black uppercase">Current Cliff Duration</span>
-                      <span className="block text-xs font-bold text-zinc-300">{Number(item.details?.cliffDuration ?? item.cliffDuration ?? 0)}s</span>
+                      <span className="block text-xs font-bold text-zinc-300">{formatDuration(item.details?.cliffDuration ?? item.cliffDuration ?? 0)}</span>
                     </div>
                   )}
                   {isMilestoneType(item.details?.type ?? item.type) && (
@@ -227,13 +247,13 @@ export const CsvDiffPanel = memo(function CsvDiffPanel({
                   {!isMilestoneType(item.type) && (
                     <div>
                       <span className="block text-[9px] text-zinc-500 font-black uppercase">Duration</span>
-                      <span className="block text-xs font-bold text-zinc-300">{item.duration}s</span>
+                      <span className="block text-xs font-bold text-zinc-300">{formatDuration(item.duration)}</span>
                     </div>
                   )}
                   {isCliffType(item.type) && (
                     <div>
                       <span className="block text-[9px] text-zinc-500 font-black uppercase">Cliff Duration</span>
-                      <span className="block text-xs font-bold text-zinc-300">{item.cliffDuration}s</span>
+                      <span className="block text-xs font-bold text-zinc-300">{formatDuration(item.cliffDuration)}</span>
                     </div>
                   )}
                   {isMilestoneType(item.type) && (
