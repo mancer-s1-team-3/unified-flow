@@ -1974,6 +1974,7 @@ const csvEditStructuralValidation = useCsvStructuralValidation(csvEditText, "edi
 });
 
 const createCsvDisabled =
+  !connected ||
   !csvCreateText?.trim() ||
   activeTxAction === "create_stream_csv" ||
   csvMilestoneValidation.hasErrors ||
@@ -1988,6 +1989,7 @@ const csvEditExceedsBalance =
   (csvEditTotalByMint[createForm.mint] ?? 0) > tokenBalance.balance;
 
 const editCsvDisabled =
+  !connected ||
   !csvEditText?.trim() ||
   activeTxAction === "edit_stream_csv" ||
   csvEditMilestoneValidation.hasErrors ||
