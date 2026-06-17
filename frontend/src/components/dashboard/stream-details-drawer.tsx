@@ -374,9 +374,9 @@ const hasClaimable = selectedStream.vestingType === 2
 
                     if (vestingType === 0) {
                       row = `${selectedStream.id},0,${humanAmount},${duration},,`;
-                    } else if (vestingType === 1) {
-                      row = `${selectedStream.id},1,${humanAmount},,${cliffDuration},`;
-                    } else if (vestingType === 2) {
+                   } else if (vestingType === 1) {
+  row = `${selectedStream.id},1,${humanAmount},${duration},${cliffDuration},`;
+} else if (vestingType === 2) {
                       row = `${selectedStream.id},2,${humanAmount},,,${milestones}`;
                     }
 
