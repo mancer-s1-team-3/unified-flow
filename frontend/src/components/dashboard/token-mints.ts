@@ -146,6 +146,6 @@ export function buildCreateStreamCsvTemplate(endpoint: string) {
     "recipient,amount,mint,type,duration,cliff_duration,milestones",
     `${recipient},2,${defaultMint},0,7200,0,`,
     `${recipient},2,${defaultMint},1,15000,3600,`,
-    `${recipient},2,${defaultMint},2,9000,0,0.5,0.5,0.5,0.5`,
+    `${recipient},2,${defaultMint},2,0,0,0.5,0.5,0.5,0.5`,
   ].join("\n");
 }
