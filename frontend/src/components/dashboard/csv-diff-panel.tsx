@@ -4,14 +4,31 @@ import { memo } from "react";
 import { Layers, X } from "lucide-react";
 import { shorten } from "./utils";
 
+// ── Minimal shape we need from MintPreset, kept local so this file
+//    doesn't need to import the full type from token-mints.tsx ──────────
+type MintLike = {
+  mint: string;
+  label: string;
+  decimals: number;
+};
+
 export const CsvDiffPanel = memo(function CsvDiffPanel({
   csvDiffResult,
   compareVersionSelected,
   onClose,
+  mintPresets = [],
+  selectedMint,
+  selectedMintDecimals,
 }: {
   csvDiffResult: any;
   compareVersionSelected: string;
   onClose: () => void;
+  // ── New: lets this panel resolve "Tokens" -> real symbol + correct decimals ──
+  mintPresets?: MintLike[];
+  // Fallback mint/decimals when an item doesn't carry its own mint field
+  // (e.g. createForm.mint / selectedMintPreset from the parent panel)
+  selectedMint?: string;
+  selectedMintDecimals?: number;
 }) {
   if (!csvDiffResult) return null;
   const mode = csvDiffResult.mode === "edit" ? "edit" : "create";
@@ -24,17 +41,55 @@ export const CsvDiffPanel = memo(function CsvDiffPanel({
     if (value === 1) return "Cliff";
     return "Milestone";
   };
-  const formatAmount = (amount: any, decimals: number = 9) => {
-  const raw = Number(amount || 0);
-  const value = raw / Math.pow(10, decimals);
-  return value.toLocaleString(undefined, {
-    minimumFractionDigits: 0,
-    maximumFractionDigits: 4,
-  });
-};
 
   const isMilestoneType = (type: unknown) => Number(type) === 2;
   const isCliffType = (type: unknown) => Number(type) === 1;
+
+  // ── Resolve a mint address to a known preset (USDC, etc.) ──────────────
+  const resolveMintPreset = (mintAddress: unknown) => {
+    if (!mintAddress) return null;
+    const addr = String(mintAddress);
+    return mintPresets.find((p) => p.mint === addr) ?? null;
+  };
+
+  // ── Resolve display label for a given item. Priority:
+  //    1. item's own mint, matched against known presets
+  //    2. fallback selectedMint (from parent's createForm.mint), matched against presets
+  //    3. shortened raw mint address (better than a generic "Tokens")
+  //    4. "Tokens" as last resort if no mint info exists at all
+  const resolveTokenLabel = (itemMint: unknown) => {
+    const preset = resolveMintPreset(itemMint) ?? resolveMintPreset(selectedMint);
+    if (preset) return preset.label;
+    const addr = itemMint ? String(itemMint) : selectedMint;
+    if (addr) return shorten(addr);
+    return "Tokens";
+  };
+
+  // ── Resolve decimals for a given item. Priority:
+  //    1. matched preset's decimals (item mint, then fallback mint)
+  //    2. item.mintDecimals / item.decimals if backend already attached it
+  //    3. selectedMintDecimals prop from parent
+  //    4. 6 (USDC-style default) — NOT 9, to avoid the SOL-decimals bug
+  const resolveDecimals = (itemMint: unknown, item?: any) => {
+    const preset = resolveMintPreset(itemMint) ?? resolveMintPreset(selectedMint);
+    if (preset) return preset.decimals;
+    if (typeof item?.mintDecimals === "number") return item.mintDecimals;
+    if (typeof item?.decimals === "number") return item.decimals;
+    if (typeof selectedMintDecimals === "number") return selectedMintDecimals;
+    return 6;
+  };
+
+  // ── Convert raw base-unit amount -> human readable string using the
+  //    correct decimals, then format with thousands separators. ──────────
+  const formatTokenAmount = (rawAmount: unknown, itemMint: unknown, item?: any) => {
+    const decimals = resolveDecimals(itemMint, item);
+    const raw = Number(rawAmount || 0);
+    const value = decimals > 0 ? raw / Math.pow(10, decimals) : raw;
+    const label = resolveTokenLabel(itemMint);
+    return `${value.toLocaleString(undefined, {
+      maximumFractionDigits: decimals,
+    })} ${label}`;
+  };
 
   const formatFieldName = (field: string) => {
     if (field === "cliffDuration") return "Cliff Duration";
@@ -46,8 +101,8 @@ export const CsvDiffPanel = memo(function CsvDiffPanel({
     return field;
   };
 
-  const formatFieldValue = (field: string, value: any) => {
-    if (field === "amount") return `${Number(value || 0).toLocaleString()} Tokens`;
+  const formatFieldValue = (field: string, value: any, itemMint?: unknown, item?: any) => {
+    if (field === "amount") return formatTokenAmount(value, itemMint, item);
     if (field === "type") return formatType(value);
     if (field === "cancelable") return value ? "true" : "false";
     if (field === "milestones") return value || "None";
@@ -117,7 +172,7 @@ export const CsvDiffPanel = memo(function CsvDiffPanel({
                   </div>
                   <div>
                     <span className="block text-[9px] text-zinc-500 font-black uppercase">Amount</span>
-                    <span className="block text-xs font-bold text-emerald-400">{item.amount.toLocaleString()} Tokens</span>
+                    <span className="block text-xs font-bold text-emerald-400">{formatTokenAmount(item.amount, item.mint, item)}</span>
                   </div>
                   <div>
                     <span className="block text-[9px] text-zinc-500 font-black uppercase">Type</span>
@@ -153,7 +208,9 @@ export const CsvDiffPanel = memo(function CsvDiffPanel({
               <span className="w-1.5 h-1.5 rounded-full bg-amber-500" />
               Modified Streams ({csvDiffResult.modified.length})
             </div>
-            {csvDiffResult.modified.map((item: any, idx: number) => (
+            {csvDiffResult.modified.map((item: any, idx: number) => {
+              const itemMint = item.details?.mint ?? item.mint;
+              return (
               <div key={`mod-${idx}`} className="bg-amber-950/5 border border-amber-900/30 rounded-2xl p-4 flex flex-col gap-2 animate-in slide-in-from-bottom-2 duration-200">
                 <div className="flex justify-between items-center">
                   <span className="text-[9px] bg-amber-950/40 text-amber-400 border border-amber-900/60 font-black px-2 py-0.5 rounded-md uppercase tracking-wider">
@@ -193,15 +250,16 @@ export const CsvDiffPanel = memo(function CsvDiffPanel({
                     <div key={cIdx} className="flex justify-between items-center text-xs">
                       <span className="text-[10px] text-zinc-500 uppercase font-black">{formatFieldName(ch.field)}</span>
                       <div className="flex items-center gap-2 font-semibold">
-                        <span className="text-zinc-500 line-through">{formatFieldValue(ch.field, ch.oldVal)}</span>
+                        <span className="text-zinc-500 line-through">{formatFieldValue(ch.field, ch.oldVal, itemMint, item)}</span>
                         <span className="text-zinc-500">→</span>
-                        <span className="text-amber-400 font-bold">{formatFieldValue(ch.field, ch.newVal)}</span>
+                        <span className="text-amber-400 font-bold">{formatFieldValue(ch.field, ch.newVal, itemMint, item)}</span>
                       </div>
                     </div>
                   ))}
                 </div>
               </div>
-            ))}
+              );
+            })}
           </div>
         )}
 
@@ -226,7 +284,7 @@ export const CsvDiffPanel = memo(function CsvDiffPanel({
                   </div>
                   <div>
                     <span className="block text-[9px] text-zinc-500 font-black uppercase">Amount</span>
-                   <span className="block text-xs font-bold text-zinc-300">{formatAmount(item.amount, item.decimals)} Tokens</span>
+                    <span className="block text-xs font-bold text-zinc-300">{formatTokenAmount(item.amount, item.mint, item)}</span>
                   </div>
                   <div>
                     <span className="block text-[9px] text-zinc-500 font-black uppercase">Type</span>
