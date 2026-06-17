@@ -12,6 +12,27 @@ type MintLike = {
   decimals: number;
 };
 
+// ── Format a duration (in seconds) into a compact "Xd Yh Zm" string.
+//    Falls back to plain seconds for sub-minute durations so small
+//    testing values (e.g. 30s) stay precise instead of showing "0m". ──────
+function formatDuration(value: unknown): string {
+  const totalSeconds = Math.max(0, Math.floor(Number(value || 0)));
+  if (!Number.isFinite(totalSeconds) || totalSeconds === 0) return "0s";
+  if (totalSeconds < 60) return `${totalSeconds}s`;
+
+  const days = Math.floor(totalSeconds / 86400);
+  const hours = Math.floor((totalSeconds % 86400) / 3600);
+  const minutes = Math.floor((totalSeconds % 3600) / 60);
+
+  const parts: string[] = [];
+  if (days > 0) parts.push(`${days}d`);
+  if (hours > 0) parts.push(`${hours}h`);
+  // Only show minutes if there's no days (keeps it compact for long durations)
+  if (minutes > 0 && days === 0) parts.push(`${minutes}m`);
+
+  return parts.length > 0 ? parts.join(" ") : "0m";
+}
+
 export const CsvDiffPanel = memo(function CsvDiffPanel({
   csvDiffResult,
   compareVersionSelected,
