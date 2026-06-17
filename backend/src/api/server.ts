@@ -21,7 +21,7 @@ import { connection, getActiveCluster, getPrimaryRpcEndpoint } from "../services
 import { logger, captureException } from "../services/logger";
 import { indexerState } from "../services/indexerState";
 import { parseCsvText, computeCsvDiff, mapCsvRowsToStreams, validateCsvContent } from "../services/csvDiff";
-import { streamChat, isConfigured as isAiConfigured, type ChatContext } from "../services/aiChat";
+import { streamChat, isOnTopic, isConfigured as isAiConfigured, type ChatContext } from "../services/aiChat";
 import { screenUserMessage, REFUSAL_MESSAGE } from "../services/contentGuard";
 import idl from "../idl/unified_flow.json";
 
@@ -958,6 +958,19 @@ app.post("/ai/chat", async (req, res) => {
             requestId: (req as any).requestId,
             category: verdict.category,
             reason: verdict.reason,
+            snippet: userMessage.slice(0, 80),
+        });
+        send({ content: REFUSAL_MESSAGE, done: true });
+        res.write("data: [DONE]\n\n");
+        res.end();
+        return;
+    }
+
+    // Off-topic gate: a separate cheap classification call, since ASI:One
+    // ignores soft "stay on topic" prompting. Fails open on any error.
+    if (!(await isOnTopic(userMessage, context ?? {}))) {
+        logger.warn("ai_chat_offtopic", {
+            requestId: (req as any).requestId,
             snippet: userMessage.slice(0, 80),
         });
         send({ content: REFUSAL_MESSAGE, done: true });
