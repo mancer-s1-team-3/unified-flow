@@ -1,5 +1,5 @@
 import React from "react";
-import { FileCode, AlertTriangle } from "lucide-react";
+import { FileCode, AlertTriangle, Terminal } from "lucide-react";
 import { CodeSnippet } from "@/components/docs/CodeSnippet";
 
 /* ── helper components ──────────────────────────────────────────── */
@@ -52,6 +52,15 @@ const ErrorTable = ({ errors }: { errors: { code: string; desc: string }[] }) =>
   </div>
 );
 
+const ExampleUsage = ({ code }: { code: string }) => (
+  <div className="mt-6">
+    <h4 className="text-xs font-bold text-emerald-400 uppercase tracking-wider mb-2 flex items-center gap-1.5">
+      <Terminal className="w-3.5 h-3.5" /> Example Usage
+    </h4>
+    <CodeSnippet code={code} />
+  </div>
+);
+
 const InstructionCard = ({ id, title, desc, children }: { id: string; title: string; desc: string; children: React.ReactNode }) => (
   <section id={id} className="scroll-mt-24 p-6 rounded-2xl bg-zinc-900/20 border border-zinc-800">
     <h3 className="text-xl font-bold text-zinc-100 font-mono mb-2">{title}</h3>
@@ -70,8 +79,16 @@ export default function InstructionsPage() {
           Instruction Reference
         </h1>
         <p className="text-lg text-zinc-400 font-light leading-relaxed">
-          Every on-chain instruction exposed by the Unified Flow program, with parameters, access controls, error codes, and behavioral notes.
+          Every on-chain instruction exposed by the Unified Flow program, with parameters, access controls, error codes, and example usage.
         </p>
+        <div className="mt-5 p-4 rounded-xl bg-indigo-500/5 border border-indigo-500/10 text-sm text-zinc-400 leading-relaxed">
+          Example snippets use the TypeScript SDK <code className="text-indigo-300 font-mono text-xs">UnifiedFlowClient</code>{" "}
+          (referenced as <code className="text-indigo-300 font-mono text-xs">client</code>) — see the{" "}
+          <a href="/docs/guide" className="text-indigo-400 underline hover:text-indigo-300">Integration Guide</a> for how to
+          initialize it. Admin-only instructions (<code className="text-indigo-300 font-mono text-xs">initialize_config</code>,{" "}
+          <code className="text-indigo-300 font-mono text-xs">withdraw_fees</code>) are not wrapped by the SDK and are called
+          directly through the raw Anchor <code className="text-indigo-300 font-mono text-xs">program</code> instance.
+        </div>
       </div>
 
       {/* ── create_stream ── */}
@@ -125,6 +142,24 @@ Milestone PDA: ["milestone", stream_pda, milestone_index_byte]`} />
           { code: "TransferFeeMintUnsupported", desc: "vault.amount != amount after transfer." },
           { code: "ProtocolPaused", desc: "Config paused flag is set." },
         ]} />
+
+        <ExampleUsage code={`import { BN } from "@coral-xyz/anchor";
+
+// Linear stream: 1,000 tokens (6 decimals) vesting over 1 year
+const now = Math.floor(Date.now() / 1000);
+
+const { signature } = await client.createStream(
+  recipient,                 // PublicKey of the receiver
+  mint,                      // SPL token mint PublicKey
+  new BN(1_000_000_000),     // amount
+  new BN(now + 60),          // start_ts (starts in 60s)
+  new BN(now + 60),          // cliff_ts (= start_ts for linear)
+  new BN(now + 31_536_000),  // end_ts (1 year)
+  0,                         // vesting_type: 0 = Linear
+  [],                        // milestones (empty for linear/cliff)
+  new BN(Date.now())         // unique nonce
+);
+console.log("Stream created:", signature);`} />
       </InstructionCard>
 
       {/* ── withdraw ── */}
@@ -171,6 +206,14 @@ claimable = vested - stream.withdrawn`} />
           { code: "InvalidOracleFeed", desc: "Chainlink feed address or owner mismatch." },
           { code: "StaleOraclePrice", desc: "Oracle timestamp > 1 hour old." },
         ]} />
+
+        <ExampleUsage code={`// Called by the recipient. Claims all currently vested tokens
+// and pays the ~$0.99 USD (in SOL) protocol fee.
+const { signature } = await client.withdraw(
+  streamPDA,
+  (phase) => console.log("status:", phase) // optional: wallet_approval | sending | confirming
+);
+console.log("Withdrawn:", signature);`} />
       </InstructionCard>
 
       {/* ── cancel ── */}
@@ -199,6 +242,11 @@ returned_to_creator = stream.total_amount - vested`} />
           { code: "FullyVested", desc: "All tokens have vested; nothing to return." },
           { code: "ProtocolPaused", desc: "Protocol is currently paused." },
         ]} />
+
+        <ExampleUsage code={`// Called by the stream creator. Unvested tokens are refunded
+// to the creator; vested-but-unwithdrawn tokens go to the recipient.
+const { signature } = await client.cancel(streamPDA);
+console.log("Cancelled:", signature);`} />
       </InstructionCard>
 
       {/* ── unlock_milestone ── */}
@@ -236,6 +284,11 @@ returned_to_creator = stream.total_amount - vested`} />
           { code: "MilestoneAlreadyUnlocked", desc: "Milestone is already approved." },
           { code: "Unauthorized", desc: "Signer is not the stream creator." },
         ]} />
+
+        <ExampleUsage code={`// Called by the creator. Milestones must be unlocked in order:
+// index 0 first, then 1, then 2 ...
+await client.unlockMilestone(streamPDA, 0);
+await client.unlockMilestone(streamPDA, 1);`} />
       </InstructionCard>
 
       {/* ── edit_milestone ── */}
@@ -267,6 +320,17 @@ if new_amount < old_amount:
           { code: "InvalidAmount", desc: "new_amount is 0." },
           { code: "InsufficientBalance", desc: "Creator balance insufficient for top-up." },
         ]} />
+
+        <ExampleUsage code={`import { BN } from "@coral-xyz/anchor";
+
+// Resize milestone index 2 to 300,000 tokens.
+// The vault auto-rebalances: tops up from, or refunds to, the creator.
+// Note: the mint is resolved internally — no mint argument is required.
+await client.editMilestone(
+  streamPDA,
+  2,                         // milestone index (0-based)
+  new BN(300_000_000_000)    // new amount
+);`} />
       </InstructionCard>
 
       {/* ── edit_cliff ── */}
@@ -289,6 +353,13 @@ if new_amount < old_amount:
             <li>new_cliff_ts must satisfy: start_ts {"<="} new_cliff_ts {"<="} end_ts and new_cliff_ts {">="} now</li>
           </ul>
         </div>
+
+        <ExampleUsage code={`import { BN } from "@coral-xyz/anchor";
+
+// Move the cliff to 90 days from now (cliff streams only,
+// before any withdrawal has been made).
+const now = Math.floor(Date.now() / 1000);
+await client.editCliff(streamPDA, new BN(now + 7_776_000));`} />
       </InstructionCard>
 
       {/* ── edit_linear ── */}
@@ -312,6 +383,18 @@ if new_amount < old_amount:
             <li>Creator token account must hold {">="} topup_amount if top-up is requested</li>
           </ul>
         </div>
+
+        <ExampleUsage code={`import { BN } from "@coral-xyz/anchor";
+
+// Extend the end date and top up 500,000 tokens in one call.
+// Pass the current end_ts to skip the extension, or new BN(0) as
+// topup to only extend. The mint is resolved internally.
+const now = Math.floor(Date.now() / 1000);
+await client.editLinear(
+  streamPDA,
+  new BN(now + 63_072_000),  // new end_ts (must be > current end_ts)
+  new BN(500_000_000_000)    // topup_amount (new BN(0) to skip)
+);`} />
       </InstructionCard>
 
       {/* ── initialize_config ── */}
@@ -349,6 +432,26 @@ if new_amount < old_amount:
             </tbody>
           </table>
         </div>
+
+        <ExampleUsage code={`import { PublicKey, SystemProgram } from "@solana/web3.js";
+
+// Admin-only, one-time. Not wrapped by the SDK — call it through
+// the raw Anchor program instance.
+const [config] = PublicKey.findProgramAddressSync(
+  [Buffer.from("config")],
+  program.programId
+);
+
+await program.methods
+  .initializeConfig()
+  .accounts({
+    admin: wallet.publicKey,
+    config,
+    systemProgram: SystemProgram.programId,
+  })
+  .rpc();
+
+// CLI equivalent: unifiedflow init`} />
       </InstructionCard>
 
       {/* ── withdraw_fees ── */}
@@ -367,6 +470,24 @@ if new_amount < old_amount:
             <li>fee_vault.lamports() {">="} amount</li>
           </ul>
         </div>
+
+        <ExampleUsage code={`import { BN } from "@coral-xyz/anchor";
+import { PublicKey, SystemProgram } from "@solana/web3.js";
+
+// Admin-only. Withdraw accumulated SOL fees from the fee_vault PDA.
+const [config]   = PublicKey.findProgramAddressSync([Buffer.from("config")], program.programId);
+const [feeVault] = PublicKey.findProgramAddressSync([Buffer.from("fee_vault")], program.programId);
+
+await program.methods
+  .withdrawFees(new BN(1_000_000)) // lamports to withdraw
+  .accounts({
+    admin: wallet.publicKey,       // must equal config.fee_authority
+    config,
+    feeVault,
+    destination: wallet.publicKey, // SOL destination
+    systemProgram: SystemProgram.programId,
+  })
+  .rpc();`} />
       </InstructionCard>
     </div>
   );

@@ -1,141 +1,59 @@
 # Unified Flow
 
-Unified Flow is a Solana-based token distribution monorepo for building transparent and auditable SPL token vesting and streaming workflows. The project combines an Anchor on-chain program, a supporting backend service, and a web frontend.
-
-The project is currently in early development. The base structure for the smart contract, backend, frontend, integration tests, and CI is already in place as the foundation for future iterations.
+Unified Flow is a Solana-based token distribution monorepo for building transparent and auditable SPL token vesting and streaming workflows. It combines an Anchor on-chain program, a TypeScript SDK, a CLI, a backend indexer/API (with an MCP server), and a Next.js web frontend.
 
 ## Overview
 
-Unified Flow is designed to help organizations and teams lock SPL tokens on-chain and release them to recipients over time based on predefined schedules.
+Unified Flow lets organizations and teams lock SPL tokens on-chain and release them to recipients over time based on predefined schedules. It supports three vesting models:
 
-Target vesting models:
-
-- Linear vesting
-- Cliff vesting
-- Milestone-based vesting
-
-Core program instructions currently scaffolded:
-
-## `create_stream` Instruction
-
-The `create_stream` instruction initializes a new token vesting stream and locks SPL tokens into a program-controlled vault account.
-
-Current implementation supports linear, cliff, and milestone vesting streams.
-
-### Parameters
-
-| Parameter | Type | Description |
+| Type | Model | Behavior |
 | --- | --- | --- |
-| `amount` | `u64` | Total token amount locked into the stream |
-| `start_ts` | `i64` | Vesting start timestamp (Unix timestamp) |
-| `cliff_ts` | `i64` | Cliff unlock timestamp. For linear streams this should match `start_ts`. For cliff streams it must be between `start_ts` and `end_ts`. For milestone streams it is stored but not used by the unlock logic. |
-| `end_ts` | `i64` | Vesting end timestamp (Unix timestamp) |
-| `vesting_type` | `u8` | Vesting model: `0` = linear, `1` = cliff, `2` = milestone |
-| `milestones` | `Vec<MilestoneInput>` | Ordered milestone allocations. Required for milestone streams, must be empty for linear and cliff streams |
-| `nonce` | `u64` | Unique nonce used for PDA derivation |
+| `0` | **Linear** | Tokens unlock continuously, second-by-second, from `start_ts` to `end_ts`. |
+| `1` | **Cliff** | Tokens stay fully locked until `cliff_ts`, then unlock linearly toward `end_ts`. |
+| `2` | **Milestone** | Tokens are split into discrete milestones the creator unlocks sequentially on-chain. |
 
-### PDA Structure
+Withdrawals charge a fixed **$0.99 USD** protocol fee, paid in SOL and priced in real time via the on-chain **Chainlink SOL/USD** feed.
 
-The stream account PDA is derived using:
+**Deployed program ID:** `8M5yieUh7pxwUi1YBByDF82nqoorZwaKi8dBoMVpurFa`
 
-```text
-[
-  "stream",
-  creator,
-  recipient,
-  nonce
-]
-```
+## Documentation
 
-### Vesting Rules
+Full developer documentation ships as a docs site inside the frontend. Run the frontend (see below) and open:
 
-- Linear streams require `milestones = []` and validate `start_ts >= now`, `end_ts > now`, `end_ts > start_ts`, and `cliff_ts >= start_ts`.
-- Cliff streams require `milestones = []` and the same base timing checks as linear streams, plus `cliff_ts <= end_ts`.
-- Milestone streams require at least one milestone, a matching `remainingAccounts` entry for each milestone PDA, and the milestone amounts must sum exactly to `amount`.
-- Milestone amounts must all be greater than zero.
-- Milestone count is capped at `255` entries because the on-chain account stores the count as `u8`.
-
-### Milestone PDA Structure
-
-For milestone streams, each milestone account PDA is derived using:
-
-```text
-[
-  "milestone",
-  stream,
-  milestone_index
-]
-```
-
-Milestones must be passed in order starting from index `0`.
-## `withdraw` Instruction
-
-The `withdraw` instruction allows the stream recipient to claim tokens that have already vested. Tokens unlock linearly over time — the recipient can call `withdraw` at any point after vesting begins and receive whatever portion has unlocked since the last claim.
-
-### How the unlock amount is calculated
-
-```
-vested   = total_amount × (elapsed / duration)
-claimable = vested − already_withdrawn
-```
-
-Where `elapsed = now − start_ts` and `duration = end_ts − start_ts`. Before `start_ts` the claimable amount is zero. At or after `end_ts` the full amount is claimable.
-
-### Parameters
-
-| Parameter | Type | Description |
-| --- | --- | --- |
-| `_amount_to_withdraw` | `u64` | Unused by the program; included only to ensure unique transaction signatures across calls |
-
-### Behavior
-
-- Computes the claimable amount at the current slot time.
-- Transfers exactly the claimable tokens from the vault PDA to the recipient's associated token account.
-- Charges a fixed **$0.99 USD** protocol fee in SOL **on every call**, regardless of how many tokens are claimed. The fee is priced in real time via the on-chain Chainlink SOL/USD feed and deducted from the recipient's SOL balance.
-- Updates `stream.withdrawn` to accumulate total claimed tokens.
-- Sets `stream.status = COMPLETED (2)` when the final tokens are claimed.
-- Partial withdrawals are fully supported — the recipient can call `withdraw` multiple times and accumulate claims over the lifetime of the stream.
-
-### Access control
-
-| Check | Error |
+| Page | Route |
 | --- | --- |
-| Caller must be the stream recipient | `Unauthorized` |
-| Stream must be in `ACTIVE (1)` status | `StreamNotActive` |
-| Claimable amount must be greater than zero | `NothingToWithdraw` |
-| Protocol must not be paused | `ProtocolPaused` |
-| Oracle feed must match the expected address | `InvalidOracleFeed` |
-| Oracle price must not be stale (> 1 hour old) | `StaleOraclePrice` |
-| Fee receiver must match `config.fee_authority` | `InvalidFeeReceiver` |
+| Overview / vesting models | [`/docs/overview`](frontend/src/app/docs/overview/) |
+| Instruction reference (all instructions, params, errors, examples) | [`/docs/instructions`](frontend/src/app/docs/instructions/) |
+| Developer integration guide | [`/docs/guide`](frontend/src/app/docs/guide/) |
+| Architecture decision records | [`/docs/adr`](frontend/src/app/docs/adr/) |
+| Setup guide | [`/docs/setup`](frontend/src/app/docs/setup/) |
+| SDK / API / CLI / MCP | [`/docs/sdk`](frontend/src/app/docs/sdk/), [`/docs/api`](frontend/src/app/docs/api/), [`/docs/cli`](frontend/src/app/docs/cli/), [`/docs/mcp`](frontend/src/app/docs/mcp/) |
 
-### Example flow
+## Program Instructions
 
-1. Creator locks 1,000 tokens over 100 days via `create_stream`.
-2. After 25 days, recipient calls `withdraw` → receives 250 tokens and pays **$0.99** in SOL.
-3. After 50 days, recipient calls `withdraw` again → receives 250 more tokens (not 500, because 250 were already claimed) and pays **$0.99** again.
-4. After 100 days, recipient calls `withdraw` a final time → receives remaining 500 tokens, pays **$0.99** again, and stream moves to `COMPLETED`.
+The on-chain program exposes the following instructions. See [`/docs/instructions`](frontend/src/app/docs/instructions/) for full parameters, validation rules, error codes, and code examples.
 
-## `cancel` Instruction
-
-
-## Component Status
-
-| Component | Status | Path |
+| Instruction | Caller | Summary |
 | --- | --- | --- |
-| Anchor program | In development | [programs/unified-flow/](programs/unified-flow/) |
-| Backend API | Initialized | [backend/](backend/) |
-| Frontend web app | Initialized | [frontend/](frontend/) |
-| Integration tests | Initialized | [tests/](tests/) |
-| CI workflow | Available | [.github/workflows/](.github/workflows/) |
+| `create_stream` | Anyone | Initializes a vesting stream and locks tokens into a program vault (linear, cliff, or milestone). |
+| `withdraw` | Recipient | Claims all currently vested tokens. Charges the $0.99 SOL fee per call. |
+| `cancel` | Creator | Cancels a stream. Unvested tokens return to the creator; vested-but-unwithdrawn tokens go to the recipient. |
+| `unlock_milestone` | Creator | Unlocks the next sequential milestone of a milestone stream. |
+| `edit_milestone` | Creator | Resizes an un-unlocked milestone allocation; the vault auto-rebalances. |
+| `edit_cliff` | Creator | Updates the cliff timestamp of a cliff stream (before any withdrawal). |
+| `edit_linear` | Creator | Extends the end timestamp and/or tops up a linear or cliff stream. |
+| `initialize_config` | Admin | One-time initialization of the global protocol config PDA. |
+| `withdraw_fees` | Fee authority | Withdraws accumulated SOL fees from the fee vault PDA. |
 
-## Tech Stack
+### PDA derivation
 
-- **Solana + Anchor** for the on-chain program
-- **Rust** for smart contract development
-- **TypeScript** for tests, backend, and frontend
-- **Express** for the backend service
-- **Next.js** for the frontend web app
-- **Mocha + Chai** for Anchor integration tests
+```text
+Config PDA:    ["config"]
+Fee Vault PDA: ["fee_vault"]
+Stream PDA:    ["stream", creator, recipient, nonce.to_le_bytes()]
+Vault ATA:     ATA(stream_pda, mint)
+Milestone PDA: ["milestone", stream_pda, milestone_index_byte]
+```
 
 ## Repository Structure
 
@@ -144,21 +62,30 @@ Where `elapsed = now − start_ts` and `duration = end_ts − start_ts`. Before 
 |-- Anchor.toml                 # Anchor, cluster, wallet, and test script config
 |-- Cargo.toml                  # Rust workspace manifest
 |-- rust-toolchain.toml         # Pinned Rust toolchain
-|-- package.json                # JS/TS tooling for the Anchor workspace
 |-- programs/
-|   `-- unified-flow/         # Anchor on-chain program
+|   `-- unified-flow/           # Anchor on-chain program (src/lib.rs, src/oracle.rs)
+|-- sdk/                        # TypeScript SDK (@unifiedflow/unified-flow-sdk)
+|-- cli/                        # Command-line tool (@unifiedflow/cli)
+|-- backend/                    # Express API, Prisma indexer, MCP server, AI chat
+|-- frontend/                   # Next.js web app + documentation site (/docs)
 |-- tests/                      # TypeScript integration tests
 |-- migrations/                 # Anchor deploy scripts
-|-- backend/                    # Express + TypeScript backend API
-|-- frontend/                   # Next.js + Tailwind CSS frontend
 `-- .github/workflows/          # CI workflows for build and test
 ```
 
+## Tech Stack
+
+- **Solana + Anchor** for the on-chain program (Rust)
+- **TypeScript** for the SDK, CLI, tests, backend, and frontend
+- **Express + Prisma (PostgreSQL)** for the backend API and event indexer
+- **Model Context Protocol (MCP)** server for LLM agent access
+- **Next.js + Tailwind CSS** for the frontend web app and docs site
+- **Chainlink** on-chain SOL/USD feed for dynamic fee pricing
+- **Mocha + Chai** for Anchor integration tests
+
 ## Prerequisites
 
-Make sure the following tools are installed:
-
-| Tool | Version Used | Notes |
+| Tool | Version | Notes |
 | --- | --- | --- |
 | Rust | `1.89.0` | Pinned through `rust-toolchain.toml` |
 | Solana CLI | `2.2.1` | Matches `Anchor.toml` |
@@ -225,34 +152,84 @@ solana-test-validator -r
 anchor test --skip-local-validator
 ```
 
+## TypeScript SDK
+
+The SDK in [`sdk/`](sdk/) (`@unifiedflow/unified-flow-sdk`) wraps the program with a typed client that auto-resolves PDAs and account lists. See [sdk/README.md](sdk/README.md) and [`/docs/guide`](frontend/src/app/docs/guide/) for full setup.
+
+To consume it locally from the frontend or backend, add to your `package.json`:
+
+```json
+"@unifiedflow/unified-flow-sdk": "file:../sdk"
+```
+
+Minimal usage (see the Integration Guide for full client initialization):
+
+```typescript
+import { BN } from "@coral-xyz/anchor";
+import { UnifiedFlowClient } from "@unifiedflow/unified-flow-sdk";
+
+// `client` is a UnifiedFlowClient bound to a wallet + connection
+const now = Math.floor(Date.now() / 1000);
+
+const { signature } = await client.createStream(
+  recipient,                 // PublicKey
+  mint,                      // PublicKey
+  new BN(1_000_000_000),     // amount
+  new BN(now + 60),          // start_ts
+  new BN(now + 60),          // cliff_ts (= start_ts for linear)
+  new BN(now + 31_536_000),  // end_ts
+  0,                         // vesting_type: Linear
+  [],                        // milestones (empty for linear/cliff)
+  new BN(Date.now())         // unique nonce
+);
+```
+
+## CLI
+
+The CLI in [`cli/`](cli/) (`@unifiedflow/cli`) drives the program from the terminal — create, view, withdraw, cancel, unlock, edit, and CSV batch operations. See [cli/README.md](cli/README.md) for the full command reference.
+
+```bash
+# Create a 1-year linear stream
+unifiedflow create <recipient> <mint> 1000000000 0 31536000
+
+# View a stream
+unifiedflow view <streamAddress>
+
+# Withdraw vested tokens
+unifiedflow withdraw <streamAddress>
+```
+
+Configure via environment variables (`WALLET_PATH`, `PROGRAM_ID`, `RPC_URL`).
+
 ## Backend
 
-The backend lives in [backend/](backend/) and currently exposes a health check endpoint.
+The backend in [`backend/`](backend/) is an Express + TypeScript service that indexes program events into PostgreSQL (Prisma) and exposes a REST API consumed by the frontend, plus an MCP server for AI agents.
 
 ```bash
 cd backend
 npm install
-npm run dev
+npm run dev          # start the API (default PORT=3000)
+npm run init-config  # initialize the on-chain protocol config (admin, one-time)
+npm run mcp          # start the Model Context Protocol server
 ```
 
-Default endpoint:
+Selected endpoints:
 
 ```text
-GET http://localhost:3000/health
+GET  /health                       # service + DB health
+GET  /streams                      # list indexed streams
+GET  /streams/:id                  # stream detail
+POST /streams                      # create a stream
+POST /streams/:id/withdraw         # withdraw
+POST /streams/:id/cancel           # cancel
+POST /ai/chat                      # AI assistant chat
 ```
 
-Response:
-
-```json
-{
-  "status": "ok",
-  "message": "Backend is running"
-}
-```
+A Prisma schema and migrations live in [backend/prisma/](backend/prisma/). Set `DATABASE_URL` (and RPC/program env vars) before running.
 
 ## Frontend
 
-The frontend lives in [frontend/](frontend/) and uses Next.js.
+The frontend in [`frontend/`](frontend/) is a Next.js app that connects to a Solana wallet, manages streams, and hosts the documentation site at `/docs`.
 
 ```bash
 cd frontend
@@ -260,49 +237,11 @@ npm install
 npm run dev
 ```
 
-By default, the app runs at:
+The app runs at `http://localhost:3000` by default. If the backend also uses port `3000`, run one service on a different port.
 
-```text
-http://localhost:3000
-```
+## MCP Server
 
-If the backend is also running on port `3000`, run one of the services on a different port.
-
-## TypeScript SDK
-
-A TypeScript SDK is provided in the `sdk/` directory to simplify interacting with the Unified Flow program. It provides auto-resolution of PDAs and a convenient wrapper class.
-
-### Features
-- Pre-configured `UnifiedFlowClient` class to execute all program instructions.
-- Helper utilities to derive all PDAs (e.g., Streams, Milestones, Config, Vault ATAs).
-- Exports standard Anchor IDL types for full type-safety.
-
-### Usage Example
-```typescript
-import { UnifiedFlowClient } from "@uniflow/unified-flow-sdk";
-
-// Initialize the client with an active Anchor Program instance
-const client = new UnifiedFlowClient(program);
-
-// Create a new stream easily without deriving PDAs manually
-await client.createStream(
-  creatorPublicKey,
-  recipientPublicKey,
-  mintPublicKey,
-  amountBN,
-  startTsBN,
-  cliffTsBN,
-  endTsBN,
-  vestingType,
-  milestonesArray,
-  nonceBN
-).signers([creatorKeypair]).rpc();
-```
-
-To use it in the frontend or backend, add the following to your `package.json` dependencies:
-```json
-"@uniflow/unified-flow-sdk": "file:../sdk"
-```
+The backend ships a Model Context Protocol server (`npm run mcp` from `backend/`) that exposes program read/write operations as LLM tools for Claude Desktop, Cursor, and other MCP clients. See [`/docs/mcp`](frontend/src/app/docs/mcp/) for the client configuration JSON and the list of exposed tools.
 
 ## Deploy to Devnet
 
@@ -345,6 +284,17 @@ anchor keys sync
 anchor build
 ```
 
+> After deploying, call `initialize_config` once (`unifiedflow init` or `npm run init-config` from `backend/`) before any streams can be created.
+
+## Chainlink Integration
+
+Withdrawal fees are priced in USD and converted to SOL on-chain using the Chainlink SOL/USD feed. The SDK includes these accounts automatically on `withdraw`.
+
+```text
+Chainlink program: HEvSKofvBgfaexv23kMabbYqxasxU3mQ4ibBMEmJWHny
+SOL/USD feed:      99B2bTijsU6f1GCT73HmdR7HCFFjGMBcPZY6jZ96ynrR
+```
+
 ## Useful Scripts
 
 Root workspace:
@@ -362,6 +312,8 @@ Backend:
 npm run dev
 npm run build
 npm start
+npm run mcp
+npm run init-config
 ```
 
 Frontend:
@@ -407,16 +359,11 @@ Wait a few minutes and retry, or use a Solana faucet.
 
 **Backend and frontend ports conflict**
 
-The backend uses `PORT=3000` by default if no environment variable is set, and Next.js also defaults to `3000`. Set one service to a different port explicitly.
+The backend uses `PORT=3000` by default and Next.js also defaults to `3000`. Set one service to a different port explicitly.
 
-## Initial Roadmap
+**Withdrawals fail with `StaleOraclePrice`**
 
-- Complete account validation logic for `create_stream`, `withdraw`, and `cancel`
-- Add stream and milestone state transitions
-- Connect the frontend to a Solana wallet
-- Add backend indexing for stream activity
-- Document the architecture and data model
-- Expand integration tests for the main vesting scenarios
+The Chainlink SOL/USD feed has not updated within the last hour. Ensure your RPC is connected to a cluster where the feed is live (e.g. Devnet) and retry shortly.
 
 ---
 
