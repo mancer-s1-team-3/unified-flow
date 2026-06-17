@@ -3,7 +3,7 @@
 import { memo } from "react";
 import { Layers, X } from "lucide-react";
 import { shorten } from "./utils";
-
+import { resolveMintInput, getClusterKey, getMintPresets } from "@/components/dashboard/token-mints";
 // ── Minimal shape we need from MintPreset, kept local so this file
 //    doesn't need to import the full type from token-mints.tsx ──────────
 type MintLike = {
@@ -65,52 +65,75 @@ export const CsvDiffPanel = memo(function CsvDiffPanel({
 
   const isMilestoneType = (type: unknown) => Number(type) === 2;
   const isCliffType = (type: unknown) => Number(type) === 1;
-
+const resolveMintAddress = (mint: unknown) => {
+  if (!mint) return null;
+  return resolveMintInput(String(mint), selectedMint ?? "");
+};
+const cluster = getClusterKey(selectedMint ?? "");
+const resolvedPresets = getMintPresets(cluster ?? "devnet");
   // ── Resolve a mint address to a known preset (USDC, etc.) ──────────────
-  const resolveMintPreset = (mintAddress: unknown) => {
-    if (!mintAddress) return null;
-    const addr = String(mintAddress);
-    return mintPresets.find((p) => p.mint === addr) ?? null;
-  };
+const resolveMintPreset = (mintAddress: unknown) => {
+  const addr = resolveMintAddress(mintAddress);
+  if (!addr) return null;
+  return resolvedPresets.find((p) => p.mint === addr) ?? null;
+};
 
   // ── Resolve display label for a given item. Priority:
   //    1. item's own mint, matched against known presets
   //    2. fallback selectedMint (from parent's createForm.mint), matched against presets
   //    3. shortened raw mint address (better than a generic "Tokens")
   //    4. "Tokens" as last resort if no mint info exists at all
-  const resolveTokenLabel = (itemMint: unknown) => {
-    const preset = resolveMintPreset(itemMint) ?? resolveMintPreset(selectedMint);
-    if (preset) return preset.label;
-    const addr = itemMint ? String(itemMint) : selectedMint;
-    if (addr) return shorten(addr);
-    return "Tokens";
-  };
+const resolveTokenLabel = (itemMint: unknown) => {
+  const addr = resolveMintAddress(itemMint);
+
+  const preset = addr
+    ? resolvedPresets.find((p) => p.mint === addr)
+    : null;
+
+  if (preset) return preset.label;
+
+  return addr ? shorten(addr) : "Tokens";
+};
 
   // ── Resolve decimals for a given item. Priority:
   //    1. matched preset's decimals (item mint, then fallback mint)
   //    2. item.mintDecimals / item.decimals if backend already attached it
   //    3. selectedMintDecimals prop from parent
   //    4. 6 (USDC-style default) — NOT 9, to avoid the SOL-decimals bug
-  const resolveDecimals = (itemMint: unknown, item?: any) => {
-    const preset = resolveMintPreset(itemMint) ?? resolveMintPreset(selectedMint);
-    if (preset) return preset.decimals;
-    if (typeof item?.mintDecimals === "number") return item.mintDecimals;
-    if (typeof item?.decimals === "number") return item.decimals;
-    if (typeof selectedMintDecimals === "number") return selectedMintDecimals;
-    return 6;
-  };
+const resolveDecimals = (itemMint: unknown, item?: any) => {
+  const addr = resolveMintAddress(itemMint);
+
+  const preset = addr
+    ? resolvedPresets.find((p) => p.mint === addr)
+    : null;
+
+  if (preset) return preset.decimals;
+  if (typeof item?.mintDecimals === "number") return item.mintDecimals;
+  if (typeof item?.decimals === "number") return item.decimals;
+  if (typeof selectedMintDecimals === "number") return selectedMintDecimals;
+  return 6;
+};
 
   // ── Convert raw base-unit amount -> human readable string using the
   //    correct decimals, then format with thousands separators. ──────────
-  const formatTokenAmount = (rawAmount: unknown, itemMint: unknown, item?: any) => {
-    const decimals = resolveDecimals(itemMint, item);
-    const raw = Number(rawAmount || 0);
-    const value = decimals > 0 ? raw / Math.pow(10, decimals) : raw;
-    const label = resolveTokenLabel(itemMint);
-    return `${value.toLocaleString(undefined, {
-      maximumFractionDigits: decimals,
-    })} ${label}`;
-  };
+const formatTokenAmount = (rawAmount: unknown, itemMint: unknown, item?: any) => {
+  const resolvedMint = resolveMintInput(
+    String(itemMint ?? item?.mint ?? ""),
+    selectedMint ?? ""
+  );
+
+  const decimals = resolveDecimals(resolvedMint, item);
+
+  const raw = Number(rawAmount || 0);
+  const value = decimals > 0 ? raw / Math.pow(10, decimals) : raw;
+
+  // IMPORTANT: pakai resolved mint, bukan raw
+  const label = resolveTokenLabel(resolvedMint);
+
+  return `${value.toLocaleString(undefined, {
+    maximumFractionDigits: decimals,
+  })} ${label}`;
+};
 
   const formatFieldName = (field: string) => {
     if (field === "cliffDuration") return "Cliff Duration";
@@ -121,12 +144,28 @@ export const CsvDiffPanel = memo(function CsvDiffPanel({
     if (field === "type") return "Type";
     return field;
   };
+const formatMilestones = (value: any, itemMint?: unknown, item?: any) => {
+  if (!value) return "None";
 
+  const decimals = resolveDecimals(itemMint, item);
+
+  return String(value)
+    .split(";")
+    .filter(Boolean)
+    .map((v) => {
+      const raw = Number(v);
+      const formatted = raw / Math.pow(10, decimals);
+      return formatted.toLocaleString(undefined, {
+        maximumFractionDigits: decimals,
+      });
+    })
+    .join(";");
+};
   const formatFieldValue = (field: string, value: any, itemMint?: unknown, item?: any) => {
     if (field === "amount") return formatTokenAmount(value, itemMint, item);
     if (field === "type") return formatType(value);
     if (field === "cancelable") return value ? "true" : "false";
-    if (field === "milestones") return value || "None";
+    if (field === "milestones") return formatMilestones(value, itemMint, item);
     if (field === "duration" || field === "cliffDuration") return formatDuration(value);
     return String(value ?? "None");
   };
@@ -326,7 +365,9 @@ export const CsvDiffPanel = memo(function CsvDiffPanel({
                   {isMilestoneType(item.type) && (
                     <div className="col-span-2">
                       <span className="block text-[9px] text-zinc-500 font-black uppercase">Milestones</span>
-                      <span className="block text-xs font-bold text-zinc-300 truncate">{item.milestones || "None"}</span>
+                   <span className="block text-xs font-bold text-zinc-300 truncate">
+  {formatFieldValue("milestones", item.milestones, item.mint, item)}
+</span>
                     </div>
                   )}
                 </div>
