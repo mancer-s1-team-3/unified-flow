@@ -153,8 +153,13 @@ const formatMilestones = (value: any, itemMint?: unknown, item?: any) => {
     .split(";")
     .filter(Boolean)
     .map((v) => {
-      const raw = Number(v);
-      const formatted = raw / Math.pow(10, decimals);
+      const trimmed = v.trim();
+      // Heuristic: base-unit amounts are always whole integers. If the
+      // value already contains a decimal point, the backend gave us a
+      // human-readable amount — don't divide it again by 10^decimals.
+      const isAlreadyHuman = trimmed.includes(".");
+      const raw = Number(trimmed);
+      const formatted = isAlreadyHuman ? raw : raw / Math.pow(10, decimals);
       return formatted.toLocaleString(undefined, {
         maximumFractionDigits: decimals,
       });
@@ -305,18 +310,33 @@ const formatMilestones = (value: any, itemMint?: unknown, item?: any) => {
                     </div>
                   )}
                 </div>
-                <div className="grid gap-2 mt-2 border-t border-zinc-900/50 pt-2">
-                  {item.changes.map((ch: any, cIdx: number) => (
-                    <div key={cIdx} className="flex justify-between items-center text-xs">
-                      <span className="text-[10px] text-zinc-500 uppercase font-black">{formatFieldName(ch.field)}</span>
-                      <div className="flex items-center gap-2 font-semibold">
-                        <span className="text-zinc-500 line-through">{formatFieldValue(ch.field, ch.oldVal, itemMint, item)}</span>
-                        <span className="text-zinc-500">→</span>
-                        <span className="text-amber-400 font-bold">{formatFieldValue(ch.field, ch.newVal, itemMint, item)}</span>
-                      </div>
-                    </div>
-                  ))}
-                </div>
+            <div className="grid gap-2 mt-2 border-t border-zinc-900/50 pt-2">
+  {item.changes
+    .filter((ch: any) => {
+      const streamType = item.details?.type ?? item.type;
+      // Milestone streams don't use duration/cliff_duration — hide these
+      // even if the backend diff reports a spurious change (e.g. empty
+      // CSV cell parsed as 0 vs a stale stored value).
+      if (isMilestoneType(streamType) && (ch.field === "duration" || ch.field === "cliffDuration")) {
+        return false;
+      }
+      // Linear/Milestone streams don't have a cliff — hide cliffDuration noise too.
+      if (!isCliffType(streamType) && ch.field === "cliffDuration") {
+        return false;
+      }
+      return true;
+    })
+    .map((ch: any, cIdx: number) => (
+      <div key={cIdx} className="flex justify-between items-center text-xs">
+        <span className="text-[10px] text-zinc-500 uppercase font-black">{formatFieldName(ch.field)}</span>
+        <div className="flex items-center gap-2 font-semibold">
+          <span className="text-zinc-500 line-through">{formatFieldValue(ch.field, ch.oldVal, itemMint, item)}</span>
+          <span className="text-zinc-500">→</span>
+          <span className="text-amber-400 font-bold">{formatFieldValue(ch.field, ch.newVal, itemMint, item)}</span>
+        </div>
+      </div>
+    ))}
+</div>
               </div>
               );
             })}
