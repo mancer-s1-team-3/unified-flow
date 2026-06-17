@@ -92,7 +92,16 @@ function normalizeMilestones(value: unknown) {
   return String(value).trim();
 }
 
-function normalizeCsvRecord(row: CsvRow | CsvDiffRecord): CsvDiffRecord {
+// ── NEW: convert a human-readable token amount (e.g. "2" for 2 USDC) into
+// raw base units (e.g. 2_000_000 for 6 decimals), matching the scale that
+// normalizeStreamRecord() already uses for on-chain stream.totalAmount.
+// Math.round (not truncate) avoids floating point drift like 1.999999996.
+function toBaseUnits(humanAmount: number, decimals: number): number {
+  if (!Number.isFinite(humanAmount) || humanAmount === 0) return 0;
+  return Math.round(humanAmount * Math.pow(10, decimals));
+}
+
+function normalizeCsvRecord(row: CsvRow | CsvDiffRecord, decimals: number = 0): CsvDiffRecord {
   const recipient = String(row.recipient ?? "").trim();
   const id = row.id ? String(row.id).trim() : undefined;
 
@@ -100,7 +109,11 @@ function normalizeCsvRecord(row: CsvRow | CsvDiffRecord): CsvDiffRecord {
     matchKey: id || (recipient ? `recipient:${recipient.toLowerCase()}` : `row:${Math.random().toString(36).slice(2, 10)}`),
     id,
     recipient,
-    amount: toNumber(row.amount, 0),
+    // CSV "amount" is always human-readable (e.g. "2" = 2 tokens), so it must be
+    // scaled to base units here to match normalizeStreamRecord()'s output —
+    // otherwise rows from CSV and rows from the DB end up mixed at different
+    // scales inside the same added/modified/unchanged arrays.
+    amount: toBaseUnits(toNumber(row.amount, 0), decimals),
     mint: String(row.mint ?? "").trim(),
     type: toNumber(row.type, 0),
     duration: toNumber(row.duration, 0),
@@ -119,6 +132,8 @@ function normalizeStreamRecord(stream: any): CsvDiffRecord {
     matchKey: id || (recipient ? `recipient:${recipient.toLowerCase()}` : `row:${Math.random().toString(36).slice(2, 10)}`),
     id,
     recipient,
+    // stream.totalAmount is already raw base units (BigInt from Prisma) —
+    // no scaling needed here, this was always correct.
     amount: toNumber(stream.totalAmount ?? stream.amount, 0),
     mint: String(stream.mint ?? "").trim(),
     type: toNumber(stream.vestingType ?? stream.type, 0),
@@ -149,6 +164,12 @@ function buildIdentityRecordKey(record: Pick<CsvDiffRecord, "recipient" | "mint"
 
 /**
  * Robust CSV parser that parses text into key-value objects, converting numeric and boolean fields appropriately.
+ *
+ * NOTE: `row.amount` returned here is intentionally left as the raw
+ * human-readable number written in the CSV (e.g. 2, not 2_000_000). Scaling
+ * to base units happens later in normalizeCsvRecord(), once the per-row mint
+ * decimals are known — callers needing the raw CSV value (e.g.
+ * validateCsvContent) keep working unchanged.
  */
 export function parseCsvText(csvText: string): CsvRow[] {
   const lines = csvText
@@ -378,23 +399,42 @@ function pushChange(changes: DiffChange[], field: string, oldVal: CsvPrimitive, 
 
 /**
  * Compute the diff between incoming CSV rows and a set of reference rows.
+ *
+ * @param decimalsByMint Optional map of mint address -> decimals, used to
+ * scale each CSV row's human-readable `amount` into raw base units so it's
+ * comparable with `refStreams[].totalAmount` (which is already base units
+ * straight from the on-chain/Prisma data). Without this, CSV rows and DB
+ * rows end up at different numeric scales inside the same added/modified/
+ * unchanged arrays (e.g. "2" vs "2000000" for the same 2-USDC stream).
+ * @param fallbackDecimals Decimals to use when a row's mint isn't present in
+ * decimalsByMint (unknown/custom mint). Defaults to 6, matching the
+ * USDC-style fallback already used throughout the frontend.
  */
 export function computeCsvDiff(
   newRows: CsvRow[],
   refStreams: any[],
-  mode: "create" | "edit"
+  mode: "create" | "edit",
+  decimalsByMint: Map<string, number> = new Map(),
+  fallbackDecimals: number = 6
 ): CsvDiffResult {
   const added: any[] = [];
   const modified: DiffItem[] = [];
   const deleted: any[] = [];
   const unchanged: any[] = [];
 
-  const normalizedNewRows = newRows.map(normalizeCsvRecord);
+  const resolveDecimals = (mint: string | undefined) => {
+    if (!mint || mint.trim() === "") return fallbackDecimals;
+    return decimalsByMint.get(mint.trim()) ?? fallbackDecimals;
+  };
+
+  const normalizedNewRows = newRows.map((row) =>
+    normalizeCsvRecord(row, resolveDecimals(row.mint))
+  );
 
   const normalizedRefRows = refStreams.map((stream) =>
     Object.prototype.hasOwnProperty.call(stream, "totalAmount") || Object.prototype.hasOwnProperty.call(stream, "vestingType")
       ? normalizeStreamRecord(stream)
-      : normalizeCsvRecord(stream)
+      : normalizeCsvRecord(stream, resolveDecimals(stream.mint))
   );
 
   const refExactKeyBuckets = new Map<string, number[]>();
@@ -501,8 +541,8 @@ export function computeCsvDiff(
       return;
     }
 
-    const exactKey = buildExactRecordKey(normalizeCsvRecord(row));
-    const identityKey = buildIdentityRecordKey(normalizeCsvRecord(row));
+    const exactKey = buildExactRecordKey(normalizeCsvRecord(row, resolveDecimals(row.mint)));
+    const identityKey = buildIdentityRecordKey(normalizeCsvRecord(row, resolveDecimals(row.mint)));
 
     const exactCandidateIndex = takeFirstUnusedIndex(refExactKeyBuckets.get(exactKey) || []);
 
@@ -575,6 +615,14 @@ export function computeCsvDiff(
 
 /**
  * Utility to map CSV rows into diff-friendly records.
+ *
+ * NOTE: this maps rows at decimals=0 (no scaling) since callers (currently
+ * only the historical-CSV-as-reference-for-edit-mode path in server.ts) treat
+ * the result as a reference snapshot, not as something compared directly
+ * against a fresh CSV upload's already-scaled amounts in this same pass.
+ * If this utility starts feeding into computeCsvDiff's create-mode amount
+ * comparisons against live CSV rows, it will need the same decimals
+ * treatment as normalizedRefRows does above.
  */
 export function mapCsvRowsToStreams(rows: CsvRow[]): any[] {
   return rows.map((row) => normalizeCsvRecord(row));
