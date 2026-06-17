@@ -3523,22 +3523,60 @@ function useCsvDurationValidation(
         }
       }
 
-      if (vestingType === 1 && hasCliff) {
-        const c = parseSecs(cliffCell);
-        if (!c.ok) {
-          issues.push({
-            rowNum: i,
-            field: "cliff_duration",
-            reason: c.bad === "float" ? "cliff_duration must be a whole number of seconds" : "cliff_duration is not a valid number",
-          });
-        } else if (start > 0 && currentEnd > 0) {
-          const newCliff = start + c.value;
-          if (newCliff < start || newCliff > currentEnd) {
+      if (vestingType === 1 && (hasCliff || hasDuration)) {
+        // A cliff row may ALSO extend the stream's duration. The batch applies
+        // that via edit_linear BEFORE edit_cliff, so the cliff is bounded by the
+        // NEW end (start + new duration), not the live end. Validate against that.
+        let effectiveEnd = currentEnd;
+        if (hasDuration) {
+          const d = parseSecs(durCell);
+          if (!d.ok) {
+            issues.push({
+              rowNum: i,
+              field: "duration",
+              reason: d.bad === "float" ? "duration must be a whole number of seconds" : "duration is not a valid number",
+            });
+          } else if (d.value > MAX_DURATION) {
+            issues.push({ rowNum: i, field: "duration", reason: "duration is unreasonably large (max ~100 years)" });
+          } else if (start > 0 && currentEnd > 0 && start + d.value > currentEnd) {
+            effectiveEnd = start + d.value;            // extend allowed → new end bounds the cliff
+          } else if (start > 0 && currentEnd > 0 && start + d.value < currentEnd) {
+            // edit_linear can only extend a cliff stream's end, never shrink it.
+            issues.push({
+              rowNum: i,
+              field: "duration",
+              reason: "duration for a cliff stream can only be extended (new end must be ≥ current end)",
+            });
+          }
+        }
+
+        if (hasCliff) {
+          const c = parseSecs(cliffCell);
+          const currentCliffDuration = Number(stream.cliffTs ?? 0) - start;
+          const cliffChanges = c.ok && c.value !== currentCliffDuration;
+          if (!c.ok) {
             issues.push({
               rowNum: i,
               field: "cliff_duration",
-              reason: "cliff must fall between stream start and end (cliff_duration ≤ stream duration)",
+              reason: c.bad === "float" ? "cliff_duration must be a whole number of seconds" : "cliff_duration is not a valid number",
             });
+          } else if (cliffChanges && parseBaseUnits(stream.withdrawn ?? 0) > BigInt(0)) {
+            // On-chain edit_cliff requires withdrawn == 0: once any tokens have been
+            // withdrawn the cliff can no longer be moved (extend / top-up still ok).
+            issues.push({
+              rowNum: i,
+              field: "cliff_duration",
+              reason: "cliff can't be changed after tokens have been withdrawn from this stream",
+            });
+          } else if (start > 0 && effectiveEnd > 0) {
+            const newCliff = start + c.value;
+            if (newCliff < start || newCliff > effectiveEnd) {
+              issues.push({
+                rowNum: i,
+                field: "cliff_duration",
+                reason: "cliff must fall within the stream (cliff_duration ≤ duration, after any extension)",
+              });
+            }
           }
         }
       }

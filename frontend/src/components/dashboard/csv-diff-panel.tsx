@@ -294,13 +294,13 @@ const formatMilestones = (value: any, itemMint?: unknown, item?: any) => {
                   {!isMilestoneType(item.details?.type ?? item.type) && (
                     <div>
                       <span className="block text-[9px] text-zinc-500 font-black uppercase">Current Duration</span>
-                      <span className="block text-xs font-bold text-zinc-300">{formatDuration(item.details?.duration ?? item.duration ?? 0)}</span>
+                      <span className="block text-xs font-bold text-zinc-300">{formatDuration(item.changes?.find((c: any) => c.field === "duration")?.oldVal ?? item.details?.duration ?? item.duration ?? 0)}</span>
                     </div>
                   )}
                   {isCliffType(item.details?.type ?? item.type) && (
                     <div>
                       <span className="block text-[9px] text-zinc-500 font-black uppercase">Current Cliff Duration</span>
-                      <span className="block text-xs font-bold text-zinc-300">{formatDuration(item.details?.cliffDuration ?? item.cliffDuration ?? 0)}</span>
+                      <span className="block text-xs font-bold text-zinc-300">{formatDuration(item.changes?.find((c: any) => c.field === "cliffDuration")?.oldVal ?? item.details?.cliffDuration ?? item.cliffDuration ?? 0)}</span>
                     </div>
                   )}
                   {isMilestoneType(item.details?.type ?? item.type) && (
