@@ -1,6 +1,9 @@
 // src/lib/useUnifiedFlowClient.ts
 "use client";
 
+// Must run before the SDK is used — patches Buffer.writeBigUInt64LE for browsers
+// whose Buffer polyfill lacks it (the SDK's stream-PDA derivation needs it).
+import "@/lib/buffer-polyfill";
 import { useMemo } from "react";
 import { useWalletConnection, useClusterState } from "@solana/react-hooks";
 import { AnchorProvider, Program } from "@coral-xyz/anchor";

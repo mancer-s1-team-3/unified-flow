@@ -15,84 +15,128 @@ import {
     normalizeCliffEdited,
 } from "./eventNormalizer";
 import idl from "../idl/unified_flow.json";
+import { logger, captureException } from "./logger";
+import { indexerState } from "./indexerState";
 
 dotenv.config();
 
 const PROGRAM_ID = new PublicKey(process.env.PROGRAM_ID!);
 const PROGRAM_IDL = idl as Idl;
 
-export async function startIndexer() {
-    console.log("Starting indexer...");
+const MAX_BACKOFF_MS = 30_000;
+const HEARTBEAT_MS = 30_000;
 
-    connection.onLogs(
-        PROGRAM_ID,
-        async (logInfo) => {
-            try {
-                console.log("TX:", logInfo.signature);
+let logsSubId: number | null = null;
+let backoffMs = 1_000;
+let rpcDown = false;
 
-                // =========================
-                // GET TX
-                // =========================
-                const tx = await connection.getTransaction(logInfo.signature, {
-                    commitment: "confirmed",
-                    maxSupportedTransactionVersion: 0,
-                });
+async function processLog(logInfo: { signature: string }) {
+    try {
+        logger.debug("indexer tx", { signature: logInfo.signature });
 
-                if (!tx) return;
+        // =========================
+        // GET TX
+        // =========================
+        const tx = await connection.getTransaction(logInfo.signature, {
+            commitment: "confirmed",
+            maxSupportedTransactionVersion: 0,
+        });
 
-                const logs = tx.meta?.logMessages || [];
+        if (!tx) return;
 
-                // =========================
-                // PARSE EVENTS
-                // =========================
-                const events = parseEventsSafely(logs);
+        const logs = tx.meta?.logMessages || [];
 
-                console.log("EVENTS:", events);
+        // =========================
+        // PARSE EVENTS
+        // =========================
+        const events = parseEventsSafely(logs);
 
-                // =========================
-                // HANDLE EVENTS
-                // =========================
-                for (const event of events) {
-                    console.log("EVENT:", event.name);
-
-                    if (event.name === "StreamCreated") {
-                        await handleStreamCreated(
-                            event.data,
-                            tx,
-                            logInfo.signature
-                        );
-                    } else if (event.name === "TokensClaimed") {
-                        await handleTokensClaimed(
-                            event.data,
-                            tx,
-                            logInfo.signature
-                        );
-                    } else if (event.name === "MilestoneUnlocked") {
-                        await handleMilestoneUnlocked(
-                            event.data,
-                            tx,
-                            logInfo.signature
-                        );
-                    } else if (event.name === "StreamCancelled") {
-                        await handleStreamCancelled(
-                            event.data,
-                            tx,
-                            logInfo.signature
-                        );
-                    } else if (event.name === "MilestoneEdited") {
-                        await handleMilestoneEdited(event.data, tx, logInfo.signature);
-                    } else if (event.name === "LinearEdited") {
-                        await handleLinearEdited(event.data, tx, logInfo.signature);
-                    } else if (event.name === "CliffEdited") {
-                        await handleCliffEdited(event.data, tx, logInfo.signature);
-                    }
-                }
-            } catch (err) {
-                console.error("Error in indexing transaction log logs:", err);
+        // =========================
+        // HANDLE EVENTS
+        // =========================
+        for (const event of events) {
+            if (event.name === "StreamCreated") {
+                await handleStreamCreated(event.data, tx, logInfo.signature);
+            } else if (event.name === "TokensClaimed") {
+                await handleTokensClaimed(event.data, tx, logInfo.signature);
+            } else if (event.name === "MilestoneUnlocked") {
+                await handleMilestoneUnlocked(event.data, tx, logInfo.signature);
+            } else if (event.name === "StreamCancelled") {
+                await handleStreamCancelled(event.data, tx, logInfo.signature);
+            } else if (event.name === "MilestoneEdited") {
+                await handleMilestoneEdited(event.data, tx, logInfo.signature);
+            } else if (event.name === "LinearEdited") {
+                await handleLinearEdited(event.data, tx, logInfo.signature);
+            } else if (event.name === "CliffEdited") {
+                await handleCliffEdited(event.data, tx, logInfo.signature);
             }
-        },
-        "confirmed"
-    );
+        }
+
+        // Liveness signal consumed by GET /health.
+        indexerState.lastIndexedSlot =
+            typeof tx.slot === "number" ? tx.slot : Number(tx.slot);
+        indexerState.lastIndexedAt = new Date().toISOString();
+    } catch (err) {
+        // No longer swallowed — funnels to structured logging / error tracking.
+        captureException(err, { where: "indexer.processLog", signature: logInfo.signature });
+    }
+}
+
+function subscribe() {
+    try {
+        if (logsSubId !== null) {
+            try {
+                connection.removeOnLogsListener(logsSubId);
+            } catch {
+                /* listener already gone */
+            }
+            logsSubId = null;
+        }
+        logsSubId = connection.onLogs(PROGRAM_ID, processLog, "confirmed");
+        indexerState.subscribed = true;
+        indexerState.lastError = null;
+        backoffMs = 1_000;
+        logger.info("indexer subscribed to program logs", {
+            programId: PROGRAM_ID.toBase58(),
+            endpoint: (connection as unknown as { activeHttpEndpoint?: string }).activeHttpEndpoint,
+        });
+    } catch (err) {
+        indexerState.subscribed = false;
+        indexerState.lastError = err instanceof Error ? err.message : String(err);
+        captureException(err, { where: "indexer.subscribe", retryInMs: backoffMs });
+        setTimeout(subscribe, backoffMs);
+        backoffMs = Math.min(backoffMs * 2, MAX_BACKOFF_MS);
+    }
+}
+
+// Periodic liveness check that doubles as WebSocket reconnect: web3.js `onLogs`
+// does not auto-resubscribe after an endpoint drops, so when the RPC was down and
+// recovers we re-establish the subscription. A failed heartbeat means RPC
+// failover is exhausted — logged loudly so an external uptime monitor can alert.
+async function heartbeat() {
+    try {
+        const slot = await connection.getSlot("confirmed");
+        indexerState.lastHeartbeatAt = new Date().toISOString();
+        if (rpcDown) {
+            rpcDown = false;
+            indexerState.reconnects += 1;
+            logger.warn("RPC recovered — resubscribing indexer", { slot });
+            subscribe();
+        } else if (!indexerState.subscribed) {
+            subscribe();
+        }
+    } catch (err) {
+        rpcDown = true;
+        indexerState.subscribed = false;
+        indexerState.lastError = err instanceof Error ? err.message : String(err);
+        logger.error("indexer heartbeat failed — RPC failover exhausted, indexing paused", { err });
+    }
+}
+
+export async function startIndexer() {
+    logger.info("Starting indexer...");
+    subscribe();
+    setInterval(heartbeat, HEARTBEAT_MS);
 }
 
 async function handleStreamCreated(

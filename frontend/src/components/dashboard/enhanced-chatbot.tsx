@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import {
   Bot,
@@ -16,10 +16,14 @@ import {
   Rocket,
 } from "lucide-react";
 import { getASIOneChatService, type ChatContext, type ChatMessage } from "@/lib/asione-chat";
-import { PublicKey } from "@solana/web3.js";
+import { Connection, PublicKey } from "@solana/web3.js";
 import { BN } from "@coral-xyz/anchor";
+import { useClusterState, useWalletConnection } from "@solana/react-hooks";
 import { useUnifiedFlowClient } from "@/lib/useUnifiedFlowClient";
-import type { MilestoneInput } from "@unifiedflow/unified-flow-sdk";
+import { resolveMintInput } from "@/components/dashboard/token-mints";
+import { createStreamOnChain } from "@/lib/solana/create-stream";
+import type { WalletSession } from "@solana/client";
+import { useNetwork } from "@/components/wallet/network-context";
 import { getStream } from "@/lib/api";
 
 // ─── Enhanced Suggestions ────────────────────────────────────────────────────
@@ -29,6 +33,9 @@ const DEFAULT_SUGGESTIONS = [
   "How do I cancel a stream?",
   "Can I bulk-create streams?",
 ];
+
+// Cap chat input length so a runaway paste can't bloat the request/UI.
+const MAX_MESSAGE_LENGTH = 2000;
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 interface Message {
@@ -43,9 +50,94 @@ interface Message {
   };
 }
 
+// ─── Helpers ─────────────────────────────────────────────────────────────────
+
+// Escape HTML so untrusted AI text can't inject markup through the markdown
+// renderer's dangerouslySetInnerHTML. Markdown tokens (* ` etc.) survive this
+// and are turned into safe, fixed-class tags afterwards.
+function escapeHtml(text: string) {
+  return text
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;");
+}
+
+// Collision-resistant message id (Date.now() alone collides on fast sends).
+function newId(prefix: string) {
+  const rand =
+    typeof crypto !== "undefined" && typeof crypto.randomUUID === "function"
+      ? crypto.randomUUID()
+      : `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+  return `${prefix}-${rand}`;
+}
+
+// Convert a human-readable token amount ("12.5") to base units for `decimals`.
+// Mirrors the dashboard helper; returns 0n for anything non-numeric.
+function parseTokenAmountToBaseUnits(value: string, decimals: number): bigint {
+  const trimmed = String(value ?? "").trim().replace(/,/g, ".");
+  if (trimmed === "" || !/^\d+(\.\d+)?$/.test(trimmed)) return BigInt(0);
+  const [wholePart, fractionPart = ""] = trimmed.split(".");
+  const normalizedFraction = fractionPart.slice(0, decimals).padEnd(decimals, "0");
+  const raw = `${wholePart}${normalizedFraction}`.replace(/^0+(?=\d)/, "");
+  try { return BigInt(raw || "0"); } catch { return BigInt(0); }
+}
+
+// ── Per-field tool-arg validators (friendly errors instead of raw throws) ──
+function toPublicKey(value: unknown, label: string): PublicKey {
+  if (typeof value !== "string" || !value.trim()) {
+    throw new Error(`Missing ${label} address.`);
+  }
+  try {
+    return new PublicKey(value.trim());
+  } catch {
+    throw new Error(`Invalid ${label} address: "${value}".`);
+  }
+}
+
+function toUnixSeconds(value: unknown, label: string): BN {
+  const n = typeof value === "string" ? Number(value) : value;
+  if (typeof n !== "number" || !Number.isFinite(n) || !Number.isInteger(n) || n < 0) {
+    throw new Error(`Invalid ${label} (expected a whole Unix timestamp in seconds).`);
+  }
+  return new BN(n);
+}
+
+// Whole, non-negative number of seconds — a relative span to add, not an
+// absolute time. The model supplies durations (which it computes reliably);
+// the app derives any absolute timestamp itself.
+function toDurationSeconds(value: unknown, label: string): BN {
+  const n = typeof value === "string" ? Number(value) : value;
+  if (typeof n !== "number" || !Number.isFinite(n) || !Number.isInteger(n) || n < 0) {
+    throw new Error(`Invalid ${label} (expected a whole number of seconds).`);
+  }
+  return new BN(n);
+}
+
+function toIndex(value: unknown, label: string): number {
+  const n = typeof value === "string" ? Number(value) : value;
+  if (typeof n !== "number" || !Number.isInteger(n) || n < 0) {
+    throw new Error(`Invalid ${label} (expected a 0-based index).`);
+  }
+  return n;
+}
+
+// Token amount → base-unit BN. `allowZero` for top-ups that may be 0.
+function toBaseUnitsBN(amount: unknown, decimals: number, label: string, allowZero = false): BN {
+  const str =
+    typeof amount === "number"
+      ? (Number.isFinite(amount) ? String(amount) : "")
+      : String(amount ?? "");
+  const base = parseTokenAmountToBaseUnits(str, decimals);
+  if (base < BigInt(0) || (!allowZero && base <= BigInt(0))) {
+    throw new Error(`Invalid ${label} amount: "${amount}".`);
+  }
+  return new BN(base.toString());
+}
+
 // ─── Markdown Renderer ───────────────────────────────────────────────────────
 function renderMarkdown(text: string) {
-  let html = text.replace(/\*\*(.*?)\*\*/g, '<strong class="font-semibold text-white">$1</strong>');
+  let html = escapeHtml(text);
+  html = html.replace(/\*\*(.*?)\*\*/g, '<strong class="font-semibold text-white">$1</strong>');
   html = html.replace(/\*(.*?)\*/g, '<em class="italic text-zinc-200">$1</em>');
   html = html.replace(/```([\s\S]*?)```/g, '<pre class="bg-zinc-950 border border-zinc-800 rounded-lg p-2 my-2 overflow-x-auto text-[10px] font-mono text-zinc-200"><code>$1</code></pre>');
   html = html.replace(/`([^`]+)`/g, '<code class="bg-zinc-950 border border-zinc-800 rounded px-1 py-0.5 text-[10px] font-mono text-indigo-200">$1</code>');
@@ -71,6 +163,24 @@ export function EnhancedChatbot() {
 
   // ✅ Hook dipanggil di top-level component, bukan di dalam fungsi
   const client = useUnifiedFlowClient();
+  const { endpoint } = useClusterState();
+  const { wallet } = useWalletConnection();
+  const { cluster } = useNetwork();
+
+  const walletAddress = wallet?.account?.address ? String(wallet.account.address) : undefined;
+  const connection = useMemo(() => new Connection(endpoint, "confirmed"), [endpoint]);
+
+  // Read an SPL mint's on-chain decimals so LLM-supplied token amounts can be
+  // converted to base units before they hit the program.
+  const fetchMintDecimals = async (mint: PublicKey): Promise<number> => {
+    const info = await connection.getParsedAccountInfo(mint, "confirmed");
+    const parsed = info.value?.data as { parsed?: { info?: { decimals?: number } } } | undefined;
+    const decimals = parsed?.parsed?.info?.decimals;
+    if (typeof decimals !== "number") {
+      throw new Error("Unable to read mint decimals. Make sure the mint address is a valid SPL token.");
+    }
+    return decimals;
+  };
 
   // Check API connection on mount (resolved server-side via the backend proxy)
   useEffect(() => {
@@ -121,14 +231,17 @@ export function EnhancedChatbot() {
     }));
     return {
       conversationHistory,
-      userProfile: { cluster: "devnet" },
+      userProfile: {
+        cluster,
+        ...(walletAddress ? { walletAddress } : {}),
+      },
     };
   };
 // Ganti fungsi executeTool dan tambah handler di button onClick
 
 const executeToolWithFeedback = async (toolName: string, args: string) => {
   // Tambah "executing" message
-  const executingId = `tool-${Date.now()}`;
+  const executingId = newId("tool");
   setMessages((prev) => [
     ...prev,
     {
@@ -157,94 +270,173 @@ const executeToolWithFeedback = async (toolName: string, args: string) => {
     )
   );
 };
+  // Resolve a stream's mint + decimals (edit actions need both: the mint as an
+  // explicit SDK arg, the decimals to convert human amounts to base units).
+  const fetchStreamMintInfo = async (
+    streamPda: string
+  ): Promise<{ mint: PublicKey; decimals: number; endTs: BN }> => {
+    const stream = await getStream(streamPda);
+    if (!stream || !stream.mint) throw new Error("Stream not found.");
+    const mint = new PublicKey(stream.mint);
+    const decimals =
+      typeof stream.mintDecimals === "number"
+        ? stream.mintDecimals
+        : await fetchMintDecimals(mint);
+    const endTs = new BN(String(stream.endTs ?? "0"));
+    return { mint, decimals, endTs };
+  };
+
   // ─── Execute tool call ────────────────────────────────────────────────────
   const executeTool = async (toolName: string, args: string) => {
     if (!client) {
       return { success: false, message: "Wallet not connected. Please connect your wallet first." };
     }
 
+    let parsedArgs: Record<string, unknown>;
     try {
-      const parsedArgs = JSON.parse(args);
+      parsedArgs = JSON.parse(args);
+    } catch {
+      return { success: false, message: "The assistant returned malformed action data. Please try again." };
+    }
+
+    try {
       console.log(`Executing tool: ${toolName}`, parsedArgs);
 
       switch (toolName) {
-       case "create_stream": {
-  const {
-    recipient,
-    mint,
-    amount,
-    startTs,
-    cliffTs,
-    endTs,
-    vestingType = 0,
-    milestones = [],
-    nonce,
-  } = parsedArgs;
+        case "create_stream": {
+          const {
+            recipient,
+            mint,
+            amount,
+            start_ts,
+            cliff_ts,
+            end_ts,
+            vesting_type = 0,
+            milestones = [],
+          } = parsedArgs;
 
- const result = await client.createStream(
-   new PublicKey(recipient),
-     new PublicKey(mint),
-   
-   
-    new BN(amount),
-    new BN(startTs),
-    new BN(cliffTs),
-    new BN(endTs),
-    vestingType,
-    milestones,
-    new BN(nonce)
-  );
-  return { success: true, message: `Stream created! Tx: ${result.signature}` };
-}
-case "withdraw_stream": {
-  const { stream_pda } = parsedArgs;
+          const vestingType = Number(vesting_type);
+          if (![0, 1, 2].includes(vestingType)) {
+            return { success: false, message: "Invalid vesting type (expected 0=linear, 1=cliff, 2=milestone)." };
+          }
 
-  const result = await client.withdraw(new PublicKey(stream_pda));
-  return { success: true, message: `Withdrawal successful! Tx: ${result.signature}` };
-}
-case "cancel_stream": {
-  const { stream_pda } = parsedArgs;
-  if (!stream_pda) return { success: false, message: "Missing stream_pda." };
-  const result = await client.cancel(new PublicKey(stream_pda));
-  return { success: true, message: `Stream cancelled! Tx: ${result.signature}` };
-}
-        case "unlock_milestone": {
-          const { stream_pda,  milestone_index } = parsedArgs;
+          // Validate recipient up front; resolve the mint to the active cluster's
+          // real address (handles "USDC"/symbols and mainnet-vs-devnet addresses).
+          const recipientStr = String(recipient ?? "").trim();
+          toPublicKey(recipientStr, "recipient");
+          const resolvedMint = resolveMintInput(String(mint ?? ""), endpoint);
 
-          const result = await client.unlockMilestone(
-            new PublicKey(stream_pda),
-            Number(milestone_index)
-          );
-          return { success: true, message: `Milestone ${milestone_index} unlocked! Tx: ${result.signature}` };
+          // The model hands absolute timestamps; we trust only the relative span
+          // (end - start) and start "now". Route through the dashboard's proven
+          // createStreamOnChain so we reuse browser-safe PDA derivation, balance
+          // checks, wSOL auto-wrap and ATA handling — none of which the SDK's
+          // createStream does (that path kept failing: swapped accounts, the
+          // writeBigUInt64LE nonce bug, missing-ATA, etc.).
+          const startNum = toUnixSeconds(start_ts, "start time").toNumber();
+          const endNum = toUnixSeconds(end_ts, "end time").toNumber();
+          const durationSecs = endNum - startNum;
+          if (durationSecs <= 0) {
+            return { success: false, message: "End time must be after start time." };
+          }
+          const cliffNum = cliff_ts != null ? toUnixSeconds(cliff_ts, "cliff time").toNumber() : 0;
+          const cliffDuration = vestingType === 1 ? Math.max(cliffNum - startNum, 0) : 0;
+
+          if (vestingType === 2 && (!Array.isArray(milestones) || milestones.length === 0)) {
+            return { success: false, message: "Milestone vesting requires a non-empty milestones array." };
+          }
+          const milestoneAmounts =
+            vestingType === 2 && Array.isArray(milestones)
+              ? (milestones as unknown[]).map((m) => {
+                  const amt = m && typeof m === "object" ? (m as Record<string, unknown>).amount : m;
+                  return String(amt ?? "0");
+                })
+              : [];
+
+          const result = await createStreamOnChain({
+            wallet: wallet as unknown as WalletSession,
+            endpoint,
+            input: {
+              recipient: recipientStr,
+              amount: String(amount ?? ""),
+              mint: resolvedMint,
+              type: String(vestingType),
+              startDate: "", // start ~now; avoids drift from the model's clock
+              duration: String(durationSecs),
+              cliffDuration: String(cliffDuration),
+              milestoneCount: String(milestoneAmounts.length),
+              milestoneAmounts,
+            },
+          });
+          return { success: true, message: `Stream created! Tx: ${result.signature}` };
         }
-case "edit_milestone": {
-  const { stream_pda,  milestone_index, new_amount } = parsedArgs;
-  const result = await client.editMilestone(
-    new PublicKey(stream_pda),
-    Number(milestone_index),
-    new BN(new_amount)
-  );
-  return { success: true, message: `Milestone ${milestone_index} updated! Tx: ${result.signature}` };
-}
 
-case "edit_cliff": {
-  const { stream_pda, new_cliff_ts } = parsedArgs;
-  const result = await client.editCliff(
-    new PublicKey(stream_pda),
-    new BN(new_cliff_ts)
-  );
-  return { success: true, message: `Cliff updated! Tx: ${result.signature}` };
-}
+        case "withdraw_stream": {
+          const { stream_pda } = parsedArgs;
+          const result = await client.withdraw(toPublicKey(stream_pda, "stream"));
+          return { success: true, message: `Withdrawal successful! Tx: ${result.signature}` };
+        }
 
-case "edit_linear": {
-  const { stream_pda,  new_end_ts, topup_amount } = parsedArgs;
-  const result = await client.editLinear(
-    new PublicKey(stream_pda),
-    new BN(new_end_ts),
-    new BN(topup_amount)
-  );
-  return { success: true, message: `Stream extended! Tx: ${result.signature}` };
-}
+        case "cancel_stream": {
+          const { stream_pda } = parsedArgs;
+          const result = await client.cancel(toPublicKey(stream_pda, "stream"));
+          return { success: true, message: `Stream cancelled! Tx: ${result.signature}` };
+        }
+
+        case "unlock_milestone": {
+          const { stream_pda, milestone_index } = parsedArgs;
+          const index = toIndex(milestone_index, "milestone index");
+          const result = await client.unlockMilestone(toPublicKey(stream_pda, "stream"), index);
+          return { success: true, message: `Milestone ${index} unlocked! Tx: ${result.signature}` };
+        }
+
+        case "edit_milestone": {
+          const { stream_pda, milestone_index, new_amount } = parsedArgs;
+          const streamPk = toPublicKey(stream_pda, "stream");
+          const index = toIndex(milestone_index, "milestone index");
+          const { decimals } = await fetchStreamMintInfo(String(stream_pda).trim());
+          const result = await client.editMilestone(
+            streamPk,
+            index,
+            toBaseUnitsBN(new_amount, decimals, "milestone")
+          );
+          return { success: true, message: `Milestone ${index} updated! Tx: ${result.signature}` };
+        }
+
+        case "edit_cliff": {
+          const { stream_pda, new_cliff_ts } = parsedArgs;
+          const result = await client.editCliff(
+            toPublicKey(stream_pda, "stream"),
+            toUnixSeconds(new_cliff_ts, "cliff time")
+          );
+          return { success: true, message: `Cliff updated! Tx: ${result.signature}` };
+        }
+
+        case "edit_linear": {
+          const { stream_pda, extend_seconds, topup_amount } = parsedArgs;
+          const streamPk = toPublicKey(stream_pda, "stream");
+          const { decimals, endTs } = await fetchStreamMintInfo(String(stream_pda).trim());
+
+          // The model supplies a RELATIVE extension (seconds to add). We read the
+          // stream's current end and compute the absolute new end ourselves — the
+          // model can't reliably know "now" or the stream's end, so it must never
+          // hand us an absolute timestamp (that silently no-ops on-chain when the
+          // value isn't strictly later than the current end).
+          const extendBn = toDurationSeconds(extend_seconds, "extension duration");
+          const topupBn = toBaseUnitsBN(topup_amount, decimals, "top-up", true);
+
+          if (extendBn.lten(0) && topupBn.lten(0)) {
+            return {
+              success: false,
+              message: "Nothing to update: provide a positive extension duration, a top-up amount, or both.",
+            };
+          }
+
+          const newEndBn = endTs.add(extendBn);
+          const result = await client.editLinear(streamPk, newEndBn, topupBn);
+          const extendedNote = extendBn.gtn(0) ? ` Extended by ${extendBn.toString()}s.` : "";
+          return { success: true, message: `Stream updated!${extendedNote} Tx: ${result.signature}` };
+        }
+
         default:
           return { success: false, message: `Unknown tool: ${toolName}` };
       }
@@ -258,13 +450,14 @@ case "edit_linear": {
   };
 
   // ─── Send message ─────────────────────────────────────────────────────────
-  const sendMessage = async (text: string) => {
-    if (!text.trim() || loading) return;
+  const sendMessage = async (rawText: string) => {
+    const text = rawText.trim().slice(0, MAX_MESSAGE_LENGTH);
+    if (!text || loading) return;
 
     const userMessage: Message = {
-      id: `user-${Date.now()}`,
+      id: newId("user"),
       role: "user",
-      text: text.trim(),
+      text,
       timestamp: Date.now(),
     };
 
@@ -273,7 +466,7 @@ case "edit_linear": {
     setShowSuggestions(false);
     setLoading(true);
 
-    const assistantMessageId = `assistant-${Date.now()}`;
+    const assistantMessageId = newId("assistant");
     setMessages((prev) => [
       ...prev,
       { id: assistantMessageId, role: "assistant", text: "", timestamp: Date.now(), isStreaming: true },
@@ -286,7 +479,9 @@ case "edit_linear": {
         if (chunk.error) {
           setMessages((prev) =>
             prev.map((msg) =>
-              msg.id === assistantMessageId ? { ...msg, text: chunk.content, isStreaming: false } : msg
+              msg.id === assistantMessageId
+                ? { ...msg, text: chunk.content, isStreaming: false, timestamp: Date.now() }
+                : msg
             )
           );
           break;
@@ -300,6 +495,9 @@ case "edit_linear": {
                   text: chunk.content,
                   isStreaming: !chunk.done,
                   toolCall: chunk.done ? chunk.toolCall : undefined,
+                  // Stamp completion time when the stream finishes, instead of
+                  // freezing it at the moment the request started.
+                  timestamp: chunk.done ? Date.now() : msg.timestamp,
                 }
               : msg
           )
@@ -310,7 +508,12 @@ case "edit_linear": {
       setMessages((prev) =>
         prev.map((msg) =>
           msg.id === assistantMessageId
-            ? { ...msg, text: "I apologize, but I encountered an error. Please try again.", isStreaming: false }
+            ? {
+                ...msg,
+                text: "I apologize, but I encountered an error. Please try again.",
+                isStreaming: false,
+                timestamp: Date.now(),
+              }
             : msg
         )
       );
@@ -344,6 +547,49 @@ edit_linear:    { label: "Extend Stream",    icon: "📈", color: "bg-teal-600" 
     };
     const info = toolLabels[toolCall.name] || { label: toolCall.name, icon: "⚡", color: "bg-zinc-600" };
     return { ...info, args: toolCall.arguments };
+  };
+
+  // Deterministic backstop: never offer to run an action whose required, user-
+  // supplied fields are missing/malformed (the model sometimes emits a tool call
+  // with a blank or placeholder recipient). Returns the human-readable names of
+  // whatever is still needed; an empty array means the call is runnable.
+  const getMissingToolArgs = (toolCall: { name: string; arguments: string }): string[] => {
+    let args: Record<string, unknown> = {};
+    try {
+      args = JSON.parse(toolCall.arguments || "{}") as Record<string, unknown>;
+    } catch {
+      return ["valid arguments"];
+    }
+    const isPubkey = (v: unknown): boolean => {
+      if (typeof v !== "string" || !v.trim()) return false;
+      try {
+        new PublicKey(v.trim());
+        return true;
+      } catch {
+        return false;
+      }
+    };
+    const isPositiveNumber = (v: unknown): boolean => {
+      const n = typeof v === "string" ? Number(v) : v;
+      return typeof n === "number" && Number.isFinite(n) && n > 0;
+    };
+    const missing: string[] = [];
+    switch (toolCall.name) {
+      case "create_stream":
+        if (!isPubkey(args.recipient)) missing.push("recipient address");
+        if (typeof args.mint !== "string" || !String(args.mint).trim()) missing.push("token");
+        if (!isPositiveNumber(args.amount)) missing.push("amount");
+        break;
+      case "withdraw_stream":
+      case "cancel_stream":
+      case "unlock_milestone":
+      case "edit_milestone":
+      case "edit_cliff":
+      case "edit_linear":
+        if (!isPubkey(args.stream_pda)) missing.push("stream address");
+        break;
+    }
+    return missing;
   };
 
   // ─── Render ───────────────────────────────────────────────────────────────
@@ -456,6 +702,18 @@ edit_linear:    { label: "Extend Stream",    icon: "📈", color: "bg-teal-600" 
                           {(() => {
                             const toolInfo = getToolCallInfo(message.toolCall);
                             if (!toolInfo) return null;
+                            const missing = getMissingToolArgs(message.toolCall!);
+                            if (missing.length > 0) {
+                              return (
+                                <div className="flex items-start gap-2 px-3 py-2.5 rounded-xl bg-amber-500/10 border border-amber-500/30 text-amber-300/90 text-[11px] leading-relaxed">
+                                  <span className="text-sm">⚠️</span>
+                                  <span>
+                                    Can&apos;t run <strong>{toolInfo.label}</strong> yet — still need:{" "}
+                                    <strong>{missing.join(", ")}</strong>. Please provide it and try again.
+                                  </span>
+                                </div>
+                              );
+                            }
                             return (
                               <button
                                 onClick={() =>
@@ -519,8 +777,9 @@ edit_linear:    { label: "Extend Stream",    icon: "📈", color: "bg-teal-600" 
                     ref={inputRef}
                     rows={1}
                     value={input}
+                    maxLength={MAX_MESSAGE_LENGTH}
                     onChange={(e) => {
-                      setInput(e.target.value);
+                      setInput(e.target.value.slice(0, MAX_MESSAGE_LENGTH));
                       e.target.style.height = "auto";
                       e.target.style.height = `${Math.min(e.target.scrollHeight, 100)}px`;
                     }}

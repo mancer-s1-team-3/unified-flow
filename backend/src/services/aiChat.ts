@@ -52,6 +52,7 @@ Important guidelines:
 - If you don't know something, admit it and suggest alternatives
 - Keep responses under 200 words when possible
 - Use emojis sparingly but effectively
+- If a required detail for an action is missing from the user's request (e.g. recipient address, stream address, or amount), ASK for it in plain text. Never call a tool with an empty, placeholder, or guessed value for a field the user must supply.
 
 Technical details:
 - Streams use PDAs (Program Derived Addresses) as identifiers
@@ -70,8 +71,8 @@ const TOOLS = [
         type: "object",
         properties: {
           recipient: { type: "string", description: "Recipient wallet public key" },
-          mint: { type: "string", description: "Token mint public key" },
-          amount: { type: "number", description: "Total token amount in base units" },
+          mint: { type: "string", description: "Token symbol (e.g. 'USDC', 'SOL') or mint address. Prefer the symbol — the app resolves it to the correct mint for the active cluster (devnet/mainnet). Never guess a mint address for a well-known token; the same token has different mints per cluster." },
+          amount: { type: "number", description: "Total token amount in human-readable units (e.g. 1000 means 1000 tokens). The app converts to base units using the mint's on-chain decimals." },
           start_ts: { type: "number", description: "Stream start timestamp (Unix seconds)" },
           cliff_ts: { type: "number", description: "Cliff timestamp (Unix seconds); 0 if no cliff" },
           end_ts: { type: "number", description: "Stream end/expiry timestamp (Unix seconds)" },
@@ -82,14 +83,14 @@ const TOOLS = [
             items: {
               type: "object",
               properties: {
-                amount: { type: "number", description: "Token amount for this milestone" },
+                amount: { type: "number", description: "Token amount for this milestone, in human-readable units (the app converts using the mint's decimals)." },
               },
               required: ["amount"],
             },
           },
           nonce: { type: "number", description: "Unique nonce to derive stream PDA" },
         },
-        required: ["recipient", "mint", "amount", "start_ts", "cliff_ts", "end_ts", "vesting_type", "nonce"],
+        required: ["recipient", "mint", "amount", "start_ts", "cliff_ts", "end_ts", "vesting_type"],
       },
     },
   },
@@ -148,7 +149,7 @@ const TOOLS = [
         properties: {
           stream_pda: { type: "string", description: "Stream account PDA public key" },
           milestone_index: { type: "number", description: "0-based index of the milestone to edit" },
-          new_amount: { type: "number", description: "New token amount in base units" },
+          new_amount: { type: "number", description: "New token amount in human-readable units (the app converts using the mint's decimals)." },
         },
         required: ["stream_pda", "milestone_index", "new_amount"],
       },
@@ -173,15 +174,15 @@ const TOOLS = [
     type: "function",
     function: {
       name: "edit_linear",
-      description: "Extend end date and/or top-up token amount for a linear stream in a single transaction.",
+      description: "Extend the end date and/or top-up token amount for a linear stream in a single transaction. To extend, give how many seconds to ADD to the stream's current end — the app reads the current end on-chain and computes the new end itself. Never compute or pass an absolute timestamp.",
       parameters: {
         type: "object",
         properties: {
           stream_pda: { type: "string", description: "Stream account PDA public key" },
-          new_end_ts: { type: "number", description: "New end timestamp (Unix seconds)" },
-          topup_amount: { type: "number", description: "Additional tokens to deposit into vault (0 if only extending)" },
+          extend_seconds: { type: "number", description: "Number of seconds to extend the end time by, relative to the stream's current end (e.g. 1 day = 86400, 30 days = 2592000). Use 0 if only topping up." },
+          topup_amount: { type: "number", description: "Additional tokens to deposit into vault, in human-readable units (0 if only extending; the app converts using the mint's decimals)." },
         },
-        required: ["stream_pda", "new_end_ts", "topup_amount"],
+        required: ["stream_pda", "extend_seconds", "topup_amount"],
       },
     },
   },
@@ -222,6 +223,14 @@ function buildContextInfo(context: ChatContext): string {
 
 function buildMessages(userMessage: string, context: ChatContext): ChatMessage[] {
   const messages: ChatMessage[] = [{ role: "system", content: SYSTEM_PROMPT }];
+
+  // Anchor the model to real wall-clock time. Without this it falls back to its
+  // training-cutoff date and produces wildly wrong absolute timestamps for
+  // create_stream / edit_cliff (and any date math the user asks for).
+  messages.push({
+    role: "system",
+    content: `Current time (Unix seconds): ${Math.floor(Date.now() / 1000)}. Treat this as "now" for all date and duration math. Never infer the current date from prior knowledge.`,
+  });
 
   if (context.userProfile) {
     const contextInfo = buildContextInfo(context);

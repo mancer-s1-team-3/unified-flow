@@ -106,7 +106,7 @@ export const CsvDiffPanel = memo(function CsvDiffPanel({
     if (field === "type") return formatType(value);
     if (field === "cancelable") return value ? "true" : "false";
     if (field === "milestones") return value || "None";
-    if (field === "duration" || field === "cliffDuration") return `${Number(value || 0)}s`;
+    if (field === "duration" || field === "cliffDuration") return formatDuration(value);
     return String(value ?? "None");
   };
 
@@ -181,13 +181,13 @@ export const CsvDiffPanel = memo(function CsvDiffPanel({
                   {!isMilestoneType(item.type) && (
                     <div>
                       <span className="block text-[9px] text-zinc-500 font-black uppercase">Duration</span>
-                      <span className="block text-xs font-bold text-zinc-350">{item.duration}s</span>
+                      <span className="block text-xs font-bold text-zinc-350">{formatDuration(item.duration)}</span>
                     </div>
                   )}
                   {isCliffType(item.type) && (
                     <div>
                       <span className="block text-[9px] text-zinc-500 font-black uppercase">Cliff Duration</span>
-                      <span className="block text-xs font-bold text-zinc-350">{item.cliffDuration}s</span>
+                      <span className="block text-xs font-bold text-zinc-350">{formatDuration(item.cliffDuration)}</span>
                     </div>
                   )}
                   {Number(item.type) === 2 && (
@@ -229,13 +229,13 @@ export const CsvDiffPanel = memo(function CsvDiffPanel({
                   {!isMilestoneType(item.details?.type ?? item.type) && (
                     <div>
                       <span className="block text-[9px] text-zinc-500 font-black uppercase">Current Duration</span>
-                      <span className="block text-xs font-bold text-zinc-300">{Number(item.details?.duration ?? item.duration ?? 0)}s</span>
+                      <span className="block text-xs font-bold text-zinc-300">{formatDuration(item.details?.duration ?? item.duration ?? 0)}</span>
                     </div>
                   )}
                   {isCliffType(item.details?.type ?? item.type) && (
                     <div>
                       <span className="block text-[9px] text-zinc-500 font-black uppercase">Current Cliff Duration</span>
-                      <span className="block text-xs font-bold text-zinc-300">{Number(item.details?.cliffDuration ?? item.cliffDuration ?? 0)}s</span>
+                      <span className="block text-xs font-bold text-zinc-300">{formatDuration(item.details?.cliffDuration ?? item.cliffDuration ?? 0)}</span>
                     </div>
                   )}
                   {isMilestoneType(item.details?.type ?? item.type) && (
@@ -293,13 +293,13 @@ export const CsvDiffPanel = memo(function CsvDiffPanel({
                   {!isMilestoneType(item.type) && (
                     <div>
                       <span className="block text-[9px] text-zinc-500 font-black uppercase">Duration</span>
-                      <span className="block text-xs font-bold text-zinc-300">{item.duration}s</span>
+                      <span className="block text-xs font-bold text-zinc-300">{formatDuration(item.duration)}</span>
                     </div>
                   )}
                   {isCliffType(item.type) && (
                     <div>
                       <span className="block text-[9px] text-zinc-500 font-black uppercase">Cliff Duration</span>
-                      <span className="block text-xs font-bold text-zinc-300">{item.cliffDuration}s</span>
+                      <span className="block text-xs font-bold text-zinc-300">{formatDuration(item.cliffDuration)}</span>
                     </div>
                   )}
                   {isMilestoneType(item.type) && (

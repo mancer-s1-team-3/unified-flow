@@ -181,8 +181,8 @@ export class UnifiedFlowClient {
       { address: stream.toBase58(), role: AccountRole.WRITABLE },
       { address: vault.toBase58(), role: AccountRole.WRITABLE },
       { address: creatorTokenAccount.toBase58(), role: AccountRole.WRITABLE },
-      { address: TOKEN_PROGRAM_ID.toBase58(), role: AccountRole.READONLY },
       { address: SystemProgram.programId.toBase58(), role: AccountRole.READONLY },
+      { address: TOKEN_PROGRAM_ID.toBase58(), role: AccountRole.READONLY },
       { address: ASSOCIATED_TOKEN_PROGRAM_ID.toBase58(), role: AccountRole.READONLY },
     ]);
 
