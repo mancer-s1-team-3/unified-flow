@@ -3427,47 +3427,53 @@ function useCsvDurationValidation(
       if (!line) continue;
       const values = line.split(",").map((v) => v.trim());
 
-      if (mode === "create") {
-        const d = parseSecs(durIdx !== -1 ? values[durIdx] ?? "" : "");
-        if (!d.ok) {
-          issues.push({
-            rowNum: i,
-            field: "duration",
-            reason:
-              d.bad === "missing"
-                ? "duration is required (whole seconds > 0)"
-                : d.bad === "float"
-                ? "duration must be a whole number of seconds"
-                : "duration is not a valid number",
-          });
-        } else if (d.value <= 0) {
-          issues.push({ rowNum: i, field: "duration", reason: "duration must be greater than 0" });
-        } else if (d.value > MAX_DURATION) {
-          issues.push({ rowNum: i, field: "duration", reason: "duration is unreasonably large (max ~100 years)" });
-        }
+     if (mode === "create") {
+  const isMilestoneRow = typeIdx !== -1 && values[typeIdx] === "2";
 
-        // cliff_duration only matters for cliff (type 1) rows
-        if (typeIdx !== -1 && values[typeIdx] === "1") {
-          const c = parseSecs(cliffIdx !== -1 ? values[cliffIdx] ?? "" : "");
-          if (!c.ok) {
-            issues.push({
-              rowNum: i,
-              field: "cliff_duration",
-              reason:
-                c.bad === "missing"
-                  ? "cliff_duration is required for cliff (type 1) streams"
-                  : c.bad === "float"
-                  ? "cliff_duration must be a whole number of seconds"
-                  : "cliff_duration is not a valid number",
-            });
-          } else if (c.value <= 0) {
-            issues.push({ rowNum: i, field: "cliff_duration", reason: "cliff_duration must be greater than 0 for cliff streams" });
-          } else if (d.ok && d.value > 0 && c.value > d.value) {
-            issues.push({ rowNum: i, field: "cliff_duration", reason: "cliff_duration must be ≤ duration (cliff must fall within the stream)" });
-          }
-        }
-        continue;
+  // Milestone (type 2) streams don't have duration/cliff_duration on-chain —
+  // skip both checks entirely for these rows.
+  if (!isMilestoneRow) {
+    const d = parseSecs(durIdx !== -1 ? values[durIdx] ?? "" : "");
+    if (!d.ok) {
+      issues.push({
+        rowNum: i,
+        field: "duration",
+        reason:
+          d.bad === "missing"
+            ? "duration is required (whole seconds > 0)"
+            : d.bad === "float"
+            ? "duration must be a whole number of seconds"
+            : "duration is not a valid number",
+      });
+    } else if (d.value <= 0) {
+      issues.push({ rowNum: i, field: "duration", reason: "duration must be greater than 0" });
+    } else if (d.value > MAX_DURATION) {
+      issues.push({ rowNum: i, field: "duration", reason: "duration is unreasonably large (max ~100 years)" });
+    }
+
+    // cliff_duration only matters for cliff (type 1) rows
+    if (typeIdx !== -1 && values[typeIdx] === "1") {
+      const c = parseSecs(cliffIdx !== -1 ? values[cliffIdx] ?? "" : "");
+      if (!c.ok) {
+        issues.push({
+          rowNum: i,
+          field: "cliff_duration",
+          reason:
+            c.bad === "missing"
+              ? "cliff_duration is required for cliff (type 1) streams"
+              : c.bad === "float"
+              ? "cliff_duration must be a whole number of seconds"
+              : "cliff_duration is not a valid number",
+        });
+      } else if (c.value <= 0) {
+        issues.push({ rowNum: i, field: "cliff_duration", reason: "cliff_duration must be greater than 0 for cliff streams" });
+      } else if (d.ok && d.value > 0 && c.value > d.value) {
+        issues.push({ rowNum: i, field: "cliff_duration", reason: "cliff_duration must be ≤ duration (cliff must fall within the stream)" });
       }
+    }
+  }
+  continue;
+}
 
       // ── edit mode: validate against the live stream's actual vesting type ──
       const id = idIdx !== -1 ? (values[idIdx] ?? "").trim() : "";
