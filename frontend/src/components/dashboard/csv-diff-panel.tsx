@@ -24,6 +24,14 @@ export const CsvDiffPanel = memo(function CsvDiffPanel({
     if (value === 1) return "Cliff";
     return "Milestone";
   };
+  const formatAmount = (amount: any, decimals: number = 9) => {
+  const raw = Number(amount || 0);
+  const value = raw / Math.pow(10, decimals);
+  return value.toLocaleString(undefined, {
+    minimumFractionDigits: 0,
+    maximumFractionDigits: 4,
+  });
+};
 
   const isMilestoneType = (type: unknown) => Number(type) === 2;
   const isCliffType = (type: unknown) => Number(type) === 1;
@@ -218,7 +226,7 @@ export const CsvDiffPanel = memo(function CsvDiffPanel({
                   </div>
                   <div>
                     <span className="block text-[9px] text-zinc-500 font-black uppercase">Amount</span>
-                    <span className="block text-xs font-bold text-zinc-300">{item.amount.toLocaleString()} Tokens</span>
+                   <span className="block text-xs font-bold text-zinc-300">{formatAmount(item.amount, item.decimals)} Tokens</span>
                   </div>
                   <div>
                     <span className="block text-[9px] text-zinc-500 font-black uppercase">Type</span>
