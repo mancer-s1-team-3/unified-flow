@@ -684,21 +684,52 @@ export async function editStreamBatchOnChain({
     }
 
     if (vestingType === 1) {
-      if (!hasCliffDuration) {
-        continue;
+      const startTs = new anchor.BN(String(streamState.startTs || "0"));
+      const currentEndTs = new anchor.BN(String(streamState.endTs || "0"));
+
+      // On-chain edit_cliff enforces new_cliff_ts <= end_ts, so a cliff can never
+      // be pushed past the stream's CURRENT end. When the same row also extends
+      // the duration (and/or tops up), apply that via edit_linear FIRST — the
+      // program accepts edit_linear for cliff streams and leaves cliff_ts intact
+      // — THEN move the cliff, which re-fetches the now-extended end and passes
+      // its guard. This automates the manual "edit linear duration first, then
+      // the cliff" workaround so a single CSV row can do both.
+      const wantsExtend =
+        hasDuration && startTs.add(new anchor.BN(durationRaw)).gt(currentEndTs);
+
+      if (wantsExtend || hasAmount) {
+        const linearResult = await editLinearOnChain({
+          wallet,
+          endpoint,
+          commitment,
+          onStatus,
+          input: {
+            streamAddress,
+            newEndDuration: wantsExtend ? durationRaw : undefined,
+            topupAmount: hasAmount ? amountRaw : "0",
+          },
+        });
+        signatures.push(linearResult.signature);
+        streamAddresses.push(streamAddress);
       }
-      const cliffResult = await editCliffOnChain({
-        wallet,
-        endpoint,
-        commitment,
-        onStatus,
-        input: {
-          streamAddress,
-          newCliffDuration: cliffRaw,
-        },
-      });
-      signatures.push(cliffResult.signature);
-      streamAddresses.push(streamAddress);
+
+      // Only move the cliff when it actually changes — an unchanged value would
+      // needlessly trip the on-chain withdrawn==0 guard and waste a transaction.
+      const currentCliffDuration = new anchor.BN(String(streamState.cliffTs || "0")).sub(startTs);
+      if (hasCliffDuration && !new anchor.BN(cliffRaw).eq(currentCliffDuration)) {
+        const cliffResult = await editCliffOnChain({
+          wallet,
+          endpoint,
+          commitment,
+          onStatus,
+          input: {
+            streamAddress,
+            newCliffDuration: cliffRaw,
+          },
+        });
+        signatures.push(cliffResult.signature);
+        streamAddresses.push(streamAddress);
+      }
       continue;
     }
 

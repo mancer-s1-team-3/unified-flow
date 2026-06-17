@@ -22,6 +22,7 @@ import { logger, captureException } from "../services/logger";
 import { indexerState } from "../services/indexerState";
 import { parseCsvText, computeCsvDiff, mapCsvRowsToStreams, validateCsvContent } from "../services/csvDiff";
 import { streamChat, isConfigured as isAiConfigured, type ChatContext } from "../services/aiChat";
+import { screenUserMessage, REFUSAL_MESSAGE } from "../services/contentGuard";
 import idl from "../idl/unified_flow.json";
 
 const app = express();
@@ -947,6 +948,23 @@ app.post("/ai/chat", async (req, res) => {
     res.flushHeaders();
 
     const send = (chunk: unknown) => res.write(`data: ${JSON.stringify(chunk)}\n\n`);
+
+    // Content guard: screen for prompt-injection / abuse before spending an
+    // upstream call. The refusal goes out as a normal content chunk (no `error`
+    // field) so the UI renders it as a plain assistant reply.
+    const verdict = screenUserMessage(userMessage);
+    if (!verdict.allowed) {
+        logger.warn("ai_chat_flagged", {
+            requestId: (req as any).requestId,
+            category: verdict.category,
+            reason: verdict.reason,
+            snippet: userMessage.slice(0, 80),
+        });
+        send({ content: REFUSAL_MESSAGE, done: true });
+        res.write("data: [DONE]\n\n");
+        res.end();
+        return;
+    }
 
     try {
         for await (const chunk of streamChat(userMessage, context ?? {})) {
