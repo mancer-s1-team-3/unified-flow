@@ -235,11 +235,11 @@ async function prepareCreateStreamInstruction({
   const startTs = toBn(Math.max(parsedStartTs, nowTs + 1));
   const durationSecs = Number(input.duration || 0);
 
-  if (!Number.isFinite(durationSecs) || durationSecs <= 0) {
+  if (vestingType !== 2 && (!Number.isFinite(durationSecs) || durationSecs <= 0)) {
     throw new Error("Duration must be a positive number of seconds.");
   }
 
-  const endTs = toBn(startTs.toNumber() + durationSecs);
+  const endTs = toBn(startTs.toNumber() + (durationSecs > 0 ? durationSecs : 1));
   const cliffTs = vestingType === 1 ? toBn(startTs.toNumber() + Number(input.cliffDuration || 0)) : startTs;
 
   if (vestingType === 1 && Number(input.cliffDuration || 0) <= 0) {
@@ -523,11 +523,11 @@ export async function createStreamOnChain({
   const startTs = toBn(nowTs + 10);
   const durationSecs = Number(input.duration || 0);
 
-  if (!Number.isFinite(durationSecs) || durationSecs <= 0) {
+  if (vestingType !== 2 && (!Number.isFinite(durationSecs) || durationSecs <= 0)) {
     throw new Error("Duration must be a positive number of seconds.");
   }
 
-  const endTs = toBn(nowTs + 10 + durationSecs);
+  const endTs = toBn(nowTs + 10 + (durationSecs > 0 ? durationSecs : 1));
   const cliffTs =
     vestingType === 1
       ? toBn(nowTs + 10 + Number(input.cliffDuration || 0))
