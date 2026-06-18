@@ -5,7 +5,7 @@ import Link from "next/link";
 import { BookOpen, Terminal, Cpu, Globe, Coins, ArrowLeft, Sparkles, Settings, Layers, FileCode, Rocket, Menu, X, Wrench } from "lucide-react";
 import { DocsSearch } from "@/components/docs/DocsSearch";
 import { DocsSidebarLink } from "@/components/docs/DocsSidebarLink";
-
+import { DocsChatbot } from "@/components/docs/DocsChatbot";
 export default function DocsLayout({ children }: { children: React.ReactNode }) {
   const [sidebarOpen, setSidebarOpen] = useState(false);
 
@@ -180,6 +180,7 @@ export default function DocsLayout({ children }: { children: React.ReactNode }) 
           {children}
         </main>
       </div>
+            <DocsChatbot />
     </div>
   );
 }
