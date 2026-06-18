@@ -848,7 +848,7 @@ function WithdrawPanel({
 
   // ── Claimable preview ──────────────────────────────────────────────────
   const withdrawPreview = useMemo(() => {
-    if (!stream) return null;
+      if (!stream || Number(stream.status) === 3) return null;
 
     const decimals =
       typeof stream.mintDecimals === "number" ? stream.mintDecimals : 6;
@@ -952,13 +952,14 @@ function WithdrawPanel({
     return "Confirming On-Chain...";
   };
 
-  const canSubmit =
+const canSubmit =
     !!withdrawForm.streamId.trim() &&
     !isSubmitting &&
     !isWrongWallet &&
     connected &&
-    (withdrawPreview ? withdrawPreview.hasClaimable : true) &&
-    !(withdrawPreview?.isCancelled);
+    !!stream &&
+    Number(stream.status) !== 3 &&
+    (withdrawPreview ? withdrawPreview.hasClaimable : true);
 
   return (
     <div className="animate-in fade-in-30 duration-200">
@@ -1011,7 +1012,16 @@ function WithdrawPanel({
           </div>
         </div>
       )}
-
+{/* ── Already cancelled warning ──────────────────────────────────── */}
+      {!!stream && Number(stream.status) === 3 && (
+        <div className="mb-5 bg-rose-950/20 border border-rose-500/20 rounded-2xl p-4 flex items-start gap-3">
+          <AlertTriangle className="w-4 h-4 text-rose-400 shrink-0 mt-0.5" />
+          <p className="text-[11px] text-rose-300/80 leading-relaxed">
+            This stream has been <strong className="text-rose-300">cancelled</strong>. There are no
+            tokens left to withdraw — any unwithdrawn vested amount was settled on cancellation.
+          </p>
+        </div>
+      )}
       {/* ── Claimable preview + fee card ────────────────────────────────── */}
       {withdrawPreview ? (
         <div className="mb-5 rounded-2xl border border-zinc-800 overflow-hidden">
@@ -1274,7 +1284,7 @@ function WithdrawPanel({
             </div>
           </div>
         </div>
-      ) : (
+      ) :(!stream || Number(stream.status) !== 3) ? (
         /* ── Stream not found — tampilkan fee card standalone ── */
         <div className="mt-5 rounded-2xl border border-amber-500/20 bg-amber-950/10 overflow-hidden mb-5">
           <div className="flex items-center justify-between gap-3 px-4 py-3 border-b border-amber-500/10">
@@ -1352,7 +1362,7 @@ function WithdrawPanel({
             </div>
           </div>
         </div>
-      )}
+      ):null}
 
       {/* Stream not found hint */}
       {withdrawForm.streamId.trim() && !stream && (
@@ -1378,15 +1388,15 @@ function WithdrawPanel({
         {isSubmitting ? (
           <RefreshCw className="w-4 h-4 animate-spin" />
         ) : null}
-        {!connected
-          ? "Connect wallet to withdraw"
-          : isWrongWallet
-          ? "Wrong wallet — switch to recipient wallet"
-          : withdrawPreview?.isCancelled
-          ? "Stream cancelled — cannot withdraw"
-          : !withdrawPreview?.hasClaimable && withdrawPreview
-          ? "No tokens to claim yet"
-          : getTxLabel()}
+    {!connected
+  ? "Connect wallet to withdraw"
+  : isWrongWallet
+  ? "Wrong wallet — switch to recipient wallet"
+  : !!stream && Number(stream.status) === 3
+  ? "Stream cancelled — cannot withdraw"
+  : !withdrawPreview?.hasClaimable && withdrawPreview
+  ? "No tokens to claim yet"
+  : getTxLabel()}
       </button>
     </div>
   );
