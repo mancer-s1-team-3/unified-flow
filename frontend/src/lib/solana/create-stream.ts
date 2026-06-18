@@ -269,21 +269,23 @@ async function prepareCreateStreamInstruction({
 
   const creatorSolBalance = await connection.getBalance(creator, provider.opts.commitment);
 
-  try {
-    const balance = await connection.getTokenAccountBalance(creatorTokenAccount, provider.opts.commitment);
-    const availableAmount = new anchor.BN(balance.value.amount);
+  if (!isWrappedSolMint(mint)) {
+    try {
+      const balance = await connection.getTokenAccountBalance(creatorTokenAccount, provider.opts.commitment);
+      const availableAmount = new anchor.BN(balance.value.amount);
 
-    if (availableAmount.lt(amountBn)) {
-      throw new Error(
-        `Insufficient token balance in your creator ATA. Available ${formatTokenAmountFromBaseUnits(availableAmount, mintDecimals)} tokens, need ${formatTokenAmountFromBaseUnits(amountBn, mintDecimals)} tokens.`
-      );
-    }
-  } catch (balanceError: any) {
-    const notFound = String(balanceError?.message || balanceError).toLowerCase().includes("could not find account") ||
-      String(balanceError?.message || balanceError).toLowerCase().includes("account does not exist");
+      if (availableAmount.lt(amountBn)) {
+        throw new Error(
+          `Insufficient token balance in your creator ATA. Available ${formatTokenAmountFromBaseUnits(availableAmount, mintDecimals)} tokens, need ${formatTokenAmountFromBaseUnits(amountBn, mintDecimals)} tokens.`
+        );
+      }
+    } catch (balanceError: any) {
+      const notFound = String(balanceError?.message || balanceError).toLowerCase().includes("could not find account") ||
+        String(balanceError?.message || balanceError).toLowerCase().includes("account does not exist");
 
-    if (!notFound) {
-      throw balanceError;
+      if (!notFound) {
+        throw balanceError;
+      }
     }
   }
 
