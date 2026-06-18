@@ -1423,12 +1423,17 @@ function CancelPanel({
     !!stream &&
     !!connectedWalletAddress &&
     stream.creator?.toLowerCase() !== connectedWalletAddress.toLowerCase();
+const isNotConnected = !connectedWalletAddress;
 
-  const isNotConnected = !connectedWalletAddress;
+  // ── Already cancelled / completed guards ───────────────────────────────
+  const isAlreadyCancelled = !!stream && Number(stream.status) === 3;
+  const isAlreadyCompleted = !!stream && Number(stream.status) === 2;
 
   // ── Token breakdown preview ────────────────────────────────────────────
   const cancelPreview = useMemo(() => {
-    if (!stream) return null;
+    // Don't compute/show a breakdown for streams that are already
+    // cancelled or completed — there's nothing left to cancel.
+    if (!stream || Number(stream.status) === 3 || Number(stream.status) === 2) return null;
 
     const decimals = typeof stream.mintDecimals === "number" ? stream.mintDecimals : 6;
     const nowTs = Math.floor(Date.now() / 1000);
@@ -1487,7 +1492,9 @@ function CancelPanel({
     !!cancelForm.streamId.trim() &&
     !isSubmitting &&
     !isWrongWallet &&
-    !isNotConnected;
+    !isNotConnected &&
+    !isAlreadyCancelled &&
+    !isAlreadyCompleted;
 
   return (
     <div className="animate-in fade-in-30 duration-200">
@@ -1532,7 +1539,22 @@ function CancelPanel({
           </div>
         </div>
       )}
-
+{/* ── Already cancelled / completed warning ──────────────────────── */}
+      {(isAlreadyCancelled || isAlreadyCompleted) && (
+        <div className="mb-5 bg-zinc-900/60 border border-zinc-700 rounded-2xl p-4 flex items-start gap-3">
+          <AlertTriangle className="w-4 h-4 text-zinc-400 shrink-0 mt-0.5" />
+          <div>
+            <p className="text-[11px] font-bold text-zinc-300 mb-1">
+              {isAlreadyCancelled ? "Stream already cancelled" : "Stream already completed"}
+            </p>
+            <p className="text-[11px] text-zinc-500 leading-relaxed">
+              {isAlreadyCancelled
+                ? "This stream has already been cancelled — there is nothing left to cancel."
+                : "This stream has fully vested and completed — it can no longer be cancelled."}
+            </p>
+          </div>
+        </div>
+      )}
       {/* ── Token breakdown preview ────────────────────────────────────── */}
       {cancelPreview && cancelPreview.hasAnything && (
         <div className="mb-5 rounded-2xl border border-zinc-800 overflow-hidden">
