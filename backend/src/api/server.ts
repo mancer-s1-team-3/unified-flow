@@ -15,7 +15,7 @@ import cors from "cors";
 import fs from "node:fs/promises";
 import path from "node:path";
 import { randomUUID } from "node:crypto";
-
+import { docsChat, isConfigured as isDocsAiConfigured, type DocsChatContext } from "../services/docsChat";
 import prisma from "../db/prisma";
 import { connection, getActiveCluster, getPrimaryRpcEndpoint } from "../services/rpc";
 import { logger, captureException } from "../services/logger";
@@ -918,7 +918,50 @@ app.post("/streams/:id/unlock-milestone", async (req, res) => {
         res.status(400).send({ error: err.message });
     }
 });
+app.post("/ai/docs-chat", async (req, res) => {
+    const { userMessage, context } = req.body as {
+        userMessage?: string;
+        context?: DocsChatContext;
+    };
 
+    if (!userMessage || typeof userMessage !== "string") {
+        return res.status(400).send({ error: "userMessage is required." });
+    }
+
+    res.setHeader("Content-Type", "text/event-stream");
+    res.setHeader("Cache-Control", "no-cache, no-transform");
+    res.setHeader("Connection", "keep-alive");
+    res.flushHeaders();
+
+    const send = (chunk: unknown) => res.write(`data: ${JSON.stringify(chunk)}\n\n`);
+
+    // Reuse the same content guard as the wallet-action assistant — prompt
+    // injection / abuse screening shouldn't be reimplemented per endpoint.
+    const verdict = screenUserMessage(userMessage);
+    if (!verdict.allowed) {
+        logger.warn("docs_chat_flagged", {
+            requestId: (req as any).requestId,
+            category: verdict.category,
+            reason: verdict.reason,
+            snippet: userMessage.slice(0, 80),
+        });
+        send({ content: REFUSAL_MESSAGE, done: true, sources: [] });
+        res.write("data: [DONE]\n\n");
+        res.end();
+        return;
+    }
+
+    try {
+        for await (const chunk of docsChat(userMessage, context ?? {})) {
+            send(chunk);
+        }
+    } catch (err: any) {
+        send({ content: "", done: true, error: err?.message ?? "Docs AI service error", sources: [] });
+    } finally {
+        res.write("data: [DONE]\n\n");
+        res.end();
+    }
+});
 // =====================================================
 // AI CHAT (ASI:One proxy)
 // =====================================================
