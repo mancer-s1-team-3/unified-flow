@@ -1862,8 +1862,6 @@ const editLinearExceedsBalance =
 
 
 
-// edit_milestone tidak transfer token baru (redistribute saja)
-// jadi tidak perlu balance check untuk milestone edit
   const withdrawFeeUsd =
   feeEstimate.solCost && feeEstimate.solPrice
     ? feeEstimate.solCost * feeEstimate.solPrice

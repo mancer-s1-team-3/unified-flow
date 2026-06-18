@@ -1,13 +1,7 @@
 "use client";
 
 import * as anchor from "@coral-xyz/anchor";
-import {
-  ASSOCIATED_TOKEN_PROGRAM_ADDRESS,
-  TOKEN_PROGRAM_ADDRESS,
-  getCreateAssociatedTokenIdempotentInstruction,
-  getSyncNativeInstruction,
-} from "@solana-program/token";
-import { getTransferSolInstruction } from "@solana-program/system";
+import { ASSOCIATED_TOKEN_PROGRAM_ADDRESS, TOKEN_PROGRAM_ADDRESS } from "@solana-program/token";
 import { type Commitment, Connection, PublicKey, SystemProgram, VersionedTransaction } from "@solana/web3.js";
 import { Buffer } from "buffer";
 import {
@@ -26,11 +20,14 @@ import {
 import type { WalletSession } from "@solana/client";
 import idl from "../../../../backend/src/idl/unified_flow.json";
 import { getExplorerClusterParam, getProgramIdForEndpoint } from "@/lib/solana/network-config";
+import {
+  buildWsolWrapInstructions,
+  formatTokenAmountFromBaseUnits,
+  isWrappedSolMint,
+} from "@/lib/solana/wsol";
 
 const TOKEN_PROGRAM_ID = new PublicKey(TOKEN_PROGRAM_ADDRESS);
 const ASSOCIATED_TOKEN_PROGRAM_ID = new PublicKey(ASSOCIATED_TOKEN_PROGRAM_ADDRESS);
-const WRAPPED_SOL_MINT = "So11111111111111111111111111111111111111112";
-const TOKEN_ACCOUNT_SIZE = 165;
 
 const CREATE_STREAM_IDL = idl;
 
@@ -137,22 +134,6 @@ function buildMilestones(
   }
 
   return parsedMilestones.map((item) => ({ amount: item }));
-}
-
-function formatTokenAmountFromBaseUnits(amount: anchor.BN | string | bigint, decimals: number) {
-  const raw = String(amount);
-  if (decimals <= 0) return raw;
-
-  const negative = raw.startsWith("-");
-  const unsigned = negative ? raw.slice(1) : raw;
-  const padded = unsigned.padStart(decimals + 1, "0");
-  const whole = padded.slice(0, -decimals) || "0";
-  const fraction = padded.slice(-decimals).replace(/0+$/, "");
-  return `${negative ? "-" : ""}${fraction ? `${whole}.${fraction}` : whole}`;
-}
-
-function isWrappedSolMint(mint: PublicKey) {
-  return mint.toBase58() === WRAPPED_SOL_MINT;
 }
 
 function getAnchorWallet(session: WalletSession) {
@@ -267,8 +248,6 @@ async function prepareCreateStreamInstruction({
     ASSOCIATED_TOKEN_PROGRAM_ID
   );
 
-  const creatorSolBalance = await connection.getBalance(creator, provider.opts.commitment);
-
   if (!isWrappedSolMint(mint)) {
     try {
       const balance = await connection.getTokenAccountBalance(creatorTokenAccount, provider.opts.commitment);
@@ -305,66 +284,15 @@ async function prepareCreateStreamInstruction({
       })
       : [];
 
-  const preInstructions: any[] = [];
-
-  if (isWrappedSolMint(mint)) {
-    let existingAmount = new anchor.BN(0);
-    let creatorAtaExists = true;
-
-    try {
-      const balance = await connection.getTokenAccountBalance(creatorTokenAccount, provider.opts.commitment);
-      existingAmount = new anchor.BN(balance.value.amount);
-    } catch (balanceError: any) {
-      const notFound = String(balanceError?.message || balanceError).toLowerCase().includes("could not find account") ||
-        String(balanceError?.message || balanceError).toLowerCase().includes("account does not exist");
-
-      if (!notFound) {
-        throw balanceError;
-      }
-
-      creatorAtaExists = false;
-    }
-
-    const topUpAmount = amountBn.sub(existingAmount);
-
-    if (topUpAmount.gt(new anchor.BN(0))) {
-      const rentLamports = creatorAtaExists ? 0 : await connection.getMinimumBalanceForRentExemption(TOKEN_ACCOUNT_SIZE, provider.opts.commitment);
-      const requiredLamports = topUpAmount.add(new anchor.BN(String(rentLamports)));
-
-      if (new anchor.BN(String(creatorSolBalance)).lt(requiredLamports)) {
-        throw new Error(
-          `Insufficient SOL balance to wrap ${formatTokenAmountFromBaseUnits(topUpAmount, mintDecimals)} WSOL${creatorAtaExists ? "" : " and create the token account"}. Available ${formatTokenAmountFromBaseUnits(String(creatorSolBalance), 9)} SOL, need at least ${formatTokenAmountFromBaseUnits(requiredLamports, 9)} SOL.`
-        );
-      }
-    }
-
-    if (topUpAmount.gt(new anchor.BN(0))) {
-      preInstructions.push(
-        await getCreateAssociatedTokenIdempotentInstruction({
-          payer: walletSigner as any,
-          ata: creatorTokenAccount.toBase58() as any,
-          owner: creator.toBase58() as any,
-          mint: mint.toBase58() as any,
-          systemProgram: SystemProgram.programId.toBase58() as any,
-          tokenProgram: TOKEN_PROGRAM_ID.toBase58() as any,
-        } as any)
-      );
-
-      preInstructions.push(
-        getTransferSolInstruction({
-          source: walletSigner as any,
-          destination: creatorTokenAccount.toBase58() as any,
-          amount: BigInt(topUpAmount.toString()),
-        } as any)
-      );
-
-      preInstructions.push(
-        getSyncNativeInstruction({
-          account: creatorTokenAccount.toBase58() as any,
-        } as any)
-      );
-    }
-  }
+  const preInstructions: any[] = isWrappedSolMint(mint)
+    ? await buildWsolWrapInstructions({
+        connection,
+        owner: creator,
+        walletSigner,
+        amountBn,
+        commitment: provider.opts.commitment,
+      })
+    : [];
 
   const anchorInstruction = await program.methods
     .createStream(amountBn, startTs, cliffTs, endTs, vestingType, milestones, nonce)
@@ -560,23 +488,23 @@ export async function createStreamOnChain({
     ASSOCIATED_TOKEN_PROGRAM_ID
   );
 
-  const creatorSolBalance = await connection.getBalance(creator, commitment);
+  if (!isWrappedSolMint(mint)) {
+    try {
+      const balance = await connection.getTokenAccountBalance(creatorTokenAccount, commitment);
+      const availableAmount = new anchor.BN(balance.value.amount);
 
-  try {
-    const balance = await connection.getTokenAccountBalance(creatorTokenAccount, commitment);
-    const availableAmount = new anchor.BN(balance.value.amount);
+      if (availableAmount.lt(amountBn)) {
+        throw new Error(
+          `Insufficient token balance in your creator ATA. Available ${formatTokenAmountFromBaseUnits(availableAmount, mintDecimals)} tokens, need ${formatTokenAmountFromBaseUnits(amountBn, mintDecimals)} tokens.`
+        );
+      }
+    } catch (balanceError: any) {
+      const notFound = String(balanceError?.message || balanceError).toLowerCase().includes("could not find account") ||
+        String(balanceError?.message || balanceError).toLowerCase().includes("account does not exist");
 
-    if (availableAmount.lt(amountBn)) {
-      throw new Error(
-        `Insufficient token balance in your creator ATA. Available ${formatTokenAmountFromBaseUnits(availableAmount, mintDecimals)} tokens, need ${formatTokenAmountFromBaseUnits(amountBn, mintDecimals)} tokens.`
-      );
-    }
-  } catch (balanceError: any) {
-    const notFound = String(balanceError?.message || balanceError).toLowerCase().includes("could not find account") ||
-      String(balanceError?.message || balanceError).toLowerCase().includes("account does not exist");
-
-    if (!notFound) {
-      throw balanceError;
+      if (!notFound) {
+        throw balanceError;
+      }
     }
   }
 
@@ -596,66 +524,15 @@ export async function createStreamOnChain({
       })
       : [];
 
-  const preInstructions: any[] = [];
-
-  if (isWrappedSolMint(mint)) {
-    let existingAmount = new anchor.BN(0);
-    let creatorAtaExists = true;
-
-    try {
-      const balance = await connection.getTokenAccountBalance(creatorTokenAccount, commitment);
-      existingAmount = new anchor.BN(balance.value.amount);
-    } catch (balanceError: any) {
-      const notFound = String(balanceError?.message || balanceError).toLowerCase().includes("could not find account") ||
-        String(balanceError?.message || balanceError).toLowerCase().includes("account does not exist");
-
-      if (!notFound) {
-        throw balanceError;
-      }
-
-      creatorAtaExists = false;
-    }
-
-    const topUpAmount = amountBn.sub(existingAmount);
-
-    if (topUpAmount.gt(new anchor.BN(0))) {
-      const rentLamports = creatorAtaExists ? 0 : await connection.getMinimumBalanceForRentExemption(TOKEN_ACCOUNT_SIZE, commitment);
-      const requiredLamports = topUpAmount.add(new anchor.BN(String(rentLamports)));
-
-      if (new anchor.BN(String(creatorSolBalance)).lt(requiredLamports)) {
-        throw new Error(
-          `Insufficient SOL balance to wrap ${formatTokenAmountFromBaseUnits(topUpAmount, mintDecimals)} WSOL${creatorAtaExists ? "" : " and create the token account"}. Available ${formatTokenAmountFromBaseUnits(String(creatorSolBalance), 9)} SOL, need at least ${formatTokenAmountFromBaseUnits(requiredLamports, 9)} SOL.`
-        );
-      }
-    }
-
-    if (topUpAmount.gt(new anchor.BN(0))) {
-      preInstructions.push(
-        await getCreateAssociatedTokenIdempotentInstruction({
-          payer: walletSigner as any,
-          ata: creatorTokenAccount.toBase58() as any,
-          owner: creator.toBase58() as any,
-          mint: mint.toBase58() as any,
-          systemProgram: SystemProgram.programId.toBase58() as any,
-          tokenProgram: TOKEN_PROGRAM_ID.toBase58() as any,
-        } as any)
-      );
-
-      preInstructions.push(
-        getTransferSolInstruction({
-          source: walletSigner as any,
-          destination: creatorTokenAccount.toBase58() as any,
-          amount: BigInt(topUpAmount.toString()),
-        } as any)
-      );
-
-      preInstructions.push(
-        getSyncNativeInstruction({
-          account: creatorTokenAccount.toBase58() as any,
-        } as any)
-      );
-    }
-  }
+  const preInstructions: any[] = isWrappedSolMint(mint)
+    ? await buildWsolWrapInstructions({
+        connection,
+        owner: creator,
+        walletSigner,
+        amountBn,
+        commitment,
+      })
+    : [];
 
   const anchorInstruction = await program.methods
     .createStream(amountBn, startTs, cliffTs, endTs, vestingType, milestones, nonce)

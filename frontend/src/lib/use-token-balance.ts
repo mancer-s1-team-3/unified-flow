@@ -6,8 +6,9 @@ import { Connection, PublicKey, LAMPORTS_PER_SOL } from "@solana/web3.js";
 import { ASSOCIATED_TOKEN_PROGRAM_ADDRESS, TOKEN_PROGRAM_ADDRESS } from "@solana-program/token";
 import { Buffer } from "buffer";
 import { useWalletConnection } from "@solana/react-hooks";
+import { fetchWsolBalanceSnapshot, WRAPPED_SOL_MINT } from "@/lib/solana/wsol";
 
-const SOL_MINT = "So11111111111111111111111111111111111111112";
+const SOL_MINT = WRAPPED_SOL_MINT;
 const TOKEN_PROGRAM_ID = new PublicKey(TOKEN_PROGRAM_ADDRESS);
 const ASSOCIATED_TOKEN_PROGRAM_ID = new PublicKey(ASSOCIATED_TOKEN_PROGRAM_ADDRESS);
 
@@ -43,12 +44,15 @@ async function loadBalance(
 ): Promise<BalanceData> {
     const connection = getConnection(endpoint);
 
-    // ── SOL (native) ────────────────────────────────────────────────────────
+    // ── WSOL: gabungkan saldo WSOL di ATA + native SOL ─────────────────────
     if (mint === SOL_MINT) {
-        const lamports = await connection.getBalance(new PublicKey(walletAddress));
+        const snapshot = await fetchWsolBalanceSnapshot(
+            connection,
+            new PublicKey(walletAddress)
+        );
         return {
-            balance: lamports / LAMPORTS_PER_SOL,
-            rawBalance: BigInt(lamports),
+            balance: Number(snapshot.combinedRaw) / LAMPORTS_PER_SOL,
+            rawBalance: snapshot.combinedRaw,
             decimals: 9,
         };
     }
