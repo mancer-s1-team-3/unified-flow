@@ -1648,7 +1648,7 @@ const isNotConnected = !connectedWalletAddress;
       </div>
 
       {/* Trigger button */}
-      <button
+  <button
         disabled={!canSubmit}
         onClick={() => setShowDialog(true)}
         className={`w-full font-bold text-xs py-3 rounded-xl transition-all shadow-lg flex items-center justify-center gap-2 ${
@@ -1662,6 +1662,10 @@ const isNotConnected = !connectedWalletAddress;
           ? "Connect wallet to cancel"
           : isWrongWallet
           ? "Wrong wallet — switch to creator wallet"
+          : isAlreadyCancelled
+          ? "Stream already cancelled"
+          : isAlreadyCompleted
+          ? "Stream already completed"
           : submitLabel}
       </button>
 
