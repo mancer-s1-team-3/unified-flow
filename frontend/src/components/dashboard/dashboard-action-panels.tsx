@@ -848,7 +848,7 @@ function WithdrawPanel({
 
   // ── Claimable preview ──────────────────────────────────────────────────
   const withdrawPreview = useMemo(() => {
-    if (!stream) return null;
+      if (!stream || Number(stream.status) === 3) return null;
 
     const decimals =
       typeof stream.mintDecimals === "number" ? stream.mintDecimals : 6;
@@ -1011,7 +1011,16 @@ function WithdrawPanel({
           </div>
         </div>
       )}
-
+{/* ── Already cancelled warning ──────────────────────────────────── */}
+      {!!stream && Number(stream.status) === 3 && (
+        <div className="mb-5 bg-rose-950/20 border border-rose-500/20 rounded-2xl p-4 flex items-start gap-3">
+          <AlertTriangle className="w-4 h-4 text-rose-400 shrink-0 mt-0.5" />
+          <p className="text-[11px] text-rose-300/80 leading-relaxed">
+            This stream has been <strong className="text-rose-300">cancelled</strong>. There are no
+            tokens left to withdraw — any unwithdrawn vested amount was settled on cancellation.
+          </p>
+        </div>
+      )}
       {/* ── Claimable preview + fee card ────────────────────────────────── */}
       {withdrawPreview ? (
         <div className="mb-5 rounded-2xl border border-zinc-800 overflow-hidden">
