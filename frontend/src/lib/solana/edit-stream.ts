@@ -17,6 +17,11 @@ import {
 import { type Commitment, Connection, PublicKey, VersionedTransaction } from "@solana/web3.js";
 import type { WalletSession } from "@solana/client";
 import { getExplorerClusterParam, getProgramIdForEndpoint } from "@/lib/solana/network-config";
+import {
+  buildWsolUnwrapInstructions,
+  buildWsolWrapInstructions,
+  isWrappedSolMint,
+} from "@/lib/solana/wsol";
 
 const TOKEN_PROGRAM_ID = new PublicKey(TOKEN_PROGRAM_ADDRESS);
 const ASSOCIATED_TOKEN_PROGRAM_ID = new PublicKey(ASSOCIATED_TOKEN_PROGRAM_ADDRESS);
@@ -157,6 +162,8 @@ async function executeInstructions({
   instructions,
   programId,
   onStatus,
+  preInstructions = [],
+  postInstructions = [],
 }: {
   connection: Connection;
   commitment: Commitment;
@@ -165,20 +172,28 @@ async function executeInstructions({
   instructions: InstructionSpec[];
   programId: PublicKey;
   onStatus?: (phase: TxProgressPhase) => void;
+  preInstructions?: any[];
+  postInstructions?: any[];
 }) {
   const { blockhash, lastValidBlockHeight } = await connection.getLatestBlockhash(commitment);
   const kitSigner = walletSigner as any;
+
+  const kitInstructionPayload = [
+    ...preInstructions.map((instruction) => instruction as any),
+    ...instructions.map((instruction) => ({
+      programAddress: programId.toBase58(),
+      accounts: instruction.accounts,
+      data: instruction.data,
+    })),
+    ...postInstructions.map((instruction) => instruction as any),
+  ];
 
   // All instructions are bundled into one transaction so they execute
   // atomically — either every instruction lands or none do (single signature).
   const transactionMessage = setTransactionMessageLifetimeUsingBlockhash(
     { blockhash: blockhash as any, lastValidBlockHeight: BigInt(lastValidBlockHeight) },
     appendTransactionMessageInstructions(
-      instructions.map((instruction) => ({
-        programAddress: programId.toBase58(),
-        accounts: instruction.accounts,
-        data: instruction.data,
-      })) as any,
+      kitInstructionPayload as any,
       setTransactionMessageFeePayerSigner(
         kitSigner,
         createTransactionMessage({ version: 0 })
@@ -231,10 +246,17 @@ async function executeInstructions({
 async function executeInstruction({
   anchorInstructionData,
   accounts,
+  preInstructions = [],
+  postInstructions = [],
   ...rest
-}: ExecuteInstructionParams) {
+}: ExecuteInstructionParams & {
+  preInstructions?: any[];
+  postInstructions?: any[];
+}) {
   return executeInstructions({
     ...rest,
+    preInstructions,
+    postInstructions,
     instructions: [{ data: anchorInstructionData, accounts }],
   });
 }
@@ -329,6 +351,16 @@ export async function editLinearOnChain({
   )[0];
   const [configPda] = PublicKey.findProgramAddressSync([Buffer.from("config")], PROGRAM_ID);
 
+  const preInstructions = isWrappedSolMint(mint) && parsedTopupAmount.gt(new anchor.BN(0))
+    ? await buildWsolWrapInstructions({
+      connection,
+      owner: creator,
+      walletSigner,
+      amountBn: parsedTopupAmount,
+      commitment,
+    })
+    : [];
+
   const anchorInstruction = await program.methods
     .editLinear(parsedNewEndTs, parsedTopupAmount)
     .accounts({
@@ -347,6 +379,7 @@ export async function editLinearOnChain({
     commitment,
     walletSignerMode,
     walletSigner,
+    preInstructions,
     anchorInstructionData: anchorInstruction.data,
     accounts: [
       { address: creator.toBase58(), role: AccountRole.WRITABLE_SIGNER, signer: walletSigner as any },
@@ -496,12 +529,24 @@ export async function editCliffOnChain({
     });
   }
 
+  const preInstructions =
+    hasTopup && isWrappedSolMint(mint)
+      ? await buildWsolWrapInstructions({
+        connection,
+        owner: creator,
+        walletSigner,
+        amountBn: topupAmountBn,
+        commitment,
+      })
+      : [];
+
   const { signature, simulationLogs } = await executeInstructions({
     connection,
     commitment,
     walletSignerMode,
     walletSigner,
     instructions,
+    preInstructions,
     programId: PROGRAM_ID,
     onStatus,
   });
@@ -581,6 +626,33 @@ export async function editMilestoneOnChain({
     ASSOCIATED_TOKEN_PROGRAM_ID
   )[0];
 
+  const oldAmount = milestoneAmounts[milestoneIndex];
+  const topUpDiff = newAmount.gt(oldAmount) ? newAmount.sub(oldAmount) : new anchor.BN(0);
+  const refundDiff = newAmount.lt(oldAmount) ? oldAmount.sub(newAmount) : new anchor.BN(0);
+
+  const preInstructions =
+    isWrappedSolMint(mint) && topUpDiff.gt(new anchor.BN(0))
+      ? await buildWsolWrapInstructions({
+        connection,
+        owner: creator,
+        walletSigner,
+        amountBn: topUpDiff,
+        commitment,
+      })
+      : [];
+
+  const postInstructions =
+    isWrappedSolMint(mint) && refundDiff.gt(new anchor.BN(0))
+      ? await buildWsolUnwrapInstructions({
+        connection,
+        owner: creator,
+        walletSigner,
+        amountBn: refundDiff,
+        sourceAta: creatorTokenAccount,
+        commitment,
+      })
+      : [];
+
   const anchorInstruction = await program.methods
     .editMilestone(newAmount)
     .accounts({
@@ -599,6 +671,8 @@ export async function editMilestoneOnChain({
     commitment,
     walletSignerMode,
     walletSigner,
+    preInstructions,
+    postInstructions,
     anchorInstructionData: anchorInstruction.data,
     accounts: [
       { address: creator.toBase58(), role: AccountRole.WRITABLE_SIGNER, signer: walletSigner as any },

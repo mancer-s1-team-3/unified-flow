@@ -43,7 +43,7 @@ function resolveChainlinkFeed(endpoint: string): PublicKey {
   if (!feed) {
     throw new Error(
       `Withdraw is not available on ${cluster ?? "this network"} yet: the on-chain program pins the devnet SOL/USD Chainlink feed. ` +
-        `Switch to devnet to withdraw, or upgrade & redeploy the program with a ${cluster ?? "matching"} oracle feed.`,
+      `Switch to devnet to withdraw, or upgrade & redeploy the program with a ${cluster ?? "matching"} oracle feed.`,
     );
   }
   return new PublicKey(feed);
