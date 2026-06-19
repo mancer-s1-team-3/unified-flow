@@ -22,6 +22,7 @@ import idl from "../../../../backend/src/idl/unified_flow.json";
 import { getExplorerClusterParam, getProgramIdForEndpoint } from "@/lib/solana/network-config";
 import {
   buildWsolWrapInstructions,
+  fetchWsolBalanceSnapshot,
   formatTokenAmountFromBaseUnits,
   isWrappedSolMint,
 } from "@/lib/solana/wsol";
@@ -177,6 +178,7 @@ async function prepareCreateStreamInstruction({
   input,
   walletSigner,
   programId,
+  availableWsolOverride,
 }: {
   wallet: WalletSession;
   connection: Connection;
@@ -185,6 +187,9 @@ async function prepareCreateStreamInstruction({
   input: CreateStreamInput;
   walletSigner: any;
   programId: PublicKey;
+  // Batch-aware: wSOL still available for this row after earlier rows in the
+  // same batch consumed theirs. Undefined for single creates (uses live balance).
+  availableWsolOverride?: anchor.BN;
 }): Promise<PreparedCreateStream> {
   const PROGRAM_ID = programId;
   const creator = new PublicKey(wallet.account.address.toString());
@@ -290,6 +295,7 @@ async function prepareCreateStreamInstruction({
         owner: creator,
         walletSigner,
         amountBn,
+        availableWsol: availableWsolOverride,
         commitment: provider.opts.commitment,
       })
     : [];
@@ -667,8 +673,28 @@ export async function createStreamBatchOnChain({
   const { signer: walletSigner, mode: walletSignerMode } = createWalletTransactionSigner(wallet);
   const kitSigner = walletSigner as any;
 
+  // Batch-aware wSOL accounting: snapshot the creator's existing wSOL ONCE, then
+  // decrement a running balance as each row consumes it. Without this, every row
+  // credits the same existing wSOL and later rows under-wrap → the program's
+  // InsufficientBalance ("Insufficient Token Balance") error.
+  const creator = new PublicKey(wallet.account.address.toString());
+  const hasWsolRow = inputs.some((input) => isWrappedSolMint(parsePublicKey(input.mint, "mint address")));
+  let runningWsol: anchor.BN | null = null;
+  if (hasWsolRow) {
+    const snapshot = await fetchWsolBalanceSnapshot(connection, creator, commitment);
+    runningWsol = new anchor.BN(snapshot.wsolRaw.toString());
+  }
+
   const prepared = [] as PreparedCreateStream[];
   for (const input of inputs) {
+    let availableWsolOverride: anchor.BN | undefined;
+    if (runningWsol && isWrappedSolMint(parsePublicKey(input.mint, "mint address"))) {
+      availableWsolOverride = runningWsol;
+      // wSOL is the native mint (9 decimals); this row draws `amount` of it.
+      const rowAmount = parseTokenAmount(input.amount, 9, "Total amount");
+      const remaining = runningWsol.sub(rowAmount);
+      runningWsol = remaining.isNeg() ? new anchor.BN(0) : remaining;
+    }
     prepared.push(
       await prepareCreateStreamInstruction({
         wallet,
@@ -678,6 +704,7 @@ export async function createStreamBatchOnChain({
         input,
         walletSigner,
         programId: PROGRAM_ID,
+        availableWsolOverride,
       })
     );
   }
