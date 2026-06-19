@@ -25,6 +25,7 @@
     "@prisma/client": "^7.8.0",
     "@solana/spl-token": "^0.4.14",
     "@solana/web3.js": "^1.98.4",
+    "@unifiedflow/unified-flow-sdk": "^1.0.10",
     "bs58": "^6.0.0",
     "cors": "^2.8.6",
     "dotenv": "^16.6.1",

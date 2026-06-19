@@ -140,18 +140,23 @@ export async function buildWsolWrapInstructions({
   owner,
   walletSigner,
   amountBn,
+  availableWsol,
   commitment = "confirmed",
 }: {
   connection: Connection;
   owner: PublicKey;
   walletSigner: WalletKitSigner;
   amountBn: anchor.BN;
+  // Existing wSOL to credit against this wrap. Defaults to the on-chain balance.
+  // Batch callers pass a running balance so wSOL consumed by an earlier row in
+  // the same batch isn't double-counted (which would under-wrap later rows).
+  availableWsol?: anchor.BN;
   commitment?: Commitment;
 }): Promise<KitInstruction[]> {
   const mint = getWsolMint();
   const creatorTokenAccount = getAssociatedTokenAddress(owner, mint);
   const snapshot = await fetchWsolBalanceSnapshot(connection, owner, commitment);
-  const existingAmount = new anchor.BN(snapshot.wsolRaw.toString());
+  const existingAmount = availableWsol ?? new anchor.BN(snapshot.wsolRaw.toString());
   const topUpAmount = amountBn.sub(existingAmount);
 
   if (topUpAmount.lte(new anchor.BN(0))) {

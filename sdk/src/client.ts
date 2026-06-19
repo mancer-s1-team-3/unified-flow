@@ -4,6 +4,7 @@ import {
   TOKEN_PROGRAM_ID,
   ASSOCIATED_TOKEN_PROGRAM_ID,
   getAssociatedTokenAddressSync,
+  createAssociatedTokenAccountIdempotentInstruction,
 } from "@solana/spl-token";
 import { buildWsolWrapInstructions, isWrappedSolMint } from "./wsol-node";
 import {
@@ -229,6 +230,19 @@ export class UnifiedFlowClient {
 
     const recipientAta = getAssociatedTokenAddressSync(mint, recipient, true);
 
+    // ── Ensure the recipient's token account exists (idempotent). For WSOL a
+    // fresh recipient often has no ATA yet, which would make withdraw fail. ──
+    const ensureAtaInstructions = [
+      createAssociatedTokenAccountIdempotentInstruction(
+        recipient,
+        recipientAta,
+        recipient,
+        mint,
+        TOKEN_PROGRAM_ID,
+        ASSOCIATED_TOKEN_PROGRAM_ID
+      ),
+    ];
+
     const anchorIx = await this.program.methods
       .withdraw()
       .accounts({
@@ -262,7 +276,7 @@ export class UnifiedFlowClient {
       { address: SystemProgram.programId.toBase58(), role: AccountRole.READONLY },
     ]);
 
-    const txMsg = this._buildTxMessage(kitIx, blockhash, lastValidBlockHeight);
+    const txMsg = this._buildTxMessage(kitIx, blockhash, lastValidBlockHeight, ensureAtaInstructions);
 
     onStatus?.("sending");
     const signature = await signAndSend(txMsg, this.walletSignerMode, this.connection, this.commitment);
@@ -291,6 +305,28 @@ export class UnifiedFlowClient {
     const recipientTokenAccount = getAssociatedTokenAddressSync(mint, recipient, true);
     const config = this.getConfigPDA();
     const vault = getVaultATA(mint, streamPDA);
+
+    // ── Ensure both token accounts exist before the program pays out. For WSOL
+    // (or any mint) the recipient may have no ATA yet — cancel would then fail.
+    // Creator (the signer) pays rent for both; idempotent = no-op if present.
+    const ensureAtaInstructions = [
+      createAssociatedTokenAccountIdempotentInstruction(
+        creator,
+        creatorTokenAccount,
+        creator,
+        mint,
+        TOKEN_PROGRAM_ID,
+        ASSOCIATED_TOKEN_PROGRAM_ID
+      ),
+      createAssociatedTokenAccountIdempotentInstruction(
+        creator,
+        recipientTokenAccount,
+        recipient,
+        mint,
+        TOKEN_PROGRAM_ID,
+        ASSOCIATED_TOKEN_PROGRAM_ID
+      ),
+    ];
 
     const anchorIx = await this.program.methods
       .cancel()
@@ -322,7 +358,7 @@ export class UnifiedFlowClient {
       { address: SystemProgram.programId.toBase58(), role: AccountRole.READONLY },
     ]);
 
-    const txMsg = this._buildTxMessage(kitIx, blockhash, lastValidBlockHeight);
+    const txMsg = this._buildTxMessage(kitIx, blockhash, lastValidBlockHeight, ensureAtaInstructions);
 
     onStatus?.("sending");
     const signature = await signAndSend(txMsg, this.walletSignerMode, this.connection, this.commitment);
@@ -395,11 +431,14 @@ export class UnifiedFlowClient {
     const vault = getVaultATA(mint, streamPDA);
     const creatorTokenAccount = getAssociatedTokenAddressSync(mint, creator, true);
 
-    // ── WSOL wrap for a top-up (new amount > current milestone amount) ──
     const milestoneAny: any = await programAny.account.milestoneAccount.fetch(milestonePDA);
     const oldAmount = new anchor.BN(String(milestoneAny.amount));
     const topUpDiff = newAmount.gt(oldAmount) ? newAmount.sub(oldAmount) : new anchor.BN(0);
 
+    // Top-up (new > old): wrap SOL → wSOL, which also creates the creator ATA.
+    // Otherwise (decrease/equal): the program refunds the freed tokens to the
+    // creator's ATA, so ensure it exists first — a wSOL creator may have closed
+    // it. Idempotent = no-op when it already exists.
     const wrapInstructions =
       isWrappedSolMint(mint) && topUpDiff.gt(new anchor.BN(0))
         ? await buildWsolWrapInstructions({
@@ -409,7 +448,16 @@ export class UnifiedFlowClient {
           amountBn: topUpDiff,
           commitment: this.commitment,
         })
-        : [];
+        : [
+          createAssociatedTokenAccountIdempotentInstruction(
+            creator,
+            creatorTokenAccount,
+            creator,
+            mint,
+            TOKEN_PROGRAM_ID,
+            ASSOCIATED_TOKEN_PROGRAM_ID
+          ),
+        ];
 
     const anchorIx = await this.program.methods
       .editMilestone(newAmount)
@@ -454,6 +502,7 @@ export class UnifiedFlowClient {
   public async editCliff(
     streamPDA: PublicKey,
     newCliffTs: anchor.BN,
+    topupAmount: anchor.BN = new anchor.BN(0),
     onStatus?: (phase: TxProgressPhase) => void
   ): Promise<{ signature: string }> {
     onStatus?.("wallet_approval");
@@ -463,19 +512,19 @@ export class UnifiedFlowClient {
     const programAny = this.program as any;
     const streamState: any = await programAny.account.streamAccount.fetch(streamPDA);
     const mint = streamState.mint as PublicKey;
-    const vault = getVaultATA(mint, streamPDA);
+    const vault = streamState.vault as PublicKey;
     const creatorTokenAccount = getAssociatedTokenAddressSync(mint, creator, true);
 
+    const doTopup = topupAmount.gt(new anchor.BN(0));
+
+    // edit_cliff itself only moves the cliff timestamp — accounts are exactly
+    // [creator, config, stream] per the IDL (it draws no funds).
     const anchorIx = await this.program.methods
       .editCliff(newCliffTs)
       .accounts({
         creator,
-        mint,
         config: config,
         stream: streamPDA,
-        vault: vault,
-        creatorTokenAccount,
-        tokenProgram: TOKEN_PROGRAM_ID,
       } as any)
       .instruction();
 
@@ -485,15 +534,59 @@ export class UnifiedFlowClient {
 
     const kitIx = this._toKitInstruction(anchorIx, [
       { address: creator.toBase58(), role: AccountRole.WRITABLE_SIGNER, signer: this.kitSigner },
-      { address: mint.toBase58(), role: AccountRole.READONLY },
       { address: config.toBase58(), role: AccountRole.READONLY },
       { address: streamPDA.toBase58(), role: AccountRole.WRITABLE },
-      { address: vault.toBase58(), role: AccountRole.WRITABLE },
-      { address: creatorTokenAccount.toBase58(), role: AccountRole.WRITABLE },
-      { address: TOKEN_PROGRAM_ID.toBase58(), role: AccountRole.READONLY },
     ]);
 
-    const txMsg = this._buildTxMessage(kitIx, blockhash, lastValidBlockHeight);
+    // ── Optional top-up: bundled as an edit_linear with the end unchanged, plus
+    // the WSOL wrap when the mint is native SOL (mirrors the dashboard path). ──
+    const wrapInstructions =
+      isWrappedSolMint(mint) && doTopup
+        ? await buildWsolWrapInstructions({
+          connection: this.connection,
+          owner: creator,
+          payer: creator,
+          amountBn: topupAmount,
+          commitment: this.commitment,
+        })
+        : [];
+
+    const trailingKitInstructions: any[] = [];
+    if (doTopup) {
+      const endTs = new anchor.BN(String(streamState.endTs));
+      const topupAnchorIx = await this.program.methods
+        .editLinear(endTs, topupAmount)
+        .accounts({
+          creator,
+          mint,
+          config: config,
+          stream: streamPDA,
+          vault: vault,
+          creatorTokenAccount,
+          tokenProgram: TOKEN_PROGRAM_ID,
+        } as any)
+        .instruction();
+
+      trailingKitInstructions.push(
+        this._toKitInstruction(topupAnchorIx, [
+          { address: creator.toBase58(), role: AccountRole.WRITABLE_SIGNER, signer: this.kitSigner },
+          { address: mint.toBase58(), role: AccountRole.READONLY },
+          { address: config.toBase58(), role: AccountRole.READONLY },
+          { address: streamPDA.toBase58(), role: AccountRole.WRITABLE },
+          { address: vault.toBase58(), role: AccountRole.WRITABLE },
+          { address: creatorTokenAccount.toBase58(), role: AccountRole.WRITABLE },
+          { address: TOKEN_PROGRAM_ID.toBase58(), role: AccountRole.READONLY },
+        ])
+      );
+    }
+
+    const txMsg = this._buildTxMessage(
+      kitIx,
+      blockhash,
+      lastValidBlockHeight,
+      wrapInstructions,
+      trailingKitInstructions
+    );
 
     onStatus?.("sending");
     const signature = await signAndSend(txMsg, this.walletSignerMode, this.connection, this.commitment);
@@ -612,7 +705,8 @@ export class UnifiedFlowClient {
     kitIx: any,
     blockhash: string,
     lastValidBlockHeight: number,
-    extraLeadingInstructions: anchor.web3.TransactionInstruction[] = []
+    extraLeadingInstructions: anchor.web3.TransactionInstruction[] = [],
+    extraTrailingKitInstructions: any[] = []
   ) {
     let txMsg: any = setTransactionMessageFeePayerSigner(
       this.kitSigner,
@@ -622,6 +716,9 @@ export class UnifiedFlowClient {
       txMsg = appendTransactionMessageInstruction(this._toKitInstructionAuto(ix), txMsg);
     }
     txMsg = appendTransactionMessageInstruction(kitIx, txMsg);
+    for (const trailingKitIx of extraTrailingKitInstructions) {
+      txMsg = appendTransactionMessageInstruction(trailingKitIx, txMsg);
+    }
     txMsg = setTransactionMessageLifetimeUsingBlockhash(
       { blockhash: blockhash as any, lastValidBlockHeight: BigInt(lastValidBlockHeight) },
       txMsg
