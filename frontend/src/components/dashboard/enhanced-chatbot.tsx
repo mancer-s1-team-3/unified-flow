@@ -600,7 +600,7 @@ edit_linear:    { label: "Extend Stream",    icon: "📈", color: "bg-teal-600" 
   const widget = (
     <>
       {open && (
-        <div className="fixed bottom-[calc(4rem_+_env(safe-area-inset-bottom)_+_1.5rem)] left-1/2 -translate-x-1/2 z-50 md:bottom-[5.5rem] md:left-auto md:right-6 md:translate-x-0">
+        <div className="fixed bottom-[calc(4rem_+_env(safe-area-inset-bottom)_+_1.5rem)] left-1/2 -translate-x-1/2 z-50 md:bottom-[6.5rem] md:left-auto md:right-6 md:translate-x-0">
           <div
             className={`w-[calc(100vw-2rem)] max-w-[380px] bg-zinc-950 border border-zinc-800 rounded-2xl shadow-2xl overflow-hidden transition-all duration-300 flex flex-col ${
               minimized ? "h-14" : "h-[600px]"
