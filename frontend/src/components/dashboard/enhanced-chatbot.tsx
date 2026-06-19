@@ -600,7 +600,7 @@ edit_linear:    { label: "Extend Stream",    icon: "📈", color: "bg-teal-600" 
   const widget = (
     <>
       {open && (
-        <div className="fixed bottom-[calc(4rem_+_env(safe-area-inset-bottom)_+_1.5rem)] left-1/2 -translate-x-1/2 z-50 md:bottom-[6.5rem] md:left-auto md:right-6 md:translate-x-0">
+        <div className="fixed bottom-[calc(4rem_+_env(safe-area-inset-bottom)_+_1.5rem)] left-1/2 -translate-x-1/2 z-50 md:bottom-[5.5rem] md:left-auto md:right-6 md:translate-x-0">
           <div
             className={`w-[calc(100vw-2rem)] max-w-[380px] bg-zinc-950 border border-zinc-800 rounded-2xl shadow-2xl overflow-hidden transition-all duration-300 flex flex-col ${
               minimized ? "h-14" : "h-[600px]"
@@ -829,7 +829,7 @@ edit_linear:    { label: "Extend Stream",    icon: "📈", color: "bg-teal-600" 
           setOpen(!open);
           setMinimized(false);
         }}
-        className={`fixed bottom-[calc(4rem_+_env(safe-area-inset-bottom)_+_1.5rem)] right-6 z-50 md:bottom-6 group w-14 h-14 rounded-2xl flex items-center justify-center shadow-xl transition-all duration-300 ${
+        className={`fixed bottom-[calc(4rem_+_env(safe-area-inset-bottom)_+_1.5rem)] right-6 z-40 md:bottom-6 group w-14 h-14 rounded-2xl flex items-center justify-center shadow-xl transition-all duration-300 ${
           open
             ? "bg-zinc-800 border border-zinc-700 text-zinc-400 hover:text-zinc-200"
             : "bg-gradient-to-br from-indigo-600 to-purple-600 hover:from-indigo-500 hover:to-purple-500 text-white border border-indigo-500/50 hover:shadow-indigo-900/50 hover:scale-105"
