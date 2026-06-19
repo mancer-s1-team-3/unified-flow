@@ -303,72 +303,117 @@ const executeToolWithFeedback = async (toolName: string, args: string) => {
       console.log(`Executing tool: ${toolName}`, parsedArgs);
 
       switch (toolName) {
-        case "create_stream": {
-          const {
-            recipient,
-            mint,
-            amount,
-            start_ts,
-            cliff_ts,
-            end_ts,
-            vesting_type = 0,
-            milestones = [],
-          } = parsedArgs;
+   case "create_stream": {
+  const {
+    recipient,
+    mint,
+    amount,
+    start_ts,
+    cliff_ts,
+    end_ts,
+    vesting_type = 0,
+    milestones = [],
+  } = parsedArgs;
 
-          const vestingType = Number(vesting_type);
-          if (![0, 1, 2].includes(vestingType)) {
-            return { success: false, message: "Invalid vesting type (expected 0=linear, 1=cliff, 2=milestone)." };
-          }
+  const vestingType = Number(vesting_type);
 
-          // Validate recipient up front; resolve the mint to the active cluster's
-          // real address (handles "USDC"/symbols and mainnet-vs-devnet addresses).
-          const recipientStr = String(recipient ?? "").trim();
-          toPublicKey(recipientStr, "recipient");
-          const resolvedMint = resolveMintInput(String(mint ?? ""), endpoint);
+  if (![0, 1, 2].includes(vestingType)) {
+    return {
+      success: false,
+      message:
+        "Invalid vesting type (expected 0=linear, 1=cliff, 2=milestone).",
+    };
+  }
 
-          // The model hands absolute timestamps; we trust only the relative span
-          // (end - start) and start "now". Route through the dashboard's proven
-          // createStreamOnChain so we reuse browser-safe PDA derivation, balance
-          // checks, wSOL auto-wrap and ATA handling — none of which the SDK's
-          // createStream does (that path kept failing: swapped accounts, the
-          // writeBigUInt64LE nonce bug, missing-ATA, etc.).
-          const startNum = toUnixSeconds(start_ts, "start time").toNumber();
-          const endNum = toUnixSeconds(end_ts, "end time").toNumber();
-          const durationSecs = endNum - startNum;
-          if (durationSecs <= 0) {
-            return { success: false, message: "End time must be after start time." };
-          }
-          const cliffNum = cliff_ts != null ? toUnixSeconds(cliff_ts, "cliff time").toNumber() : 0;
-          const cliffDuration = vestingType === 1 ? Math.max(cliffNum - startNum, 0) : 0;
+  const recipientPk = toPublicKey(
+    recipient,
+    "recipient"
+  );
 
-          if (vestingType === 2 && (!Array.isArray(milestones) || milestones.length === 0)) {
-            return { success: false, message: "Milestone vesting requires a non-empty milestones array." };
-          }
-          const milestoneAmounts =
-            vestingType === 2 && Array.isArray(milestones)
-              ? (milestones as unknown[]).map((m) => {
-                  const amt = m && typeof m === "object" ? (m as Record<string, unknown>).amount : m;
-                  return String(amt ?? "0");
-                })
-              : [];
+  const resolvedMint = resolveMintInput(
+    String(mint ?? ""),
+    endpoint
+  );
 
-          const result = await createStreamOnChain({
-            wallet: wallet as unknown as WalletSession,
-            endpoint,
-            input: {
-              recipient: recipientStr,
-              amount: String(amount ?? ""),
-              mint: resolvedMint,
-              type: String(vestingType),
-              startDate: "", // start ~now; avoids drift from the model's clock
-              duration: String(durationSecs),
-              cliffDuration: String(cliffDuration),
-              milestoneCount: String(milestoneAmounts.length),
-              milestoneAmounts,
-            },
-          });
-          return { success: true, message: `Stream created! Tx: ${result.signature}` };
-        }
+  const mintPk = new PublicKey(resolvedMint);
+
+  const decimals = await fetchMintDecimals(
+    mintPk
+  );
+
+  const amountBn = toBaseUnitsBN(
+    amount,
+    decimals,
+    "stream amount"
+  );
+
+  const startTsBn = toUnixSeconds(
+    start_ts,
+    "start time"
+  );
+
+  const cliffTsBn = toUnixSeconds(
+    cliff_ts,
+    "cliff time"
+  );
+
+  const endTsBn = toUnixSeconds(
+    end_ts,
+    "end time"
+  );
+
+  if (endTsBn.lte(startTsBn)) {
+    return {
+      success: false,
+      message:
+        "End time must be after start time.",
+    };
+  }
+
+  const milestoneInputs =
+    vestingType === 2
+      ? (Array.isArray(milestones)
+          ? milestones
+          : []
+        ).map((m) => {
+          const milestone =
+            m as Record<string, unknown>;
+
+          return {
+            amount: toBaseUnitsBN(
+              milestone.amount,
+              decimals,
+              "milestone amount"
+            ),
+            unlocked: false,
+          };
+        })
+      : [];
+
+  const nonce = new BN(
+    Date.now()
+      .toString()
+      .slice(-10)
+  );
+
+  const result =
+    await client.createStream(
+      recipientPk,
+      mintPk,
+      amountBn,
+      startTsBn,
+      cliffTsBn,
+      endTsBn,
+      vestingType,
+      milestoneInputs,
+      nonce
+    );
+
+  return {
+    success: true,
+    message: `Stream created! Tx: ${result.signature}`,
+  };
+}
 
         case "withdraw_stream": {
           const { stream_pda } = parsedArgs;
