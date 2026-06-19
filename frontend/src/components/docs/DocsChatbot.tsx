@@ -152,14 +152,14 @@ export function DocsChatbot() {
     setShowSuggestions(true);
   };
 
-  const widget = (
-    <div className="fixed bottom-6 right-6 z-50 flex flex-col items-end gap-3">
-      {open && (
-        <div
-          className={`w-[380px] bg-zinc-950 border border-zinc-800 rounded-2xl shadow-2xl overflow-hidden transition-all duration-300 flex flex-col ${
-            minimized ? "h-14" : "h-[600px]"
-          }`}
-        >
+const widget = (
+  <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 flex flex-col items-center gap-3 md:left-auto md:right-6 md:translate-x-0 md:items-end">
+    {open && (
+      <div
+        className={`w-[calc(100vw-2rem)] max-w-[380px] bg-zinc-950 border border-zinc-800 rounded-2xl shadow-2xl overflow-hidden transition-all duration-300 flex flex-col ${
+          minimized ? "h-14" : "h-[600px]"
+        }`}
+      >
           {!minimized && (
             <>
               <div className="shrink-0 border-b border-zinc-800 p-4 bg-zinc-950">

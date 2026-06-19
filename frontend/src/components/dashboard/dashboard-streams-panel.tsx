@@ -36,9 +36,45 @@ export function DashboardStreamsPanel({
     if (typeof window === "undefined") return false;
     return localStorage.getItem("squads_multisig_enabled") === "true";
   });
-  const [currentPage, setCurrentPage] = useState(1);
-  const itemsPerPage = 5;
+ const [currentPage, setCurrentPage] = useState(1);
+const itemsPerPage = 5;
 
+// ── New filters: status, vesting type, source (csv/manual), role ──────────
+const [filterStatus, setFilterStatus] = useState<string>("all");
+const [filterVestingType, setFilterVestingType] = useState<string>("all");
+const [filterSource, setFilterSource] = useState<string>("all");
+const [filterRole, setFilterRole] = useState<string>("all");
+
+const hasActiveFilters =
+  filterStatus !== "all" || filterVestingType !== "all" || filterSource !== "all" || filterRole !== "all";
+
+const resetFilters = useCallback(() => {
+  setFilterStatus("all");
+  setFilterVestingType("all");
+  setFilterSource("all");
+  setFilterRole("all");
+  setCurrentPage(1);
+}, []);
+
+const handleFilterStatusChange = useCallback((val: string) => {
+  setFilterStatus(val);
+  setCurrentPage(1);
+}, []);
+
+const handleFilterVestingTypeChange = useCallback((val: string) => {
+  setFilterVestingType(val);
+  setCurrentPage(1);
+}, []);
+
+const handleFilterSourceChange = useCallback((val: string) => {
+  setFilterSource(val);
+  setCurrentPage(1);
+}, []);
+
+const handleFilterRoleChange = useCallback((val: string) => {
+  setFilterRole(val);
+  setCurrentPage(1);
+}, []);
   useEffect(() => {
     if (typeof window === "undefined") return;
 
@@ -98,38 +134,83 @@ export function DashboardStreamsPanel({
   }, [streams]);
 
   const filteredStreams = useMemo(() => {
-    const query = deferredSearchQuery.trim().toLowerCase();
-    const squadsAddress = deferredFilterSquadsAddress.trim().toLowerCase();
-    const creatorAddress = connectedWalletAddress?.trim() ?? null;
-    return streams.filter((stream) => {
-      const matchesSearch =
-        query === "" ||
-        stream.id.toLowerCase().includes(query) ||
-        stream.creator.toLowerCase().includes(query) ||
-        stream.recipient.toLowerCase().includes(query) ||
-        stream.mint.toLowerCase().includes(query);
+  const query = deferredSearchQuery.trim().toLowerCase();
+  const squadsAddress = deferredFilterSquadsAddress.trim().toLowerCase();
+  const creatorAddress = connectedWalletAddress?.trim() ?? null;
 
-      // If search query is active, bypass wallet filter — allows share links to work
-      if (query !== "") return matchesSearch;
+  // Status: 0 = Active, 1 = Completed, 3 = Cancelled (matches `cancelled`/status===3
+  // pattern used elsewhere in the dashboard). Adjust mapping here if the indexer
+  // uses different numeric codes.
+  const matchesStatus = (stream: any) => {
+    if (filterStatus === "all") return true;
+    const status = Number(stream.status);
+    const isCancelled = stream.cancelled === true || status === 3;
+    if (filterStatus === "cancelled") return isCancelled;
+    if (filterStatus === "completed") return !isCancelled && status === 1;
+    if (filterStatus === "active") return !isCancelled && status !== 1;
+    return true;
+  };
 
-      if (showOnlySquads && squadsAddress !== "") {
-        const isSquadsAssociated =
-          stream.creator === squadsAddress ||
-          stream.recipient === squadsAddress;
-        return matchesSearch && isSquadsAssociated;
-      }
+  const matchesVestingType = (stream: any) => {
+    if (filterVestingType === "all") return true;
+    return String(stream.vestingType) === filterVestingType;
+  };
 
-      if (creatorAddress) {
-        const isWalletRelated =
-          stream.creator === creatorAddress ||
-          stream.recipient === creatorAddress;
-        return matchesSearch && isWalletRelated;
-      }
+  const matchesSource = (stream: any) => {
+    if (filterSource === "all") return true;
+    const isCsv = stream.isCsvCreated === true;
+    return filterSource === "csv" ? isCsv : !isCsv;
+  };
 
-      return false;
-    });
-  }, [connectedWalletAddress, deferredSearchQuery, deferredFilterSquadsAddress, showOnlySquads, streams]);
+  const matchesRole = (stream: any) => {
+    if (filterRole === "all" || !creatorAddress) return true;
+    if (filterRole === "creator") return stream.creator === creatorAddress;
+    if (filterRole === "recipient") return stream.recipient === creatorAddress;
+    return true;
+  };
 
+  return streams.filter((stream) => {
+    const matchesSearch =
+      query === "" ||
+      stream.id.toLowerCase().includes(query) ||
+      stream.creator.toLowerCase().includes(query) ||
+      stream.recipient.toLowerCase().includes(query) ||
+      stream.mint.toLowerCase().includes(query);
+
+    const matchesDropdownFilters =
+      matchesStatus(stream) && matchesVestingType(stream) && matchesSource(stream) && matchesRole(stream);
+
+    // If search query is active, bypass wallet/Squads filter — allows share links
+    // to work — but dropdown filters still apply on top of the search match.
+    if (query !== "") return matchesSearch && matchesDropdownFilters;
+
+    if (showOnlySquads && squadsAddress !== "") {
+      const isSquadsAssociated =
+        stream.creator === squadsAddress ||
+        stream.recipient === squadsAddress;
+      return matchesSearch && isSquadsAssociated && matchesDropdownFilters;
+    }
+
+    if (creatorAddress) {
+      const isWalletRelated =
+        stream.creator === creatorAddress ||
+        stream.recipient === creatorAddress;
+      return matchesSearch && isWalletRelated && matchesDropdownFilters;
+    }
+
+    return false;
+  });
+}, [
+  connectedWalletAddress,
+  deferredSearchQuery,
+  deferredFilterSquadsAddress,
+  showOnlySquads,
+  streams,
+  filterStatus,
+  filterVestingType,
+  filterSource,
+  filterRole,
+]);
   const totalPages = useMemo(() => Math.ceil(filteredStreams.length / itemsPerPage), [filteredStreams.length]);
   const safeCurrentPage = Math.min(currentPage, Math.max(totalPages, 1));
   const paginatedStreams = useMemo(() => filteredStreams.slice((safeCurrentPage - 1) * itemsPerPage, safeCurrentPage * itemsPerPage), [filteredStreams, safeCurrentPage]);
@@ -207,7 +288,83 @@ export function DashboardStreamsPanel({
           />
         </div>
       </div>
+<div className="flex flex-col sm:flex-row sm:items-center gap-3 mb-6 bg-zinc-950/45 border border-zinc-900 rounded-2xl p-4">
+  <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 flex-1 w-full">
+    <div>
+      <label className="block text-[10px] font-bold uppercase tracking-wider text-zinc-500 mb-1.5">
+        Status
+      </label>
+      <select
+        value={filterStatus}
+        onChange={(e) => handleFilterStatusChange(e.target.value)}
+        className="w-full bg-zinc-900 border border-zinc-800 rounded-xl px-3 py-2 text-xs text-zinc-200 focus:outline-none focus:border-indigo-500 cursor-pointer"
+      >
+        <option value="all">All Status</option>
+        <option value="active">Active</option>
+        <option value="completed">Completed</option>
+        <option value="cancelled">Cancelled</option>
+      </select>
+    </div>
 
+    <div>
+      <label className="block text-[10px] font-bold uppercase tracking-wider text-zinc-500 mb-1.5">
+        Vesting Type
+      </label>
+      <select
+        value={filterVestingType}
+        onChange={(e) => handleFilterVestingTypeChange(e.target.value)}
+        className="w-full bg-zinc-900 border border-zinc-800 rounded-xl px-3 py-2 text-xs text-zinc-200 focus:outline-none focus:border-indigo-500 cursor-pointer"
+      >
+        <option value="all">All Types</option>
+        <option value="0">Linear</option>
+        <option value="1">Cliff</option>
+        <option value="2">Milestone</option>
+      </select>
+    </div>
+
+    <div>
+      <label className="block text-[10px] font-bold uppercase tracking-wider text-zinc-500 mb-1.5">
+        Source
+      </label>
+      <select
+        value={filterSource}
+        onChange={(e) => handleFilterSourceChange(e.target.value)}
+        className="w-full bg-zinc-900 border border-zinc-800 rounded-xl px-3 py-2 text-xs text-zinc-200 focus:outline-none focus:border-indigo-500 cursor-pointer"
+      >
+        <option value="all">All Sources</option>
+        <option value="csv">CSV Bulk</option>
+        <option value="manual">Manual</option>
+      </select>
+    </div>
+
+    <div>
+      <label className="block text-[10px] font-bold uppercase tracking-wider text-zinc-500 mb-1.5">
+        My Role
+      </label>
+      <select
+        value={filterRole}
+        onChange={(e) => handleFilterRoleChange(e.target.value)}
+        disabled={!connectedWalletAddress}
+        className={`w-full bg-zinc-900 border rounded-xl px-3 py-2 text-xs focus:outline-none focus:border-indigo-500 cursor-pointer ${
+          connectedWalletAddress ? "border-zinc-800 text-zinc-200" : "border-zinc-850 text-zinc-650 opacity-45 cursor-not-allowed"
+        }`}
+      >
+        <option value="all">Any Role</option>
+        <option value="creator">Creator</option>
+        <option value="recipient">Recipient</option>
+      </select>
+    </div>
+  </div>
+
+  {hasActiveFilters && (
+    <button
+      onClick={resetFilters}
+      className="shrink-0 self-start sm:self-end px-3 py-2 border border-zinc-800 bg-zinc-900 hover:bg-zinc-800 text-zinc-400 hover:text-zinc-100 rounded-xl transition-all text-xs font-semibold whitespace-nowrap"
+    >
+      Reset filters
+    </button>
+  )}
+</div>
       {loading && streams.length === 0 ? (
         <div className="flex flex-col items-center justify-center py-20 text-zinc-400 gap-3">
           <RefreshCw className="w-8 h-8 animate-spin text-indigo-500" />
@@ -227,11 +384,13 @@ export function DashboardStreamsPanel({
             <>
               <Layers className="w-10 h-10 text-zinc-700 mb-3" />
               <span className="text-xs font-bold text-zinc-300">No matching streams indexed</span>
-              <span className="text-[10px] text-zinc-500 max-w-xs text-center mt-1">
-                {connectedWalletAddress
-                  ? "Only streams created or received by your connected wallet are shown here unless Squads View is enabled."
-                  : "Connect a wallet to show your created streams, or enable Squads View and paste a Squads multisig address."}
-              </span>
+            <span className="text-[10px] text-zinc-500 max-w-xs text-center mt-1">
+  {hasActiveFilters
+    ? "No streams match the current filters. Try resetting them."
+    : connectedWalletAddress
+    ? "Only streams created or received by your connected wallet are shown here unless Squads View is enabled."
+    : "Connect a wallet to show your created streams, or enable Squads View and paste a Squads multisig address."}
+</span>
             </>
           )}
         </div>
