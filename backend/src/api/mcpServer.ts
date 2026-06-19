@@ -807,7 +807,103 @@ server.tool(
         }
     }
 );
+server.tool(
+    "edit_linear",
+    "Extend a linear/cliff stream duration and/or top up additional tokens.",
+    {
+        streamAddress: z.string().describe("Public key of the stream"),
+        newEndTs: z.number().int().optional().describe(
+            "New stream end timestamp (unix seconds)"
+        ),
+        topupAmount: z.string().optional().describe(
+            "Additional token amount to add"
+        ),
+        signerSecret: z.string().optional(),
+    },
+    async ({ streamAddress, newEndTs, topupAmount, signerSecret }) => {
+        try {
+            const creator = getSigner(signerSecret);
+            const program = getAnchorProgram(creator);
+            const programAccount: any = program.account;
 
+            const streamPubkey = new PublicKey(streamAddress);
+            const streamState: any =
+                await programAccount.streamAccount.fetch(streamPubkey);
+
+            if (
+                streamState.creator.toBase58() !== creator.publicKey.toBase58()
+            ) {
+                throw new Error(
+                    `Signer (${creator.publicKey.toBase58()}) is not the stream creator (${streamState.creator.toBase58()})`
+                );
+            }
+
+            const mint = streamState.mint;
+            const vault = streamState.vault;
+
+            const creatorTokenAccount =
+                await getAssociatedTokenAddress(
+                    mint,
+                    creator.publicKey,
+                    true
+                );
+
+            const [configPda] = PublicKey.findProgramAddressSync(
+                [Buffer.from("config")],
+                PROGRAM_ID
+            );
+
+            const endTsBN = new anchor.BN(
+                newEndTs ?? streamState.endTs.toNumber()
+            );
+
+            const topupBN = new anchor.BN(
+                topupAmount ?? "0"
+            );
+
+            const tx = await program.methods
+                .editLinear(
+                    endTsBN,
+                    topupBN
+                )
+                .accounts({
+                    creator: creator.publicKey,
+                    mint,
+                    config: configPda,
+                    stream: streamPubkey,
+                    vault,
+                    creatorTokenAccount,
+                    tokenProgram: TOKEN_PROGRAM_ID,
+                })
+                .signers([creator])
+                .rpc();
+
+            return {
+                content: [{
+                    type: "text",
+                    text: JSON.stringify({
+                        message: "Successfully edited stream!",
+                        streamAddress,
+                        newEndTs: endTsBN.toString(),
+                        topupAmount: topupBN.toString(),
+                        signature: tx,
+                        explorer:
+                            `https://explorer.solana.com/tx/${tx}?cluster=devnet`,
+                    }, null, 2),
+                }],
+            };
+        } catch (error: any) {
+            return {
+                content: [{
+                    type: "text",
+                    text: `Error editing stream: ${error.message || error}`,
+                }],
+                isError: true,
+            };
+        }
+    }
+
+);
 // ============================================================================
 // 10. INITIALIZE PROTOCOL CONFIG (ADMIN CONFIG INITIALIZATION)
 // ============================================================================
