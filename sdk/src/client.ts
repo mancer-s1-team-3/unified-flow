@@ -5,6 +5,7 @@ import {
   ASSOCIATED_TOKEN_PROGRAM_ID,
   getAssociatedTokenAddressSync,
 } from "@solana/spl-token";
+import { buildWsolWrapInstructions, isWrappedSolMint } from "./wsol-node";
 import {
   AccountRole,
   appendTransactionMessageInstruction,
@@ -149,6 +150,17 @@ export class UnifiedFlowClient {
     const vault = getVaultATA(mint, stream);
     const creatorTokenAccount = getAssociatedTokenAddressSync(mint, creator, true);
 
+    // ── WSOL wrap: top up native SOL → WSOL ATA before the program draws funds ──
+    const wrapInstructions = isWrappedSolMint(mint)
+      ? await buildWsolWrapInstructions({
+        connection: this.connection,
+        owner: creator,
+        payer: creator,
+        amountBn: amount,
+        commitment: this.commitment,
+      })
+      : [];
+
     let methodBuilder = this.program.methods
       .createStream(amount, startTs, cliffTs, endTs, vestingType, milestones, nonce)
       .accounts({
@@ -186,7 +198,7 @@ export class UnifiedFlowClient {
       { address: ASSOCIATED_TOKEN_PROGRAM_ID.toBase58(), role: AccountRole.READONLY },
     ]);
 
-    const txMsg = this._buildTxMessage(kitIx, blockhash, lastValidBlockHeight);
+    const txMsg = this._buildTxMessage(kitIx, blockhash, lastValidBlockHeight, wrapInstructions);
 
     onStatus?.("sending");
     const signature = await signAndSend(txMsg, this.walletSignerMode, this.connection, this.commitment);
@@ -383,6 +395,22 @@ export class UnifiedFlowClient {
     const vault = getVaultATA(mint, streamPDA);
     const creatorTokenAccount = getAssociatedTokenAddressSync(mint, creator, true);
 
+    // ── WSOL wrap for a top-up (new amount > current milestone amount) ──
+    const milestoneAny: any = await programAny.account.milestoneAccount.fetch(milestonePDA);
+    const oldAmount = new anchor.BN(String(milestoneAny.amount));
+    const topUpDiff = newAmount.gt(oldAmount) ? newAmount.sub(oldAmount) : new anchor.BN(0);
+
+    const wrapInstructions =
+      isWrappedSolMint(mint) && topUpDiff.gt(new anchor.BN(0))
+        ? await buildWsolWrapInstructions({
+          connection: this.connection,
+          owner: creator,
+          payer: creator,
+          amountBn: topUpDiff,
+          commitment: this.commitment,
+        })
+        : [];
+
     const anchorIx = await this.program.methods
       .editMilestone(newAmount)
       .accounts({
@@ -410,7 +438,7 @@ export class UnifiedFlowClient {
       { address: TOKEN_PROGRAM_ID.toBase58(), role: AccountRole.READONLY },
     ]);
 
-    const txMsg = this._buildTxMessage(kitIx, blockhash, lastValidBlockHeight);
+    const txMsg = this._buildTxMessage(kitIx, blockhash, lastValidBlockHeight, wrapInstructions);
 
     onStatus?.("sending");
     const signature = await signAndSend(txMsg, this.walletSignerMode, this.connection, this.commitment);
@@ -494,6 +522,18 @@ export class UnifiedFlowClient {
     const vault = getVaultATA(mint, streamPDA);
     const creatorTokenAccount = getAssociatedTokenAddressSync(mint, creator, true);
 
+    // ── WSOL wrap for the top-up portion only ──
+    const wrapInstructions =
+      isWrappedSolMint(mint) && topupAmount.gt(new anchor.BN(0))
+        ? await buildWsolWrapInstructions({
+          connection: this.connection,
+          owner: creator,
+          payer: creator,
+          amountBn: topupAmount,
+          commitment: this.commitment,
+        })
+        : [];
+
     const anchorIx = await this.program.methods
       .editLinear(newEndTs, topupAmount)
       .accounts({
@@ -521,7 +561,7 @@ export class UnifiedFlowClient {
       { address: TOKEN_PROGRAM_ID.toBase58(), role: AccountRole.READONLY },
     ]);
 
-    const txMsg = this._buildTxMessage(kitIx, blockhash, lastValidBlockHeight);
+    const txMsg = this._buildTxMessage(kitIx, blockhash, lastValidBlockHeight, wrapInstructions);
 
     onStatus?.("sending");
     const signature = await signAndSend(txMsg, this.walletSignerMode, this.connection, this.commitment);
@@ -545,11 +585,42 @@ export class UnifiedFlowClient {
     } as any;
   }
 
-  private _buildTxMessage(kitIx: any, blockhash: string, lastValidBlockHeight: number) {
+  // Generic version for instructions whose account list we don't hand-build
+  // (e.g. wrap instructions from @solana/spl-token helpers). Marks any key
+  // matching our own signer's address as the wallet signer automatically.
+  private _toKitInstructionAuto(ix: anchor.web3.TransactionInstruction) {
+    const ownerAddress = new PublicKey(this.wallet.account.address.toString()).toBase58();
+    return {
+      programAddress: ix.programId.toBase58(),
+      accounts: ix.keys.map((k) => {
+        const address = k.pubkey.toBase58();
+        const isOwnerSigner = k.isSigner && address === ownerAddress;
+        const role = k.isWritable
+          ? (k.isSigner ? AccountRole.WRITABLE_SIGNER : AccountRole.WRITABLE)
+          : (k.isSigner ? AccountRole.READONLY_SIGNER : AccountRole.READONLY);
+        return {
+          address,
+          role,
+          ...(isOwnerSigner ? { signer: this.kitSigner } : {}),
+        };
+      }),
+      data: ix.data,
+    } as any;
+  }
+
+  private _buildTxMessage(
+    kitIx: any,
+    blockhash: string,
+    lastValidBlockHeight: number,
+    extraLeadingInstructions: anchor.web3.TransactionInstruction[] = []
+  ) {
     let txMsg: any = setTransactionMessageFeePayerSigner(
       this.kitSigner,
       createTransactionMessage({ version: 0 })
     );
+    for (const ix of extraLeadingInstructions) {
+      txMsg = appendTransactionMessageInstruction(this._toKitInstructionAuto(ix), txMsg);
+    }
     txMsg = appendTransactionMessageInstruction(kitIx, txMsg);
     txMsg = setTransactionMessageLifetimeUsingBlockhash(
       { blockhash: blockhash as any, lastValidBlockHeight: BigInt(lastValidBlockHeight) },
@@ -558,3 +629,4 @@ export class UnifiedFlowClient {
     return txMsg;
   }
 }
+
