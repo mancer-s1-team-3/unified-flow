@@ -192,9 +192,7 @@ export function DocsChatbot() {
                       </div>
                     </div>
                     <div className="flex items-center gap-2">
-                      <button onClick={() => setMinimized(true)} className="p-1.5 rounded-lg hover:bg-zinc-800 text-zinc-400 hover:text-white transition-colors">
-                        <ChevronDown className="w-4 h-4" />
-                      </button>
+                    
                       <button onClick={() => setOpen(false)} className="p-1.5 rounded-lg hover:bg-zinc-800 text-zinc-400 hover:text-white transition-colors">
                         <X className="w-4 h-4" />
                       </button>

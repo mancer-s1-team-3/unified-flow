@@ -638,12 +638,7 @@ edit_linear:    { label: "Extend Stream",    icon: "📈", color: "bg-teal-600" 
                       </div>
                     </div>
                     <div className="flex items-center gap-2">
-                      <button
-                        onClick={() => setMinimized(true)}
-                        className="p-1.5 rounded-lg hover:bg-zinc-800 text-zinc-400 hover:text-white transition-colors"
-                      >
-                        <ChevronDown className="w-4 h-4" />
-                      </button>
+          
                       <button
                         onClick={() => setOpen(false)}
                         className="p-1.5 rounded-lg hover:bg-zinc-800 text-zinc-400 hover:text-white transition-colors"
