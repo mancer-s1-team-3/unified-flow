@@ -13,6 +13,7 @@ import {
     ASSOCIATED_TOKEN_PROGRAM_ID,
     getAssociatedTokenAddress,
     getOrCreateAssociatedTokenAccount,
+    createAssociatedTokenAccountIdempotentInstruction,
 } from "@solana/spl-token";
 import bs58 from "bs58";
 import fs from "fs";
@@ -21,6 +22,12 @@ import path from "path";
 
 import { connection } from "../services/rpc";
 import idl from "../idl/unified_flow.json";
+// Node-safe WSOL helpers from the SDK (anchor/spl-token/web3 only — no browser
+// kit deps). Single source of truth for SOL→wSOL auto-wrap across all paths.
+import {
+    buildWsolWrapInstructions,
+    isWrappedSolMint,
+} from "@unifiedflow/unified-flow-sdk/dist/wsol-node";
 
 dotenv.config();
 
@@ -375,6 +382,17 @@ server.tool(
                 }
             }
 
+            // 6b. Auto-wrap SOL → wSOL when streaming native SOL, so the
+            // creator's wSOL ATA holds enough before the program draws funds.
+            const wrapInstructions = isWrappedSolMint(mintPubkey)
+                ? await buildWsolWrapInstructions({
+                    connection,
+                    owner: creator.publicKey,
+                    payer: creator.publicKey,
+                    amountBn: amountBN,
+                })
+                : [];
+
             // 7. Execute createStream transaction
             const tx = await program.methods
                 .createStream(
@@ -398,6 +416,7 @@ server.tool(
                     associatedTokenProgram: ASSOCIATED_TOKEN_PROGRAM_ID,
                     systemProgram: SystemProgram.programId,
                 })
+                .preInstructions(wrapInstructions)
                 .remainingAccounts(remainingAccounts)
                 .signers([creator])
                 .rpc();
@@ -463,18 +482,24 @@ server.tool(
             );
             const feeReceiver = PublicKey.findProgramAddressSync([Buffer.from("fee_vault")], PROGRAM_ID)[0];
 
-            // 2. Recipient ATA
+            // 2. Recipient ATA (ensure it exists — a fresh wSOL recipient may
+            // not have one yet, which would make withdraw fail).
             const recipientAta = await getAssociatedTokenAddress(mint, recipient.publicKey, true);
+            const ensureRecipientAtaIx = createAssociatedTokenAccountIdempotentInstruction(
+                recipient.publicKey,
+                recipientAta,
+                recipient.publicKey,
+                mint,
+                TOKEN_PROGRAM_ID,
+                ASSOCIATED_TOKEN_PROGRAM_ID
+            );
 
             // 3. Fixed Chainlink feed & Program constraints
             const chainlinkFeed = new PublicKey("99B2bTijsU6f1GCT73HmdR7HCFFjGMBcPZY6jZ96ynrR");
 
-            // 4. Unique counter sequence number (passed to Anchor withdraw function arg)
-            const seqNumber = new anchor.BN(Math.floor(Math.random() * 100000));
-
-            // 5. Run withdraw
+            // 4. Run withdraw (program takes no args; fee account is the fee_vault PDA).
             const tx = await program.methods
-                .withdraw(seqNumber)
+                .withdraw()
                 .accounts({
                     recipient: recipient.publicKey,
                     mint: mint,
@@ -482,11 +507,12 @@ server.tool(
                     stream: streamPubkey,
                     vault: vault,
                     recipientAta: recipientAta,
-                    feeReceiver: feeReceiver,
+                    feeVault: feeReceiver,
                     chainlinkFeed: chainlinkFeed,
                     tokenProgram: TOKEN_PROGRAM_ID,
                     systemProgram: SystemProgram.programId,
                 } as any)
+                .preInstructions([ensureRecipientAtaIx])
                 .signers([recipient])
                 .rpc();
 
@@ -542,20 +568,48 @@ server.tool(
             const mint = streamState.mint;
             const vault = streamState.vault;
 
+            const [configPda] = PublicKey.findProgramAddressSync(
+                [Buffer.from("config")],
+                PROGRAM_ID
+            );
             const creatorTokenAccount = await getAssociatedTokenAddress(mint, creator.publicKey, true);
             const recipientTokenAccount = await getAssociatedTokenAddress(mint, streamState.recipient, true);
+
+            // Ensure both token accounts exist before the payout. For wSOL the
+            // recipient often has no ATA yet — cancel would otherwise fail. The
+            // creator (signer) pays the rent; idempotent = no-op if present.
+            const ensureAtaInstructions = [
+                createAssociatedTokenAccountIdempotentInstruction(
+                    creator.publicKey,
+                    creatorTokenAccount,
+                    creator.publicKey,
+                    mint,
+                    TOKEN_PROGRAM_ID,
+                    ASSOCIATED_TOKEN_PROGRAM_ID
+                ),
+                createAssociatedTokenAccountIdempotentInstruction(
+                    creator.publicKey,
+                    recipientTokenAccount,
+                    streamState.recipient,
+                    mint,
+                    TOKEN_PROGRAM_ID,
+                    ASSOCIATED_TOKEN_PROGRAM_ID
+                ),
+            ];
 
             const tx = await program.methods
                 .cancel()
                 .accounts({
                     creator: creator.publicKey,
                     mint,
+                    config: configPda,
                     stream: streamPubkey,
                     vault,
                     creatorTokenAccount,
                     recipientTokenAccount,
                     tokenProgram: TOKEN_PROGRAM_ID,
                 })
+                .preInstructions(ensureAtaInstructions)
                 .signers([creator])
                 .rpc();
 
@@ -707,6 +761,31 @@ server.tool(
             const creatorTokenAccount = await getAssociatedTokenAddress(mint, creator.publicKey, true);
             const amountBN = new anchor.BN(newAmount);
 
+            // Top-up (new > old): wrap SOL → wSOL (also creates the creator ATA).
+            // Otherwise (decrease/equal): the program refunds freed tokens to the
+            // creator ATA, so ensure it exists first (a wSOL creator may have
+            // closed it). Idempotent = no-op when present.
+            const oldAmountBN = new anchor.BN(oldAmount);
+            const topUpDiff = amountBN.gt(oldAmountBN) ? amountBN.sub(oldAmountBN) : new anchor.BN(0);
+            const wrapInstructions =
+                isWrappedSolMint(mint) && topUpDiff.gt(new anchor.BN(0))
+                    ? await buildWsolWrapInstructions({
+                        connection,
+                        owner: creator.publicKey,
+                        payer: creator.publicKey,
+                        amountBn: topUpDiff,
+                    })
+                    : [
+                        createAssociatedTokenAccountIdempotentInstruction(
+                            creator.publicKey,
+                            creatorTokenAccount,
+                            creator.publicKey,
+                            mint,
+                            TOKEN_PROGRAM_ID,
+                            ASSOCIATED_TOKEN_PROGRAM_ID
+                        ),
+                    ];
+
             const tx = await program.methods
                 .editMilestone(amountBN)
                 .accounts({
@@ -718,6 +797,7 @@ server.tool(
                     creatorTokenAccount: creatorTokenAccount,
                     tokenProgram: TOKEN_PROGRAM_ID,
                 })
+                .preInstructions(wrapInstructions)
                 .signers([creator])
                 .rpc();
 
@@ -774,11 +854,16 @@ server.tool(
                 );
             }
 
+            const [configPda] = PublicKey.findProgramAddressSync(
+                [Buffer.from("config")],
+                PROGRAM_ID
+            );
             const newCliffBN = new anchor.BN(newCliffTs);
             const tx = await program.methods
                 .editCliff(newCliffBN)
                 .accounts({
                     creator: creator.publicKey,
+                    config: configPda,
                     stream: streamPubkey,
                 })
                 .signers([creator])
@@ -861,6 +946,17 @@ server.tool(
                 topupAmount ?? "0"
             );
 
+            // Auto-wrap SOL → wSOL for the top-up portion when streaming native SOL.
+            const wrapInstructions =
+                isWrappedSolMint(mint) && topupBN.gt(new anchor.BN(0))
+                    ? await buildWsolWrapInstructions({
+                        connection,
+                        owner: creator.publicKey,
+                        payer: creator.publicKey,
+                        amountBn: topupBN,
+                    })
+                    : [];
+
             const tx = await program.methods
                 .editLinear(
                     endTsBN,
@@ -875,6 +971,7 @@ server.tool(
                     creatorTokenAccount,
                     tokenProgram: TOKEN_PROGRAM_ID,
                 })
+                .preInstructions(wrapInstructions)
                 .signers([creator])
                 .rpc();
 

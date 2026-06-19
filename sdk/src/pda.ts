@@ -20,9 +20,12 @@ export function getStreamPDA(
   nonce: BN,
   programId: PublicKey = UNIFIED_FLOW_PROGRAM_ID
 ): [PublicKey, number] {
-  const nonceBuffer = Buffer.alloc(8);
-  nonceBuffer.writeBigUInt64LE(BigInt(nonce.toString()));
-  
+  // Use BN.toArrayLike rather than Buffer.writeBigUInt64LE: the latter is absent
+  // from some browser Buffer polyfills (throws "writeBigUInt64LE is not a
+  // function"). toArrayLike(...,"le",8) yields the same 8-byte LE buffer and
+  // matches the dashboard/MCP/CLI derivations.
+  const nonceBuffer = nonce.toArrayLike(Buffer, "le", 8);
+
   return PublicKey.findProgramAddressSync(
     [
       Buffer.from("stream"),

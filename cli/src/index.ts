@@ -8,6 +8,7 @@ import {
     TOKEN_PROGRAM_ID,
     ASSOCIATED_TOKEN_PROGRAM_ID,
     getAssociatedTokenAddress,
+    createAssociatedTokenAccountIdempotentInstruction,
 } from "@solana/spl-token";
 import fs from "fs";
 import path from "path";
@@ -15,6 +16,12 @@ import dotenv from "dotenv";
 
 import { connection } from "./services/rpc";
 import idl from "./idl/unified_flow.json";
+// Node-safe WSOL helpers from the SDK (anchor/spl-token/web3 only) — single
+// source of truth for the SOL→wSOL auto-wrap shared with the dashboard & MCP.
+import {
+    buildWsolWrapInstructions,
+    isWrappedSolMint,
+} from "@unifiedflow/unified-flow-sdk/dist/wsol-node";
 
 dotenv.config();
 
@@ -138,6 +145,7 @@ async function createStreamFromRow(row: any) {
     }
 
     logInfo(`Creating stream for recipient ${row.recipient}...`);
+    const wrapInstructions = await wrapSolPreIxs(mintPubkey, amountBN, signer);
     const tx = await program.methods
         .createStream(
             amountBN,
@@ -160,6 +168,7 @@ async function createStreamFromRow(row: any) {
             associatedTokenProgram: ASSOCIATED_TOKEN_PROGRAM_ID,
             systemProgram: SystemProgram.programId,
         })
+        .preInstructions(wrapInstructions)
         .remainingAccounts(remainingAccounts)
         .signers([signer])
         .rpc();
@@ -212,6 +221,7 @@ async function editBatchStream(row: any) {
         const [configPda] = PublicKey.findProgramAddressSync([Buffer.from("config")], PROGRAM_ID);
 
         logInfo(`Editing linear stream ${row.id}...`);
+        const wrapInstructions = await wrapSolPreIxs(mint, topupAmount, signer);
         const tx = await program.methods
             .editLinear(newEndTs, topupAmount)
             .accounts({
@@ -223,6 +233,7 @@ async function editBatchStream(row: any) {
                 creatorTokenAccount,
                 tokenProgram: TOKEN_PROGRAM_ID,
             })
+            .preInstructions(wrapInstructions)
             .signers([signer])
             .rpc();
 
@@ -272,9 +283,28 @@ async function editBatchStream(row: any) {
             const vault = streamState.vault;
             const creatorTokenAccount = await getAssociatedTokenAddress(mint, signer.publicKey, true);
 
+            // Top-up (new > current): wrap SOL → wSOL (also creates the creator
+            // ATA). Otherwise (decrease/equal): the program refunds freed tokens
+            // to the creator ATA, so ensure it exists first (idempotent no-op).
+            const newAmountBN = new anchor.BN(amounts[index]);
+            const milestoneState: any = await programAccount.milestoneAccount.fetch(milestonePda);
+            const oldAmountBN = new anchor.BN(String(milestoneState.amount));
+            const topUpDiff = newAmountBN.gt(oldAmountBN) ? newAmountBN.sub(oldAmountBN) : new anchor.BN(0);
+            const wrapPre = await wrapSolPreIxs(mint, topUpDiff, signer);
+            const wrapInstructions = wrapPre.length > 0 ? wrapPre : [
+                createAssociatedTokenAccountIdempotentInstruction(
+                    signer.publicKey,
+                    creatorTokenAccount,
+                    signer.publicKey,
+                    mint,
+                    TOKEN_PROGRAM_ID,
+                    ASSOCIATED_TOKEN_PROGRAM_ID
+                ),
+            ];
+
             logInfo(`Editing milestone #${index} on stream ${row.id}...`);
             const tx = await program.methods
-                .editMilestone(new anchor.BN(amounts[index]))
+                .editMilestone(newAmountBN)
                 .accounts({
                     creator: signer.publicKey,
                     stream: streamPubkey,
@@ -284,6 +314,7 @@ async function editBatchStream(row: any) {
                     creatorTokenAccount,
                     tokenProgram: TOKEN_PROGRAM_ID,
                 })
+                .preInstructions(wrapInstructions)
                 .signers([signer])
                 .rpc();
 
@@ -311,6 +342,18 @@ function getAnchorProgram(signer: Keypair) {
         commitment: "confirmed",
     });
     return new anchor.Program(idl as anchor.Idl, provider);
+}
+
+// SOL→wSOL auto-wrap pre-instructions for native-SOL streams. Returns [] for
+// non-native mints or non-positive amounts; otherwise creates/syncs the wSOL ATA.
+async function wrapSolPreIxs(mint: PublicKey, amountBn: anchor.BN, signer: Keypair) {
+    if (!isWrappedSolMint(mint) || amountBn.lte(new anchor.BN(0))) return [];
+    return buildWsolWrapInstructions({
+        connection,
+        owner: signer.publicKey,
+        payer: signer.publicKey,
+        amountBn,
+    });
 }
 
 // ============================================================================
@@ -510,7 +553,9 @@ ${C_BLUE}${C_BOLD}🌊 Vesting Stream Details:${C_RESET}
                         Buffer.from("stream"),
                         signer.publicKey.toBuffer(),
                         recipientPubkey.toBuffer(),
-                        new anchor.BN(endTs).toArrayLike(Buffer, "le", 8),
+                        // Must match the nonce passed to createStream below, else the
+                        // derived PDA won't match the program's and the tx will fail.
+                        finalNonce.toArrayLike(Buffer, "le", 8),
                     ],
                     PROGRAM_ID
                 );
@@ -530,6 +575,7 @@ ${C_BLUE}${C_BOLD}🌊 Vesting Stream Details:${C_RESET}
                 }
 
                 logInfo("Creating stream on-chain...");
+                const wrapInstructions = await wrapSolPreIxs(mintPubkey, amountBN, signer);
                 const tx = await program.methods
                     .createStream(
                         amountBN,
@@ -552,6 +598,7 @@ ${C_BLUE}${C_BOLD}🌊 Vesting Stream Details:${C_RESET}
                         associatedTokenProgram: ASSOCIATED_TOKEN_PROGRAM_ID,
                         systemProgram: SystemProgram.programId,
                     })
+                    .preInstructions(wrapInstructions)
                     .remainingAccounts(remainingAccounts)
                     .signers([signer])
                     .rpc();
@@ -576,9 +623,20 @@ ${C_BLUE}${C_BOLD}🌊 Vesting Stream Details:${C_RESET}
                 const recipientAta = await getAssociatedTokenAddress(mint, signer.publicKey, true);
 
                 const [configPda] = PublicKey.findProgramAddressSync([Buffer.from("config")], PROGRAM_ID);
-                const feeReceiver = PublicKey.findProgramAddressSync([Buffer.from("fee_vault")], PROGRAM_ID)[0];
+                const feeVault = PublicKey.findProgramAddressSync([Buffer.from("fee_vault")], PROGRAM_ID)[0];
 
                 const chainlinkFeed = new PublicKey("99B2bTijsU6f1GCT73HmdR7HCFFjGMBcPZY6jZ96ynrR");
+
+                // Ensure the recipient's token account exists (idempotent) — a fresh
+                // wSOL recipient may not have one yet, which would make withdraw fail.
+                const ensureRecipientAtaIx = createAssociatedTokenAccountIdempotentInstruction(
+                    signer.publicKey,
+                    recipientAta,
+                    signer.publicKey,
+                    mint,
+                    TOKEN_PROGRAM_ID,
+                    ASSOCIATED_TOKEN_PROGRAM_ID
+                );
 
                 logInfo("Submitting claim/withdrawal transaction...");
                 const tx = await program.methods
@@ -590,11 +648,12 @@ ${C_BLUE}${C_BOLD}🌊 Vesting Stream Details:${C_RESET}
                         stream: streamPubkey,
                         vault: vault,
                         recipientAta: recipientAta,
-                        feeReceiver: feeReceiver,
+                        feeVault: feeVault,
                         chainlinkFeed: chainlinkFeed,
                         tokenProgram: TOKEN_PROGRAM_ID,
                         systemProgram: SystemProgram.programId,
                     } as any)
+                    .preInstructions([ensureRecipientAtaIx])
                     .signers([signer])
                     .rpc();
 
@@ -613,8 +672,30 @@ ${C_BLUE}${C_BOLD}🌊 Vesting Stream Details:${C_RESET}
 
                 const mint = streamState.mint;
                 const vault = streamState.vault;
+                const [configPda] = PublicKey.findProgramAddressSync([Buffer.from("config")], PROGRAM_ID);
                 const creatorTokenAccount = await getAssociatedTokenAddress(mint, signer.publicKey, true);
                 const recipientTokenAccount = await getAssociatedTokenAddress(mint, streamState.recipient, true);
+
+                // Ensure both token accounts exist before payout. For wSOL the
+                // recipient often has no ATA yet — cancel would otherwise fail.
+                const ensureAtaInstructions = [
+                    createAssociatedTokenAccountIdempotentInstruction(
+                        signer.publicKey,
+                        creatorTokenAccount,
+                        signer.publicKey,
+                        mint,
+                        TOKEN_PROGRAM_ID,
+                        ASSOCIATED_TOKEN_PROGRAM_ID
+                    ),
+                    createAssociatedTokenAccountIdempotentInstruction(
+                        signer.publicKey,
+                        recipientTokenAccount,
+                        streamState.recipient,
+                        mint,
+                        TOKEN_PROGRAM_ID,
+                        ASSOCIATED_TOKEN_PROGRAM_ID
+                    ),
+                ];
 
                 logInfo("Cancelling stream on-chain...");
                 const tx = await program.methods
@@ -622,12 +703,14 @@ ${C_BLUE}${C_BOLD}🌊 Vesting Stream Details:${C_RESET}
                     .accounts({
                         creator: signer.publicKey,
                         mint,
+                        config: configPda,
                         stream: streamPubkey,
                         vault,
                         creatorTokenAccount,
                         recipientTokenAccount,
                         tokenProgram: TOKEN_PROGRAM_ID,
                     })
+                    .preInstructions(ensureAtaInstructions)
                     .signers([signer])
                     .rpc();
 
@@ -690,9 +773,28 @@ ${C_BLUE}${C_BOLD}🌊 Vesting Stream Details:${C_RESET}
                 );
                 const creatorTokenAccount = await getAssociatedTokenAddress(mint, signer.publicKey, true);
 
+                // Top-up (new > current): wrap SOL → wSOL (also creates the creator
+                // ATA). Otherwise (decrease/equal): the program refunds freed tokens
+                // to the creator ATA, so ensure it exists first (idempotent no-op).
+                const newAmountBN = new anchor.BN(amtStr);
+                const milestoneState: any = await programAccount.milestoneAccount.fetch(milestonePda);
+                const oldAmountBN = new anchor.BN(String(milestoneState.amount));
+                const topUpDiff = newAmountBN.gt(oldAmountBN) ? newAmountBN.sub(oldAmountBN) : new anchor.BN(0);
+                const wrapPre = await wrapSolPreIxs(mint, topUpDiff, signer);
+                const wrapInstructions = wrapPre.length > 0 ? wrapPre : [
+                    createAssociatedTokenAccountIdempotentInstruction(
+                        signer.publicKey,
+                        creatorTokenAccount,
+                        signer.publicKey,
+                        mint,
+                        TOKEN_PROGRAM_ID,
+                        ASSOCIATED_TOKEN_PROGRAM_ID
+                    ),
+                ];
+
                 logInfo(`Modifying milestone #${idx} allocation to ${amtStr} tokens...`);
                 const tx = await program.methods
-                    .editMilestone(new anchor.BN(amtStr))
+                    .editMilestone(newAmountBN)
                     .accounts({
                         creator: signer.publicKey,
                         stream: streamPubkey,
@@ -702,6 +804,7 @@ ${C_BLUE}${C_BOLD}🌊 Vesting Stream Details:${C_RESET}
                         creatorTokenAccount: creatorTokenAccount,
                         tokenProgram: TOKEN_PROGRAM_ID,
                     })
+                    .preInstructions(wrapInstructions)
                     .signers([signer])
                     .rpc();
 
@@ -735,16 +838,21 @@ ${C_BLUE}${C_BOLD}🌊 Vesting Stream Details:${C_RESET}
                         true
                     );
 
+                const [configPda] = PublicKey.findProgramAddressSync([Buffer.from("config")], PROGRAM_ID);
+                const wrapInstructions = await wrapSolPreIxs(mint, topupAmount, signer);
+
                 const tx = await program.methods
                     .editLinear(newDuration, topupAmount)
                     .accounts({
                         creator: signer.publicKey,
-                        stream: streamPubkey,
                         mint,
+                        config: configPda,
+                        stream: streamPubkey,
                         vault,
                         creatorTokenAccount,
                         tokenProgram: TOKEN_PROGRAM_ID,
                     })
+                    .preInstructions(wrapInstructions)
                     .signers([signer])
                     .rpc();
 

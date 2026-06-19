@@ -18,7 +18,6 @@ import { type Commitment, Connection, PublicKey, VersionedTransaction } from "@s
 import type { WalletSession } from "@solana/client";
 import { getExplorerClusterParam, getProgramIdForEndpoint } from "@/lib/solana/network-config";
 import {
-  buildWsolUnwrapInstructions,
   buildWsolWrapInstructions,
   isWrappedSolMint,
 } from "@/lib/solana/wsol";

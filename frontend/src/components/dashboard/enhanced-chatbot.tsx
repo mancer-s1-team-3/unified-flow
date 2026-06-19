@@ -21,8 +21,6 @@ import { BN } from "@coral-xyz/anchor";
 import { useClusterState, useWalletConnection } from "@solana/react-hooks";
 import { useUnifiedFlowClient } from "@/lib/useUnifiedFlowClient";
 import { resolveMintInput } from "@/components/dashboard/token-mints";
-import { createStreamOnChain } from "@/lib/solana/create-stream";
-import type { WalletSession } from "@solana/client";
 import { useNetwork } from "@/components/wallet/network-context";
 import { getStream } from "@/lib/api";
 
@@ -323,15 +321,13 @@ const executeToolWithFeedback = async (toolName: string, args: string) => {
           // Validate recipient up front; resolve the mint to the active cluster's
           // real address (handles "USDC"/symbols and mainnet-vs-devnet addresses).
           const recipientStr = String(recipient ?? "").trim();
-          toPublicKey(recipientStr, "recipient");
+          const recipientPk = toPublicKey(recipientStr, "recipient");
           const resolvedMint = resolveMintInput(String(mint ?? ""), endpoint);
+          const mintPk = toPublicKey(resolvedMint, "mint");
 
           // The model hands absolute timestamps; we trust only the relative span
-          // (end - start) and start "now". Route through the dashboard's proven
-          // createStreamOnChain so we reuse browser-safe PDA derivation, balance
-          // checks, wSOL auto-wrap and ATA handling — none of which the SDK's
-          // createStream does (that path kept failing: swapped accounts, the
-          // writeBigUInt64LE nonce bug, missing-ATA, etc.).
+          // (end - start) and start "now" — the model can't reliably know "now".
+          // The SDK auto-wraps wSOL and ensures ATAs, so we route through it.
           const startNum = toUnixSeconds(start_ts, "start time").toNumber();
           const endNum = toUnixSeconds(end_ts, "end time").toNumber();
           const durationSecs = endNum - startNum;
@@ -344,29 +340,35 @@ const executeToolWithFeedback = async (toolName: string, args: string) => {
           if (vestingType === 2 && (!Array.isArray(milestones) || milestones.length === 0)) {
             return { success: false, message: "Milestone vesting requires a non-empty milestones array." };
           }
-          const milestoneAmounts =
+
+          // SDK takes base-unit amounts + absolute timestamps + an explicit nonce,
+          // so resolve the mint's on-chain decimals and convert the model's
+          // human-readable amounts ourselves.
+          const decimals = await fetchMintDecimals(mintPk);
+          const amountBase = toBaseUnitsBN(amount, decimals, "amount");
+          const milestoneInputs =
             vestingType === 2 && Array.isArray(milestones)
-              ? (milestones as unknown[]).map((m) => {
+              ? (milestones as unknown[]).map((m, i) => {
                   const amt = m && typeof m === "object" ? (m as Record<string, unknown>).amount : m;
-                  return String(amt ?? "0");
+                  return { amount: toBaseUnitsBN(amt, decimals, `milestone ${i} amount`) };
                 })
               : [];
 
-          const result = await createStreamOnChain({
-            wallet: wallet as unknown as WalletSession,
-            endpoint,
-            input: {
-              recipient: recipientStr,
-              amount: String(amount ?? ""),
-              mint: resolvedMint,
-              type: String(vestingType),
-              startDate: "", // start ~now; avoids drift from the model's clock
-              duration: String(durationSecs),
-              cliffDuration: String(cliffDuration),
-              milestoneCount: String(milestoneAmounts.length),
-              milestoneAmounts,
-            },
-          });
+          // Start a minute out so the start isn't already in the past by the
+          // time the tx lands on-chain (the program rejects past start dates).
+          // Cliff and end stay relative to the start.
+          const startTs = Math.floor(Date.now() / 1000) + 60;
+          const result = await client.createStream(
+            recipientPk,
+            mintPk,
+            amountBase,
+            new BN(startTs),
+            new BN(startTs + cliffDuration),
+            new BN(startTs + durationSecs),
+            vestingType,
+            milestoneInputs,
+            new BN(Date.now())
+          );
           return { success: true, message: `Stream created! Tx: ${result.signature}` };
         }
 

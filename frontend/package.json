@@ -21,7 +21,7 @@
     "@solana/wallet-adapter-wallets": "^0.19.38",
     "@solana/web3.js": "^1.98.4",
     "@tanstack/react-query": "^5.100.10",
-    "@unifiedflow/unified-flow-sdk": "^1.0.9",
+    "@unifiedflow/unified-flow-sdk": "^1.0.10",
     "axios": "^1.16.0",
     "bn.js": "^5.2.3",
     "class-variance-authority": "^0.7.1",
