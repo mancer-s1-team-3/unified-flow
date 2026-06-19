@@ -628,7 +628,6 @@ export async function editMilestoneOnChain({
 
   const oldAmount = milestoneAmounts[milestoneIndex];
   const topUpDiff = newAmount.gt(oldAmount) ? newAmount.sub(oldAmount) : new anchor.BN(0);
-  const refundDiff = newAmount.lt(oldAmount) ? oldAmount.sub(newAmount) : new anchor.BN(0);
 
   const preInstructions =
     isWrappedSolMint(mint) && topUpDiff.gt(new anchor.BN(0))
@@ -641,17 +640,7 @@ export async function editMilestoneOnChain({
       })
       : [];
 
-  const postInstructions =
-    isWrappedSolMint(mint) && refundDiff.gt(new anchor.BN(0))
-      ? await buildWsolUnwrapInstructions({
-        connection,
-        owner: creator,
-        walletSigner,
-        amountBn: refundDiff,
-        sourceAta: creatorTokenAccount,
-        commitment,
-      })
-      : [];
+
 
   const anchorInstruction = await program.methods
     .editMilestone(newAmount)
@@ -672,7 +661,6 @@ export async function editMilestoneOnChain({
     walletSignerMode,
     walletSigner,
     preInstructions,
-    postInstructions,
     anchorInstructionData: anchorInstruction.data,
     accounts: [
       { address: creator.toBase58(), role: AccountRole.WRITABLE_SIGNER, signer: walletSigner as any },
