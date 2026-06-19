@@ -303,7 +303,7 @@ const executeToolWithFeedback = async (toolName: string, args: string) => {
       console.log(`Executing tool: ${toolName}`, parsedArgs);
 
       switch (toolName) {
-   case "create_stream": {
+ case "create_stream": {
   const {
     recipient,
     mint,
@@ -325,8 +325,10 @@ const executeToolWithFeedback = async (toolName: string, args: string) => {
     };
   }
 
+  const recipientStr = String(recipient ?? "").trim();
+
   const recipientPk = toPublicKey(
-    recipient,
+    recipientStr,
     "recipient"
   );
 
@@ -335,34 +337,38 @@ const executeToolWithFeedback = async (toolName: string, args: string) => {
     endpoint
   );
 
-  const mintPk = new PublicKey(resolvedMint);
-
-  const decimals = await fetchMintDecimals(
-    mintPk
+  const mintPk = new PublicKey(
+    resolvedMint
   );
 
-  const amountBn = toBaseUnitsBN(
-    amount,
-    decimals,
-    "stream amount"
-  );
+  const decimals =
+    await fetchMintDecimals(
+      mintPk
+    );
 
-  const startTsBn = toUnixSeconds(
-    start_ts,
-    "start time"
-  );
+  const amountBn =
+    toBaseUnitsBN(
+      amount,
+      decimals,
+      "stream amount"
+    );
 
-  const cliffTsBn = toUnixSeconds(
-    cliff_ts,
-    "cliff time"
-  );
+  const startNum =
+    toUnixSeconds(
+      start_ts,
+      "start time"
+    ).toNumber();
 
-  const endTsBn = toUnixSeconds(
-    end_ts,
-    "end time"
-  );
+  const endNum =
+    toUnixSeconds(
+      end_ts,
+      "end time"
+    ).toNumber();
 
-  if (endTsBn.lte(startTsBn)) {
+  const durationSecs =
+    endNum - startNum;
+
+  if (durationSecs <= 0) {
     return {
       success: false,
       message:
@@ -370,30 +376,77 @@ const executeToolWithFeedback = async (toolName: string, args: string) => {
     };
   }
 
+  const cliffNum =
+    cliff_ts != null
+      ? toUnixSeconds(
+          cliff_ts,
+          "cliff time"
+        ).toNumber()
+      : 0;
+
+  const cliffDuration =
+    vestingType === 1
+      ? Math.max(
+          cliffNum - startNum,
+          0
+        )
+      : 0;
+
+  if (
+    vestingType === 2 &&
+    (!Array.isArray(milestones) ||
+      milestones.length === 0)
+  ) {
+    return {
+      success: false,
+      message:
+        "Milestone vesting requires a non-empty milestones array.",
+    };
+  }
+
+  const startTsBn = new BN(
+    Math.floor(Date.now() / 1000)
+  );
+
+  const endTsBn =
+    startTsBn.add(
+      new BN(durationSecs)
+    );
+
+  const cliffTsBn =
+    vestingType === 1
+      ? startTsBn.add(
+          new BN(
+            cliffDuration
+          )
+        )
+      : new BN(0);
+
   const milestoneInputs =
     vestingType === 2
-      ? (Array.isArray(milestones)
-          ? milestones
-          : []
+      ? (
+          milestones as unknown[]
         ).map((m) => {
-          const milestone =
-            m as Record<string, unknown>;
+          const obj =
+            m as Record<
+              string,
+              unknown
+            >;
 
           return {
-            amount: toBaseUnitsBN(
-              milestone.amount,
-              decimals,
-              "milestone amount"
-            ),
+            amount:
+              toBaseUnitsBN(
+                obj.amount,
+                decimals,
+                "milestone amount"
+              ),
             unlocked: false,
           };
         })
       : [];
 
   const nonce = new BN(
-    Date.now()
-      .toString()
-      .slice(-10)
+    Date.now().toString()
   );
 
   const result =
@@ -414,7 +467,6 @@ const executeToolWithFeedback = async (toolName: string, args: string) => {
     message: `Stream created! Tx: ${result.signature}`,
   };
 }
-
         case "withdraw_stream": {
           const { stream_pda } = parsedArgs;
           const result = await client.withdraw(toPublicKey(stream_pda, "stream"));
