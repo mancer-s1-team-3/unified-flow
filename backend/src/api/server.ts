@@ -730,7 +730,6 @@ app.post("/csv/diff", async (req, res) => {
             if (!uploaderFilter) {
                 return res.status(403).send({ error: "Uploader is required to access CSV version history." });
             }
-            // Compare against a specific historical version
             const targetUpload = await prisma.csvUpload.findFirst({
                 where: {
                     version: Number(compareVersion),
@@ -741,9 +740,6 @@ app.post("/csv/diff", async (req, res) => {
                 return res.status(404).send({ error: `CSV version ${compareVersion} not found.` });
             }
             if (mode === "create") {
-                // For create diffs, keep the current DB streams for this creator so the unchanged
-                // section shows the real live stream IDs and values. The historical CSV is only
-                // used to verify that the requested version exists for this uploader.
                 refStreams = await prisma.stream.findMany({
                     where: { creator: uploaderFilter },
                 });
@@ -752,7 +748,6 @@ app.post("/csv/diff", async (req, res) => {
                 refStreams = mapCsvRowsToStreams(parsedRefRows);
             }
         } else {
-            // Compare against current live database streams, scoped to the connected creator when available.
             refStreams = await prisma.stream.findMany({
                 where: mode === "edit"
                     ? {
@@ -764,7 +759,29 @@ app.post("/csv/diff", async (req, res) => {
         }
 
         const newRows = parseCsvText(csvText);
-        const diffResult = computeCsvDiff(newRows, refStreams, mode);
+
+        // ── Resolve real decimals for every mint involved ────────────────────
+        // computeCsvDiff scales each CSV row's human-readable `amount` into raw
+        // base units using per-mint decimals. Without this, every mint silently
+        // fell back to 6 decimals (USDC-style), which is wrong for WSOL (9) and
+        // any other non-6-decimal mint — producing base-unit amounts that are
+        // off by 10^|decimals_actual - 6|, e.g. WSOL amounts showing 1000x too
+        // small once the frontend divides by the (correct) 9 decimals.
+        const mintsInvolved = new Set<string>();
+        newRows.forEach((row) => { if (row.mint) mintsInvolved.add(row.mint.trim()); });
+        refStreams.forEach((stream) => { if (stream.mint) mintsInvolved.add(String(stream.mint).trim()); });
+
+        const decimalsByMint = new Map<string, number>();
+        await Promise.all(
+            [...mintsInvolved].filter(Boolean).map(async (mint) => {
+                const decimals = await getMintDecimals(mint);
+                if (decimals !== null) {
+                    decimalsByMint.set(mint, decimals);
+                }
+            })
+        );
+
+        const diffResult = computeCsvDiff(newRows, refStreams, mode, decimalsByMint);
 
         res.send(JSON.stringify(diffResult, bigintReplacer));
     } catch (err: any) {
