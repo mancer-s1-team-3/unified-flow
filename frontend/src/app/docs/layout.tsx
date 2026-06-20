@@ -165,7 +165,7 @@ export default function DocsLayout({ children }: { children: React.ReactNode }) 
       onClick={() => setSidebarOpen(false)}
     />
     <div
-      className="fixed top-10 left-0 bottom-0 w-72 bg-zinc-950 border-r border-zinc-800 overflow-y-auto p-6"
+      className="fixed top-0 left-0 bottom-0 w-72 bg-zinc-950 border-r border-zinc-800 overflow-y-auto p-6"
       onClick={(e) => {
         // Close the sidebar whenever a nav link inside it is clicked.
         // DocsSidebarLink renders an <a> via next/link, so this catches
