@@ -78,7 +78,7 @@ export function GuideSidebarNav() {
             {lang === "id" ? "Docs developer" : "Developer docs"}
           </Link>
           <Link
-            href={withGuideLang("/skills", lang)}
+            href={withGuideLang("/docs/skills", lang)}
             className="block text-zinc-300 hover:text-white transition-colors"
           >
             {lang === "id" ? "Skill AI" : "AI skills"}
