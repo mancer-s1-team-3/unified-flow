@@ -159,7 +159,7 @@ export default function DocsLayout({ children }: { children: React.ReactNode }) 
       <div className="flex-1 max-w-[1400px] mx-auto w-full flex relative">
         {/* Mobile Sidebar Overlay */}
         {sidebarOpen && (
-          <div className="fixed inset-0 z-30 lg:hidden">
+          <div className="fixed inset-0 z-50 lg:hidden">
             <div className="fixed inset-0 bg-zinc-950/80 backdrop-blur-sm" onClick={() => setSidebarOpen(false)} />
             <div className="relative w-72 h-full bg-zinc-950 border-r border-zinc-800 overflow-y-auto p-6">
               <button onClick={() => setSidebarOpen(false)} className="absolute top-4 right-4 p-1 text-zinc-400 hover:text-zinc-200">
