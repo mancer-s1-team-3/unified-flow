@@ -18,7 +18,11 @@ type ErrorLike = {
   data?: unknown;
   cause?: unknown;
   logs?: unknown;
- };
+  error?: unknown;   // ← wallet-adapter sering nest error asli di sini
+  name?: unknown;
+  code?: unknown;
+  reason?: unknown;
+};
 
 // ─── Anchor / program custom error codes ──────────────────────────────────
 // These map to the program's error codes in lib.rs
@@ -246,6 +250,23 @@ function flattenUnknown(value: unknown): string[] {
   if (value == null) return [];
   if (typeof value === "string") return [value];
   if (typeof value === "number" || typeof value === "boolean" || typeof value === "bigint") return [String(value)];
+
+  // Native Error instances (and subclasses like WalletSignTransactionError)
+  // don't expose `message`/`name` as enumerable own properties, so
+  // Object.values() below would silently return []. Handle explicitly.
+  if (value instanceof Error) {
+    const parts: string[] = [];
+    if (value.message) parts.push(value.message);
+    if (value.name && value.name !== "Error") parts.push(value.name);
+    // Some wallet adapters attach extra context on a non-standard `.error` /
+    // `.cause` field even on Error subclasses.
+    const anyErr = value as any;
+    if (anyErr.cause) parts.push(...flattenUnknown(anyErr.cause));
+    if (anyErr.error) parts.push(...flattenUnknown(anyErr.error));
+    if (anyErr.code != null) parts.push(String(anyErr.code));
+    return parts.length > 0 ? parts : [value.toString()];
+  }
+
   if (Array.isArray(value)) return value.flatMap((item) => flattenUnknown(item));
   if (typeof value === "object") {
     return Object.values(value as Record<string, unknown>).flatMap((item) => flattenUnknown(item));
@@ -261,9 +282,23 @@ function buildRawErrorText(err: unknown): string {
     ...flattenUnknown(errorLike.data),
     ...flattenUnknown(errorLike.logs),
     ...flattenUnknown(errorLike.cause),
+    ...flattenUnknown(errorLike.error),   // ← tambah
+    ...flattenUnknown(errorLike.name),    // ← tambah
+    ...flattenUnknown(errorLike.code),    // ← tambah
+    ...flattenUnknown(errorLike.reason),  // ← tambah
   ].filter(Boolean);
 
   if (chunks.length === 0) {
+    // Last-resort fallback — never let this surface as "[object Object]".
+    if (err instanceof Error) return err.toString();
+    if (typeof err === "object" && err !== null) {
+      try {
+        const json = JSON.stringify(err);
+        return json && json !== "{}" ? json : "Unknown error (empty error object)";
+      } catch {
+        return "Unknown error";
+      }
+    }
     return String(err ?? "Unknown error");
   }
 
