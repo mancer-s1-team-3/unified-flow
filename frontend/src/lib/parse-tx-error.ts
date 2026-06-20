@@ -137,7 +137,7 @@ const FRAGMENT_MAP: { pattern: RegExp; title: string; detail: string }[] = [
 
   // Wallet / signing errors
   {
-    pattern: /user rejected|wallet_requestPermissions|user denied/i,
+    pattern: /user rejected|wallet_requestPermissions|user denied|user cancelled|user canceled|rejected the request|declined the transaction|4001/i,
     title: "Transaction Rejected",
     detail: "You rejected the transaction in your wallet. Approve the transaction to continue.",
   },
