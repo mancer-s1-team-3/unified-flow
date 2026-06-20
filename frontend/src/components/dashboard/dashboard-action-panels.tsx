@@ -3344,6 +3344,13 @@ function useCsvMilestoneValidation(csvText: string) {
 // /streams/edit-csv (server.ts): id harus ada di DB dan stream harus CSV-created.
 // Tanpa ini, baris dengan id ngawur (mis. "xxx") tampil "valid" karena
 // useCsvMilestoneValidation tidak pernah melihat kolom id.
+// Common template-placeholder patterns so users get a clearer message than
+// a generic "ID not found in database" when they forgot to replace the
+// example row from the downloaded template.
+function isLikelyTemplatePlaceholder(id: string): boolean {
+  return /^StreamCSV-X+$/i.test(id) || /^<.*>$/.test(id) || /^(your[_-]?stream[_-]?id|example|placeholder)$/i.test(id);
+}
+
 function useCsvIdValidation(
   csvText: string,
   knownStreams: any[] | undefined,
@@ -3357,8 +3364,6 @@ function useCsvIdValidation(
 
     const headers = lines[0].split(",").map((h) => h.trim().toLowerCase());
     const idIdx = headers.indexOf("id");
-    // Tanpa kolom id, edit memakai identity-match (recipient+mint+type),
-    // jadi tidak ada id yang bisa divalidasi di sini.
     if (idIdx === -1) return { issues: [], hasErrors: false };
 
     const knownById = new Map<string, any>();
@@ -3374,12 +3379,17 @@ function useCsvIdValidation(
       if (!line) continue;
       const values = line.split(",").map((v) => v.trim());
       const id = (values[idIdx] ?? "").trim();
-      // Baris tanpa id sengaja memakai identity-match — bukan error.
       if (!id) continue;
 
       const match = knownById.get(id);
       if (!match) {
-        issues.push({ rowNum: i, id, reason: "ID not found in database" });
+        issues.push({
+          rowNum: i,
+          id,
+          reason: isLikelyTemplatePlaceholder(id)
+            ? "This is the template's example placeholder — replace it with a real stream ID, or delete this row and paste your own data."
+            : "ID not found in database",
+        });
         continue;
       }
       if (!match.isCsvCreated) {
