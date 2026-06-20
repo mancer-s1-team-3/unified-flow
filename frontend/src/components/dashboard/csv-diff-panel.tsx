@@ -92,7 +92,7 @@ const resolveTokenLabel = (itemMint: unknown) => {
 
   if (preset) return preset.label;
 
-  return addr ? shorten(addr) : "Tokens";
+  return "Tokens";
 };
 
   // ── Resolve decimals for a given item. Priority:
