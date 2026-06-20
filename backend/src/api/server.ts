@@ -935,6 +935,9 @@ app.post("/streams/:id/unlock-milestone", async (req, res) => {
         res.status(400).send({ error: err.message });
     }
 });
+app.get("/ai/docs-status", (req, res) => {
+    res.json({ configured: isDocsAiConfigured() });
+});
 app.post("/ai/docs-chat", async (req, res) => {
     const { userMessage, context } = req.body as {
         userMessage?: string;
