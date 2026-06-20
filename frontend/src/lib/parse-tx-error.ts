@@ -18,7 +18,7 @@ type ErrorLike = {
   data?: unknown;
   cause?: unknown;
   logs?: unknown;
-  error?: unknown;   // ← wallet-adapter sering nest error asli di sini
+  error?: unknown;   // wallet-adapter often nests the real error here
   name?: unknown;
   code?: unknown;
   reason?: unknown;
@@ -97,18 +97,18 @@ const ANCHOR_ERROR_NAME_MAP: Record<string, { title: string; detail: string }> =
 };
 
 // ─── Known raw message fragments → friendly messages ─────────────────────
-const FRAGMENT_MAP: { pattern: RegExp; title: string; detail: string }[] = [
+const FRAGMENT_MAP: { pattern: RegExp; title: string; detail: string | ((m: string) => string) }[] = [
   // Insufficient balance (pre-flight checks from our own code)
   {
     pattern: /insufficient token balance/i,
     title: "Insufficient Token Balance",
     detail: (m: string) => extractDetail(m, /insufficient token balance[^.]*\./i),
-  } as any,
+  },
   {
     pattern: /insufficient sol balance/i,
     title: "Insufficient SOL Balance",
     detail: (m: string) => extractDetail(m, /insufficient sol balance[^.]*\./i),
-  } as any,
+  },
   {
     pattern: /insufficient lamports/i,
     title: "Insufficient SOL Balance",
@@ -135,9 +135,14 @@ const FRAGMENT_MAP: { pattern: RegExp; title: string; detail: string }[] = [
     detail: "Your token account for this mint doesn't exist yet or is empty. Receive/hold the token first, then create the stream.",
   },
 
-  // Wallet / signing errors
+  // Wallet / signing / user-rejection errors.
+  // NOTE: bare numeric rejection codes (-1, 4001, etc.) are handled earlier
+  // in parseTransactionError() via a direct `code` check — they are NOT
+  // matched here because a bare "-1" or "4001" substring is too easy to
+  // false-positive against unrelated numeric content elsewhere in a raw
+  // error blob (amounts, slots, etc).
   {
-    pattern: /user rejected|wallet_requestPermissions|user denied|user cancelled|user canceled|rejected the request|declined the transaction|4001/i,
+    pattern: /user rejected|wallet_requestPermissions|user denied|user cancelled|user canceled|rejected the request|declined the transaction|reject(ed)? the transaction/i,
     title: "Transaction Rejected",
     detail: "You rejected the transaction in your wallet. Approve the transaction to continue.",
   },
@@ -246,9 +251,22 @@ function parseAnchorErrorCode(message: string): { title: string; detail: string 
   return null;
 }
 
+// Known wallet-adapter / provider rejection codes. These show up as bare
+// numbers (`err.code === -1`, `err.code === 4001`, ...) with little or no
+// usable `message` text — especially from mobile wallets connecting via
+// deeplink (e.g. Solflare mobile), which often return a minimal
+// `{ code: -1 }` shaped error on user cancel. Checked directly against the
+// error object's `code` field, BEFORE any string flattening happens, so a
+// bare numeric code can never leak through as the literal displayed message.
+const WALLET_REJECTION_CODES = new Set<number | string>([-1, 4001, "4001", "-1", "USER_REJECTED"]);
+
+function isStringy(value: unknown): value is string {
+  return typeof value === "string" && value.trim().length > 0;
+}
+
 function flattenUnknown(value: unknown): string[] {
   if (value == null) return [];
-  if (typeof value === "string") return [value];
+  if (typeof value === "string") return value.trim() ? [value] : [];
   if (typeof value === "number" || typeof value === "boolean" || typeof value === "bigint") return [String(value)];
 
   // Native Error instances (and subclasses like WalletSignTransactionError)
@@ -263,13 +281,23 @@ function flattenUnknown(value: unknown): string[] {
     const anyErr = value as any;
     if (anyErr.cause) parts.push(...flattenUnknown(anyErr.cause));
     if (anyErr.error) parts.push(...flattenUnknown(anyErr.error));
-    if (anyErr.code != null) parts.push(String(anyErr.code));
+    // `code` is intentionally labeled here (not a bare number) so it can
+    // never become the *entire* displayed message on its own — see
+    // buildRawErrorText / parseTransactionError for the dedicated code path.
+    if (anyErr.code != null) parts.push(`code: ${anyErr.code}`);
     return parts.length > 0 ? parts : [value.toString()];
   }
 
   if (Array.isArray(value)) return value.flatMap((item) => flattenUnknown(item));
   if (typeof value === "object") {
-    return Object.values(value as Record<string, unknown>).flatMap((item) => flattenUnknown(item));
+    return Object.entries(value as Record<string, unknown>).flatMap(([key, v]) => {
+      // Same reasoning as above: a bare `code` field shouldn't surface as an
+      // unlabeled number sitting alongside (or instead of) real message text.
+      if (key === "code" && (typeof v === "number" || typeof v === "string")) {
+        return [`code: ${v}`];
+      }
+      return flattenUnknown(v);
+    });
   }
   return [];
 }
@@ -282,11 +310,18 @@ function buildRawErrorText(err: unknown): string {
     ...flattenUnknown(errorLike.data),
     ...flattenUnknown(errorLike.logs),
     ...flattenUnknown(errorLike.cause),
-    ...flattenUnknown(errorLike.error),   // ← tambah
-    ...flattenUnknown(errorLike.name),    // ← tambah
-    ...flattenUnknown(errorLike.code),    // ← tambah
-    ...flattenUnknown(errorLike.reason),  // ← tambah
-  ].filter(Boolean);
+    ...flattenUnknown(errorLike.error),
+    ...flattenUnknown(errorLike.name),
+    ...flattenUnknown(errorLike.reason),
+  ].filter(isStringy);
+
+  // `code` is appended last and always labeled — it should never be the
+  // sole content of `raw` without context, but it's still useful to keep
+  // around for debugging ("Show details").
+  const code = errorLike.code;
+  if (code != null && isStringy(String(code))) {
+    chunks.push(`code: ${code}`);
+  }
 
   if (chunks.length === 0) {
     // Last-resort fallback — never let this surface as "[object Object]".
@@ -305,9 +340,36 @@ function buildRawErrorText(err: unknown): string {
   return chunks.join(" | ");
 }
 
+// Pulls a usable `code` value off an arbitrary error shape, checking the
+// common nesting spots wallet adapters use (top-level, `.error.code`,
+// `.cause.code`).
+function extractWalletCode(err: unknown): number | string | null {
+  const e = (err ?? {}) as any;
+  const candidates = [e?.code, e?.error?.code, e?.cause?.code, e?.data?.code];
+  for (const c of candidates) {
+    if (c === 0) continue; // 0 is a valid non-error code in some providers; skip
+    if (c != null) return c;
+  }
+  return null;
+}
+
 export function parseTransactionError(err: unknown): ParsedTxError {
   const raw = buildRawErrorText(err);
   const lower = raw.toLowerCase();
+
+  // 0. Direct rejection-code check. Some wallets — notably Solflare mobile
+  // over the deeplink flow — return a minimal `{ code: -1 }` (or 4001) on
+  // user cancel with no usable message text. Checking the structured code
+  // directly, before any regex/string matching, means a bare numeric code
+  // can never become the literal displayed error message.
+  const walletCode = extractWalletCode(err);
+  if (walletCode != null && WALLET_REJECTION_CODES.has(walletCode)) {
+    return {
+      title: "Transaction Rejected",
+      detail: "You rejected the transaction in your wallet. Approve the transaction to continue.",
+      raw,
+    };
+  }
 
   // 1. Check anchor program custom error codes first (most specific)
   const anchorError = parseAnchorErrorCode(raw);
@@ -318,7 +380,7 @@ export function parseTransactionError(err: unknown): ParsedTxError {
   // 2. Check fragment patterns
   for (const { pattern, title, detail } of FRAGMENT_MAP) {
     if (pattern.test(raw) || pattern.test(lower)) {
-      const resolvedDetail = typeof detail === "function" ? (detail as Function)(raw) : detail;
+      const resolvedDetail = typeof detail === "function" ? detail(raw) : detail;
       return { title, detail: resolvedDetail, raw };
     }
   }
@@ -330,9 +392,16 @@ export function parseTransactionError(err: unknown): ParsedTxError {
     ?.trim()
     ?.slice(0, 300);
 
+  // Final guard: never let a bare number (or a bare "code: N" with nothing
+  // else) become the whole user-facing message — it's meaningless on its
+  // own and reads like a rendering bug.
+  const isUselessFallback = !cleaned || /^-?\d+$/.test(cleaned) || /^code:\s*-?\d+$/i.test(cleaned);
+
   return {
     title: "Transaction Failed",
-    detail: cleaned || "An unexpected error occurred. Please try again.",
+    detail: isUselessFallback
+      ? "The wallet returned an unrecognized error. Please try the transaction again."
+      : cleaned,
     raw,
   };
 }
