@@ -66,7 +66,7 @@ export default function sitemap(): MetadataRoute.Sitemap {
       priority: 0.65,
     },
     {
-      url: `${siteUrl}/skills`,
+      url: `${siteUrl}/docs/skills`,
       lastModified,
       changeFrequency: "weekly",
       priority: 0.6,
