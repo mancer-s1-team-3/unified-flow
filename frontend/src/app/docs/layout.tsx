@@ -120,7 +120,7 @@ export default function DocsLayout({ children }: { children: React.ReactNode }) 
         <div className="mt-3">
           <span className="text-[10px] uppercase tracking-wider font-bold text-indigo-300 block mb-1">Skills Route</span>
           <Link
-            href="/skills"
+            href="/docs/skills"
             className="inline-flex items-center gap-2 font-mono text-[11px] text-zinc-200 bg-black/40 px-2.5 py-1.5 rounded-lg border border-zinc-800 hover:border-indigo-500/40 hover:text-white transition-colors"
           >
             <BookOpen className="w-3 h-3 text-indigo-400" />
