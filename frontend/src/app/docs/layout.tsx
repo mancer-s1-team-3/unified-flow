@@ -158,17 +158,34 @@ export default function DocsLayout({ children }: { children: React.ReactNode }) 
 
       <div className="flex-1 max-w-[1400px] mx-auto w-full flex relative">
         {/* Mobile Sidebar Overlay */}
-        {sidebarOpen && (
-          <div className="fixed inset-0 z-50 lg:hidden">
-            <div className="fixed inset-0 bg-zinc-950/80 backdrop-blur-sm" onClick={() => setSidebarOpen(false)} />
-            <div className="relative w-72 h-full bg-zinc-950 border-r border-zinc-800 overflow-y-auto p-6">
-              <button onClick={() => setSidebarOpen(false)} className="absolute top-4 right-4 p-1 text-zinc-400 hover:text-zinc-200">
-                <X className="w-5 h-5" />
-              </button>
-              {sidebarContent}
-            </div>
-          </div>
-        )}
+    {sidebarOpen && (
+  <div className="fixed inset-0 z-50 lg:hidden">
+    <div
+      className="fixed inset-0 bg-zinc-950/80 backdrop-blur-sm"
+      onClick={() => setSidebarOpen(false)}
+    />
+    <div
+      className="fixed top-14 left-0 bottom-0 w-72 bg-zinc-950 border-r border-zinc-800 overflow-y-auto p-6"
+      onClick={(e) => {
+        // Close the sidebar whenever a nav link inside it is clicked.
+        // DocsSidebarLink renders an <a> via next/link, so this catches
+        // the click via delegation without needing to touch that component.
+        const target = e.target as HTMLElement;
+        if (target.closest("a")) {
+          setSidebarOpen(false);
+        }
+      }}
+    >
+      <button
+        onClick={() => setSidebarOpen(false)}
+        className="absolute top-4 right-4 p-1 text-zinc-400 hover:text-zinc-200"
+      >
+        <X className="w-5 h-5" />
+      </button>
+      {sidebarContent}
+    </div>
+  </div>
+)}
 
         {/* Desktop Left Sidebar */}
         <aside className="w-64 border-r border-zinc-800 bg-zinc-950 hidden lg:block shrink-0 h-[calc(100vh-3.5rem)] sticky top-14 overflow-y-auto py-6 pl-5 pr-3">
