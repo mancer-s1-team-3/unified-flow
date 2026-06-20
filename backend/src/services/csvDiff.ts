@@ -479,6 +479,9 @@ export function computeCsvDiff(
         id: stream.id || `StreamCSV-UNCH-${idx}`,
         recipient: stream.recipient,
         amount: stream.amount,
+        mint: stream.mint, // FIX: was missing — caused unchanged items to lose
+        // their mint, so CsvDiffPanel fell back to the parent's
+        // selectedMint (e.g. USDC) instead of the stream's real mint (e.g. WSOL).
         duration: stream.duration,
         cliffDuration: stream.cliffDuration,
         cancelable: stream.cancelable,
@@ -529,6 +532,7 @@ export function computeCsvDiff(
             id: matchedStream.id || normalizedRowId || `StreamCSV-UNCH-${idx}`,
             recipient: matchedStream.recipient,
             amount: matchedStream.amount,
+            mint: matchedStream.mint, // FIX: was missing
             duration: matchedStream.duration,
             cliffDuration: matchedStream.cliffDuration,
             cancelable: matchedStream.cancelable,
@@ -553,6 +557,7 @@ export function computeCsvDiff(
         id: matchedStream.id || row.id || `StreamCSV-UNCH-${idx}`,
         recipient: matchedStream.recipient,
         amount: matchedStream.amount,
+        mint: matchedStream.mint, // FIX: was missing
         duration: matchedStream.duration,
         cliffDuration: matchedStream.cliffDuration,
         cancelable: matchedStream.cancelable,
@@ -601,6 +606,7 @@ export function computeCsvDiff(
         id: matchedStream.id || row.id || `StreamCSV-UNCH-${idx}`,
         recipient: matchedStream.recipient,
         amount: matchedStream.amount,
+        mint: matchedStream.mint, // FIX: was missing
         duration: matchedStream.duration,
         cliffDuration: matchedStream.cliffDuration,
         cancelable: matchedStream.cancelable,
