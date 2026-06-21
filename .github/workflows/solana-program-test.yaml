@@ -26,6 +26,6 @@ on:
 
 jobs:
   test:
-    uses: solana-developers/github-workflows/.github/workflows/test.yaml@v0.3.4
+    uses: solana-foundation/github-workflows/.github/workflows/test.yaml@v0.3.4
     with:
       program: ${{ 'unified-flow' }}
