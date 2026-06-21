@@ -9,6 +9,8 @@ import { DashboardStreamsPanel } from "@/components/dashboard/dashboard-streams-
 import { StreamDetailsDrawer } from "@/components/dashboard/stream-details-drawer";
 import { MobileBottomNav } from "@/components/dashboard/dashboard-sidebar";
 import type { TabId } from "@/components/dashboard/types";
+import { fetchAdminConfig } from "@/lib/solana/admin";
+type TxPhase = "wallet_approval" | "sending" | "confirming";
 
 export default function StreamsPage() {
   const router = useRouter();
@@ -22,7 +24,8 @@ export default function StreamsPage() {
   const [selectedStream, setSelectedStream] = useState<any | null>(null);
   const [loadingDetails, setLoadingDetails] = useState(false);
   const [copiedId, setCopiedId] = useState<string | null>(null);
-
+  const [activeTxAction, setActiveTxAction] = useState<string | null>(null);
+  const [activeTxPhase,  setActiveTxPhase]  = useState<TxPhase | null>(null);
   const searchFromUrl = searchParams.get("search") ?? "";
   const [waitingForIndex, setWaitingForIndex] = useState(false);
   const indexRetryRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -121,6 +124,32 @@ export default function StreamsPage() {
     router.push("/?tab=edit_csv");
   }, [router]);
 
+  const [adminConfig, setAdminConfig] = useState<any>(null);
+  const [adminConfigLoading, setAdminConfigLoading] = useState(false);
+const loadAdminConfig = useCallback(async () => {
+  setAdminConfigLoading(true);
+  const config = await fetchAdminConfig({ endpoint });
+  setAdminConfig(config);
+  setAdminConfigLoading(false);
+}, [endpoint]);
+
+useEffect(() => { loadAdminConfig(); }, [loadAdminConfig]);
+
+// Refetch setelah transaksi admin selesai (gantikan effect serupa di AdminPanel)
+const isFirstAdminLoad = useRef(true);
+useEffect(() => {
+  if (isFirstAdminLoad.current) { isFirstAdminLoad.current = false; return; }
+  if (!activeTxAction && !activeTxPhase) loadAdminConfig();
+}, [activeTxAction, activeTxPhase, loadAdminConfig]);
+ const isUnauthorized =
+    !adminConfigLoading &&
+    adminConfig &&
+    connectedWalletAddress &&
+    adminConfig.adminAuthority !== connectedWalletAddress;
+    const canAccessAdmin =
+  connected &&
+  !!adminConfig &&
+  !isUnauthorized;
 
   return (
     <div className="min-h-screen bg-zinc-950 text-zinc-50">
@@ -135,7 +164,7 @@ export default function StreamsPage() {
         {/* Mobile bottom tab bar */}
         <div className="md:hidden">
           <MobileBottomNav
-          showAdmin={false}
+          showAdmin={canAccessAdmin}
             activeTab="streams"
             onSelect={(tab: TabId) => router.push(`/?tab=${tab}`)}
             streamsCount={streams.length}
