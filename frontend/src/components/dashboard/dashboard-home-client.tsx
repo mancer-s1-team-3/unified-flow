@@ -23,6 +23,7 @@ import { unlockMilestoneOnChain } from "@/lib/solana/unlock-milestone";
 import { fetchAdminConfig, setPauseOnChain, withdrawFeesOnChain } from "@/lib/solana/admin";
 import { parseTransactionError } from "@/lib/parse-tx-error";
 import { useNotifications } from "@/lib/notification-context";
+import { WsolUnwrapWidget } from "@/components/dashboard/wsol-unwrap-widget";
 import { getExplorerClusterParam, getNetworkByEndpoint } from "@/lib/solana/network-config";
 import {
   buildCreateStreamCsvTemplate,
@@ -1042,6 +1043,13 @@ if (actionName === "set_pause") {
           </div>
         </div>
       )}
+
+      <WsolUnwrapWidget
+        wallet={wallet ?? null}
+        endpoint={endpoint}
+        connected={!!connected}
+        refreshSignal={`${activeTxAction ?? ""}-${activeTxPhase ?? ""}`}
+      />
 
       <div className="max-w-7xl mx-auto w-full px-4 py-4 sm:px-6 sm:py-8 pb-20 md:pb-8 flex-grow flex flex-col md:flex-row gap-4 md:gap-8 relative z-10">
 

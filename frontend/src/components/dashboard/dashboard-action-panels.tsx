@@ -926,6 +926,7 @@ function WithdrawPanel({
       claimable: fmt(claimableBase),
       vested: fmt(vestedBase),
       hasClaimable: claimableBase > BigInt(0),
+      fullyClaimed: totalBase > BigInt(0) && withdrawnBase >= totalBase,
       withdrawnPct,
       vestedPct,
       claimablePct,
@@ -1173,7 +1174,17 @@ const canSubmit =
             </div>
           )}
 
+          {withdrawPreview.fullyClaimed && !withdrawPreview.isCancelled && (
+            <div className="px-4 py-3 border-t border-zinc-900 bg-emerald-950/10 flex items-start gap-2">
+              <div className="w-1.5 h-1.5 rounded-full bg-emerald-400 shrink-0 mt-1" />
+              <p className="text-[10px] text-emerald-300/80 leading-relaxed">
+                All tokens have been claimed. This stream is fully withdrawn.
+              </p>
+            </div>
+          )}
+
           {!withdrawPreview.hasClaimable &&
+            !withdrawPreview.fullyClaimed &&
             !withdrawPreview.cliffPending &&
             !withdrawPreview.isCancelled &&
             !withdrawPreview.isCompleted && (
@@ -1505,13 +1516,16 @@ const isNotConnected = !connectedWalletAddress;
     handleAction("cancel", cancelForm);
   };
 
+  const isFullyVested = !!cancelPreview && cancelPreview.isPureZeroReturn;
+
   const canSubmit =
     !!cancelForm.streamId.trim() &&
     !isSubmitting &&
     !isWrongWallet &&
     !isNotConnected &&
     !isAlreadyCancelled &&
-    !isAlreadyCompleted;
+    !isAlreadyCompleted &&
+    !isFullyVested;
 
   return (
     <div className="animate-in fade-in-30 duration-200">
@@ -1640,7 +1654,7 @@ const isNotConnected = !connectedWalletAddress;
             <div className="px-4 py-3 border-t border-zinc-900 bg-amber-950/10 flex items-start gap-2">
               <AlertTriangle className="w-3.5 h-3.5 text-amber-400 shrink-0 mt-0.5" />
               <p className="text-[10px] text-amber-300/80 leading-relaxed">
-                All tokens are already vested — nothing will be returned to the creator. Consider letting the stream complete naturally instead.
+                All tokens are already vested — nothing would be returned to the creator, so this stream can no longer be cancelled. Let the recipient withdraw the remaining tokens instead.
               </p>
             </div>
           )}
@@ -1683,6 +1697,8 @@ const isNotConnected = !connectedWalletAddress;
           ? "Stream already cancelled"
           : isAlreadyCompleted
           ? "Stream already completed"
+          : isFullyVested
+          ? "Stream fully vested — cannot cancel"
           : submitLabel}
       </button>
 
