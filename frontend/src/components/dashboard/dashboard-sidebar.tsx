@@ -77,13 +77,19 @@ export function MobileBottomNav({
   activeTab,
   onSelect,
   streamsCount,
+  showAdmin,
 }: {
   activeTab?: TabId;
   onSelect: (tab: TabId) => void;
   streamsCount?: number;
+  showAdmin: boolean;
 }) {
   const [sheetOpen, setSheetOpen] = useState(false);
-  const isMoreActive = MORE_TABS.some((t) => t.value === activeTab);
+  const moreTabs = showAdmin
+  ? MORE_TABS
+  : MORE_TABS.filter((t) => t.value !== "admin");
+
+const isMoreActive = moreTabs.some((t) => t.value === activeTab);
 
   // close sheet on outside scroll
   useEffect(() => {
@@ -125,7 +131,7 @@ export function MobileBottomNav({
           </button>
         </div>
         <div className="p-2">
-          {MORE_TABS.map((tab) => (
+          {moreTabs.map((tab) => (
             <button
               key={tab.value}
               onClick={() => handleSelect(tab.value)}
@@ -216,7 +222,11 @@ export const DashboardSidebar = memo(function DashboardSidebar({
     <>
       {/* Mobile bottom nav */}
       <div className="md:hidden">
-        <MobileBottomNav activeTab={activeTab} onSelect={setActiveTab} streamsCount={streamsCount} />
+        <MobileBottomNav showAdmin={
+    connected &&
+    !!adminConfig &&
+    !isUnauthorized
+  } activeTab={activeTab} onSelect={setActiveTab} streamsCount={streamsCount} />
       </div>
 
       {/* Desktop sidebar */}
