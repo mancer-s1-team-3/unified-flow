@@ -164,10 +164,10 @@ useEffect(() => {
   }, [endpoint]);
   const wallets = useMemo(() => [new SolflareWalletAdapter()], [network]);
   return (
-     <WalletProvider wallets={wallets}>
+    
     <div className="min-h-screen bg-zinc-950 text-zinc-50">
       <DashboardHeader />
-
+ <WalletProvider wallets={wallets}>
       <main className="min-h-screen bg-zinc-950 text-zinc-50 font-sans relative overflow-hidden flex flex-col justify-between selection:bg-indigo-500/30 selection:text-indigo-200">
 
         {/* Glow backgrounds */}
@@ -215,7 +215,8 @@ useEffect(() => {
         />
 
       </main>
+       </WalletProvider>
     </div>
-    </WalletProvider>
+   
   );
 }
