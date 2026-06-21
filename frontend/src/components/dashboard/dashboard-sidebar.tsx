@@ -193,33 +193,21 @@ export const DashboardSidebar = memo(function DashboardSidebar({
   activeTab,
   setActiveTab,
   streamsCount,
-
-    connectedWalletAddress,
-  endpoint,
-  connected
+     connectedWalletAddress,
+  adminConfig,        // ← terima dari parent, bukan fetch sendiri
+  adminConfigLoading,  // ← terima dari parent
+  connected,
 }: {
   activeTab: TabId;
   setActiveTab: (tab: TabId) => void;
   streamsCount: number;
-connectedWalletAddress: string | null;
-  endpoint: string;
+  connectedWalletAddress: string | null;
+  adminConfig: any | null;
+  adminConfigLoading: boolean;
   connected: boolean;
 }) {
-
-    const [adminConfig, setAdminConfig] = useState<any | null>(null);
-    const [loading, setLoading] = useState(true);
-   const loadConfig = async () => {
-      setLoading(true);
-      const config = await fetchAdminConfig({ endpoint });
-      setAdminConfig(config);
-      setLoading(false);
-    };
-      useEffect(() => {
-        loadConfig();
-      }, [endpoint]); // eslint-disable-line react-hooks/exhaustive-deps
-    
-  const isUnauthorized =
-    !loading &&
+ const isUnauthorized =
+    !adminConfigLoading &&
     adminConfig &&
     connectedWalletAddress &&
     adminConfig.adminAuthority !== connectedWalletAddress;
@@ -300,7 +288,7 @@ connectedWalletAddress: string | null;
           icon={<Shield className="w-4 h-4" />}
           label="Edit Cliff Conditions"
         />
-{!loading && connected && !isUnauthorized && adminConfig && (
+{connected && !isUnauthorized && adminConfig && (
   <>
     <div className="text-[10px] text-zinc-500 font-bold uppercase tracking-widest px-3 mt-6 mb-2">
       Admin
