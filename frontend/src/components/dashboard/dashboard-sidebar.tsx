@@ -211,6 +211,15 @@ export const DashboardSidebar = memo(function DashboardSidebar({
     adminConfig &&
     connectedWalletAddress &&
     adminConfig.adminAuthority !== connectedWalletAddress;
+      console.log("[Sidebar Debug]", {
+    connected,
+    adminConfigLoading,
+    adminConfig,
+    connectedWalletAddress,
+    adminAuthority: adminConfig?.adminAuthority,
+    isUnauthorized,
+    showAdminTab: connected && !isUnauthorized && !!adminConfig,
+  });
   return (
     <>
       {/* Mobile bottom nav */}
