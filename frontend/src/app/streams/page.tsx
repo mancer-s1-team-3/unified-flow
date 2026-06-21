@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useRef, useCallback } from "react";
+import { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useWalletConnection, useClusterState } from "@solana/react-hooks";
 import { api } from "@/lib/api";
@@ -10,6 +10,10 @@ import { StreamDetailsDrawer } from "@/components/dashboard/stream-details-drawe
 import { MobileBottomNav } from "@/components/dashboard/dashboard-sidebar";
 import type { TabId } from "@/components/dashboard/types";
 import { fetchAdminConfig } from "@/lib/solana/admin";
+import { WalletProvider } from "@solana/wallet-adapter-react";
+import { getNetworkByEndpoint } from "@/lib/solana/network-config";
+import { WalletAdapterNetwork } from "@solana/wallet-adapter-base";
+import { SolflareWalletAdapter } from "@solana/wallet-adapter-solflare";
 type TxPhase = "wallet_approval" | "sending" | "confirming";
 
 export default function StreamsPage() {
@@ -150,8 +154,17 @@ useEffect(() => {
   connected &&
   !!adminConfig &&
   !isUnauthorized;
-
+ const network = useMemo(() => {
+    const c = getNetworkByEndpoint(endpoint)?.cluster;
+    return c === "mainnet"
+      ? WalletAdapterNetwork.Mainnet
+      : c === "testnet"
+      ? WalletAdapterNetwork.Testnet
+      : WalletAdapterNetwork.Devnet;
+  }, [endpoint]);
+  const wallets = useMemo(() => [new SolflareWalletAdapter()], [network]);
   return (
+     <WalletProvider wallets={wallets}>
     <div className="min-h-screen bg-zinc-950 text-zinc-50">
       <DashboardHeader />
 
@@ -203,5 +216,6 @@ useEffect(() => {
 
       </main>
     </div>
+    </WalletProvider>
   );
 }
