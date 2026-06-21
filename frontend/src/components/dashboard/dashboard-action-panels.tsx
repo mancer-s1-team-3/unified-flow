@@ -4195,7 +4195,22 @@ function EditMilestonePanel({
     setStreamDetail(null);
     setDetailError(null);
     setEditTotalDraft(null);
-    if (!id) return;
+
+    if (!id) {
+      // FIX: Stream ID was cleared — don't leave stale milestone amounts
+      // (and a stale totalAmount) from a previously loaded stream sitting
+      // in the form. Without this, clearing the Stream ID field left
+      // `amounts` populated (e.g. 250/250/250/250) while `totalAmount`
+      // reset to "0", which made the allocation counter show a false
+      // "balanced — ready to deploy" state.
+      setEditMilestoneForm((prev: any) => ({
+        ...prev,
+        amounts: [],
+        totalAmount: "",
+        mintDecimals: null,
+      }));
+      return;
+    }
 
     const timer = setTimeout(async () => {
       setDetailLoading(true);
@@ -4299,89 +4314,85 @@ function EditMilestonePanel({
   }, [stream]);
 
   // ── Decimals ───────────────────────────────────────────────────────────
-// Ganti baris decimals constant
-const decimals = Math.max(
-  typeof editMilestoneForm.mintDecimals === "number" &&
-  editMilestoneForm.mintDecimals !== null
-    ? editMilestoneForm.mintDecimals
-    : typeof streamDetail?.mintDecimals === "number"
-    ? streamDetail.mintDecimals
-    : editMilestoneBalanceDecimals,
-  0
-);
-
-  // ── totalAmount sebagai bigint ─────────────────────────────────────────
-const totalAmountBase = useMemo(() => {
-  const raw = editMilestoneForm?.totalAmount;
-  if (!raw || raw === "" || raw === "null" || raw === "undefined") return BigInt(0);
-  try { return BigInt(String(raw).trim()); } catch { return BigInt(0); }
-}, [editMilestoneForm?.totalAmount]);
-
-  // ── Display value untuk total input ───────────────────────────────────
-  // Saat user sedang ngetik (draft != null), tampilkan draft
-  // Saat blur atau tidak ada draft, tampilkan human-readable dari base units
-const editTotalValue =
-  editTotalDraft !== null
-    ? editTotalDraft
-    : totalAmountBase > BigInt(0) && decimals >= 0 && streamDetail !== null
-    ? formatBaseUnitsToTokenAmount(totalAmountBase, decimals)
-    : "";
-
-  // ── Rescale semua milestone proportionally saat total diubah ──────────
- const rescaleMilestonesToTotal = (newTotalHuman: string) => {
-  const amounts = Array.isArray(editMilestoneForm.amounts)
-    ? editMilestoneForm.amounts
-    : [];
-  if (amounts.length === 0) return;
-
-  // ← Guard: jangan rescale kalau decimals belum resolve dari stream
-  if (!streamDetail && editMilestoneForm.mintDecimals === null) return;
-
-  const safeDecimals =
-    typeof editMilestoneForm.mintDecimals === "number"
+  const decimals = Math.max(
+    typeof editMilestoneForm.mintDecimals === "number" &&
+    editMilestoneForm.mintDecimals !== null
       ? editMilestoneForm.mintDecimals
       : typeof streamDetail?.mintDecimals === "number"
       ? streamDetail.mintDecimals
-      : editMilestoneBalanceDecimals;
-
-  const newTotalBase = parseTokenAmountToBaseUnits(newTotalHuman, safeDecimals);
-  if (newTotalBase <= BigInt(0)) return;
-
-  const currentSum = amounts.reduce(
-    (sum, v) =>
-      sum + parseTokenAmountToBaseUnits(String(v || "0"), safeDecimals),
-    BigInt(0)
+      : editMilestoneBalanceDecimals,
+    0
   );
 
-  let rescaled: string[];
-  if (currentSum <= BigInt(0)) {
-    const base = newTotalBase / BigInt(amounts.length);
-    const remainder = newTotalBase % BigInt(amounts.length);
-    rescaled = amounts.map((_, i) =>
-      formatBaseUnitsToTokenAmount(
-        base + (BigInt(i) < remainder ? BigInt(1) : BigInt(0)),
-        safeDecimals
-      )
-    );
-  } else {
-    const scaled = amounts.map((v) => {
-      const base = parseTokenAmountToBaseUnits(String(v || "0"), safeDecimals);
-      return (base * newTotalBase) / currentSum;
-    });
-    const scaledSum = scaled.reduce((a, b) => a + b, BigInt(0));
-    const diff = newTotalBase - scaledSum;
-    if (scaled.length > 0) scaled[scaled.length - 1] += diff;
-    rescaled = scaled.map((v) =>
-      formatBaseUnitsToTokenAmount(v, safeDecimals)
-    );
-  }
+  // ── totalAmount sebagai bigint ─────────────────────────────────────────
+  const totalAmountBase = useMemo(() => {
+    const raw = editMilestoneForm?.totalAmount;
+    if (!raw || raw === "" || raw === "null" || raw === "undefined") return BigInt(0);
+    try { return BigInt(String(raw).trim()); } catch { return BigInt(0); }
+  }, [editMilestoneForm?.totalAmount]);
 
-  setEditMilestoneForm({
-    ...editMilestoneForm,
-    amounts: rescaled,
-    totalAmount: String(newTotalBase),
-  });
-};
+  // ── Display value untuk total input ───────────────────────────────────
+  const editTotalValue =
+    editTotalDraft !== null
+      ? editTotalDraft
+      : totalAmountBase > BigInt(0) && decimals >= 0 && streamDetail !== null
+      ? formatBaseUnitsToTokenAmount(totalAmountBase, decimals)
+      : "";
+
+  // ── Rescale semua milestone proportionally saat total diubah ──────────
+  const rescaleMilestonesToTotal = (newTotalHuman: string) => {
+    const amounts = Array.isArray(editMilestoneForm.amounts)
+      ? editMilestoneForm.amounts
+      : [];
+    if (amounts.length === 0) return;
+
+    if (!streamDetail && editMilestoneForm.mintDecimals === null) return;
+
+    const safeDecimals =
+      typeof editMilestoneForm.mintDecimals === "number"
+        ? editMilestoneForm.mintDecimals
+        : typeof streamDetail?.mintDecimals === "number"
+        ? streamDetail.mintDecimals
+        : editMilestoneBalanceDecimals;
+
+    const newTotalBase = parseTokenAmountToBaseUnits(newTotalHuman, safeDecimals);
+    if (newTotalBase <= BigInt(0)) return;
+
+    const currentSum = amounts.reduce(
+      (sum, v) =>
+        sum + parseTokenAmountToBaseUnits(String(v || "0"), safeDecimals),
+      BigInt(0)
+    );
+
+    let rescaled: string[];
+    if (currentSum <= BigInt(0)) {
+      const base = newTotalBase / BigInt(amounts.length);
+      const remainder = newTotalBase % BigInt(amounts.length);
+      rescaled = amounts.map((_, i) =>
+        formatBaseUnitsToTokenAmount(
+          base + (BigInt(i) < remainder ? BigInt(1) : BigInt(0)),
+          safeDecimals
+        )
+      );
+    } else {
+      const scaled = amounts.map((v) => {
+        const base = parseTokenAmountToBaseUnits(String(v || "0"), safeDecimals);
+        return (base * newTotalBase) / currentSum;
+      });
+      const scaledSum = scaled.reduce((a, b) => a + b, BigInt(0));
+      const diff = newTotalBase - scaledSum;
+      if (scaled.length > 0) scaled[scaled.length - 1] += diff;
+      rescaled = scaled.map((v) =>
+        formatBaseUnitsToTokenAmount(v, safeDecimals)
+      );
+    }
+
+    setEditMilestoneForm({
+      ...editMilestoneForm,
+      amounts: rescaled,
+      totalAmount: String(newTotalBase),
+    });
+  };
 
   // ── Allocation validation ──────────────────────────────────────────────
   const amounts = Array.isArray(editMilestoneForm.amounts)
@@ -4407,8 +4418,13 @@ const editTotalValue =
     (v) => !v || Number(v) <= 0 || !Number.isFinite(Number(v))
   );
 
-  const matchesTotal =
-    totalAmountBase > BigInt(0) ? milestoneSum === totalAmountBase : true;
+  // FIX: removed the `totalAmountBase > BigInt(0) ? ... : true` special
+  // case. That shortcut meant "if total is 0, treat it as always matching"
+  // — which was wrong whenever milestones were non-zero but total hadn't
+  // loaded yet (exactly the state right after the Stream ID field is
+  // cleared, or before a stream finishes loading). A real, direct
+  // comparison handles every case correctly, including 0 === 0.
+  const matchesTotal = milestoneSum === totalAmountBase;
 
   const insufficientBalance = useMemo(() => {
     if (!stream) return false;
@@ -4445,6 +4461,9 @@ const editTotalValue =
     !hasInvalidAmounts &&
     !insufficientBalance &&
     matchesTotal &&
+    totalAmountBase > BigInt(0) && // FIX: defense-in-depth — never allow
+    // submit while the form's total is still 0, even if matchesTotal
+    // somehow evaluates true (e.g. both sums legitimately being 0).
     amounts.length > 0 &&
     connected;
 
