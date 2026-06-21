@@ -367,6 +367,20 @@ fn withdraw_matrix() {
         data: ix_data("withdraw", &()),
     });
     assert_failed(&paused);
+
+    // withdraw_fees must also respect the global pause (pause guard runs first)
+    let fees_paused = harness.process_err(&Instruction {
+        program_id: unified_flow::ID,
+        accounts: vec![
+            AccountMeta::new(harness.admin, true),
+            AccountMeta::new_readonly(Harness::config_pda(), false),
+            AccountMeta::new(fee_vault, false),
+            AccountMeta::new(harness.stranger, false),
+            AccountMeta::new_readonly(system_program::ID, false),
+        ],
+        data: ix_data("withdraw_fees", &1u64),
+    });
+    assert_failed(&fees_paused);
 }
 
 #[test]

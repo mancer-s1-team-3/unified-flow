@@ -327,6 +327,8 @@ pub fn withdraw_fees(
     ctx: Context<WithdrawFees>,
     amount: u64,
 ) -> Result<()> {
+    require!(!ctx.accounts.config.paused, ErrorCode::ProtocolPaused);
+
     require_keys_eq!(
         ctx.accounts.admin.key(),
         ctx.accounts.config.fee_authority,
@@ -558,6 +560,8 @@ pub fn cancel(ctx: Context<Cancel>) -> Result<()> {
     Ok(())
 }
 pub fn unlock_milestone(ctx: Context<UnlockMilestone>) -> Result<()> {
+    require!(!ctx.accounts.config.paused, ErrorCode::ProtocolPaused);
+
     let stream = &mut ctx.accounts.stream;
     let milestone = &mut ctx.accounts.milestone;
 
@@ -611,6 +615,8 @@ pub fn edit_milestone(
     ctx: Context<EditMilestone>,
     new_amount: u64,
 ) -> Result<()> {
+    require!(!ctx.accounts.config.paused, ErrorCode::ProtocolPaused);
+
     let now = Clock::get()?.unix_timestamp;
     let stream = &mut ctx.accounts.stream;
     let milestone = &mut ctx.accounts.milestone;
@@ -1144,6 +1150,12 @@ pub struct EditMilestone<'info> {
     pub creator: Signer<'info>,
 
     #[account(
+        seeds = [b"config"],
+        bump = config.bump,
+    )]
+    pub config: Account<'info, ConfigAccount>,
+
+    #[account(
         mut,
         has_one = creator @ ErrorCode::Unauthorized,
         has_one = mint @ ErrorCode::InvalidMint,
@@ -1239,6 +1251,12 @@ pub struct InitializeConfig<'info> {
 pub struct UnlockMilestone<'info> {
     #[account(mut)]
     pub creator: Signer<'info>,
+
+    #[account(
+        seeds = [b"config"],
+        bump = config.bump,
+    )]
+    pub config: Account<'info, ConfigAccount>,
 
     #[account(
         mut,

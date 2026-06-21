@@ -601,6 +601,24 @@ export type UnifiedFlow = {
           ]
         },
         {
+          "name": "config",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  99,
+                  111,
+                  110,
+                  102,
+                  105,
+                  103
+                ]
+              }
+            ]
+          }
+        },
+        {
           "name": "stream",
           "writable": true,
           "pda": {
@@ -761,6 +779,51 @@ export type UnifiedFlow = {
       "args": []
     },
     {
+      "name": "setPause",
+      "discriminator": [
+        63,
+        32,
+        154,
+        2,
+        56,
+        103,
+        79,
+        45
+      ],
+      "accounts": [
+        {
+          "name": "admin",
+          "writable": true,
+          "signer": true
+        },
+        {
+          "name": "config",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  99,
+                  111,
+                  110,
+                  102,
+                  105,
+                  103
+                ]
+              }
+            ]
+          }
+        }
+      ],
+      "args": [
+        {
+          "name": "paused",
+          "type": "bool"
+        }
+      ]
+    },
+    {
       "name": "unlockMilestone",
       "discriminator": [
         131,
@@ -780,6 +843,24 @@ export type UnifiedFlow = {
           "relations": [
             "stream"
           ]
+        },
+        {
+          "name": "config",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  99,
+                  111,
+                  110,
+                  102,
+                  105,
+                  103
+                ]
+              }
+            ]
+          }
         },
         {
           "name": "stream",
@@ -1190,6 +1271,19 @@ export type UnifiedFlow = {
         152,
         104,
         241
+      ]
+    },
+    {
+      "name": "protocolPaused",
+      "discriminator": [
+        35,
+        111,
+        245,
+        138,
+        237,
+        199,
+        79,
+        223
       ]
     },
     {
@@ -1671,6 +1765,26 @@ export type UnifiedFlow = {
           {
             "name": "effectiveAt",
             "type": "i64"
+          }
+        ]
+      }
+    },
+    {
+      "name": "protocolPaused",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "admin",
+            "type": "pubkey"
+          },
+          {
+            "name": "timestamp",
+            "type": "i64"
+          },
+          {
+            "name": "paused",
+            "type": "bool"
           }
         ]
       }

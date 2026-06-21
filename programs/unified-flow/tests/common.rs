@@ -511,6 +511,7 @@ impl Harness {
             program_id: unified_flow::ID,
             accounts: vec![
                 AccountMeta::new(self.creator, true),
+                AccountMeta::new_readonly(Self::config_pda(), false),
                 AccountMeta::new(stream, false),
                 AccountMeta::new(milestone, false),
                 AccountMeta::new_readonly(system_program::ID, false),
@@ -534,6 +535,7 @@ impl Harness {
             program_id: unified_flow::ID,
             accounts: vec![
                 AccountMeta::new(self.creator, true),
+                AccountMeta::new_readonly(Self::config_pda(), false),
                 AccountMeta::new(stream, false),
                 AccountMeta::new(milestone, false),
                 AccountMeta::new_readonly(mint, false),

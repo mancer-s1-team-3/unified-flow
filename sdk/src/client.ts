@@ -381,10 +381,13 @@ export class UnifiedFlowClient {
     const creator = new PublicKey(this.wallet.account.address.toString());
     const milestonePDA = getMilestonePDA(streamPDA, milestoneIndex, this.program.programId)[0];
 
+    const config = this.getConfigPDA();
+
     const anchorIx = await this.program.methods
       .unlockMilestone()
       .accounts({
         creator,
+        config,
         stream: streamPDA,
         milestone: milestonePDA,
         systemProgram: SystemProgram.programId,
@@ -397,6 +400,7 @@ export class UnifiedFlowClient {
 
     const kitIx = this._toKitInstruction(anchorIx, [
       { address: creator.toBase58(), role: AccountRole.WRITABLE_SIGNER, signer: this.kitSigner },
+      { address: config.toBase58(), role: AccountRole.READONLY },
       { address: streamPDA.toBase58(), role: AccountRole.WRITABLE },
       { address: milestonePDA.toBase58(), role: AccountRole.WRITABLE },
       { address: SystemProgram.programId.toBase58(), role: AccountRole.READONLY },
@@ -459,10 +463,13 @@ export class UnifiedFlowClient {
           ),
         ];
 
+    const config = this.getConfigPDA();
+
     const anchorIx = await this.program.methods
       .editMilestone(newAmount)
       .accounts({
         creator,
+        config,
         stream: streamPDA,
         milestone: milestonePDA,
         mint,
@@ -478,6 +485,7 @@ export class UnifiedFlowClient {
 
     const kitIx = this._toKitInstruction(anchorIx, [
       { address: creator.toBase58(), role: AccountRole.WRITABLE_SIGNER, signer: this.kitSigner },
+      { address: config.toBase58(), role: AccountRole.READONLY },
       { address: streamPDA.toBase58(), role: AccountRole.WRITABLE },
       { address: milestonePDA.toBase58(), role: AccountRole.WRITABLE },
       { address: mint.toBase58(), role: AccountRole.READONLY },

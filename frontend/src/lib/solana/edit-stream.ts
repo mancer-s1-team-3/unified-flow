@@ -641,10 +641,13 @@ export async function editMilestoneOnChain({
 
 
 
+  const [configPda] = PublicKey.findProgramAddressSync([Buffer.from("config")], PROGRAM_ID);
+
   const anchorInstruction = await program.methods
     .editMilestone(newAmount)
     .accounts({
       creator,
+      config: configPda,
       stream: streamAddress,
       milestone: milestoneAddress,
       mint,
@@ -663,6 +666,7 @@ export async function editMilestoneOnChain({
     anchorInstructionData: anchorInstruction.data,
     accounts: [
       { address: creator.toBase58(), role: AccountRole.WRITABLE_SIGNER, signer: walletSigner as any },
+      { address: configPda.toBase58(), role: AccountRole.READONLY },
       { address: streamAddress.toBase58(), role: AccountRole.WRITABLE },
       { address: milestoneAddress.toBase58(), role: AccountRole.WRITABLE },
       { address: mint.toBase58(), role: AccountRole.READONLY },

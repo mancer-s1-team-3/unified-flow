@@ -545,6 +545,8 @@ describe("cancel", () => {
       .unlockMilestone()
       .accountsStrict({
         creator: creator.publicKey,
+
+        config: PublicKey.findProgramAddressSync([Buffer.from("config")], program.programId)[0],
         stream: streamPda,
         milestone: milestonePdas[0],
         systemProgram: SystemProgram.programId,
@@ -578,6 +580,8 @@ describe("cancel", () => {
         .unlockMilestone()
         .accountsStrict({
           creator: creator.publicKey,
+
+          config: PublicKey.findProgramAddressSync([Buffer.from("config")], program.programId)[0],
           stream: streamPda,
           milestone: milestonePdas[i],
           systemProgram: SystemProgram.programId,
@@ -728,6 +732,8 @@ describe("cancel", () => {
         .unlockMilestone()
         .accountsStrict({
           creator: creator.publicKey,
+
+          config: PublicKey.findProgramAddressSync([Buffer.from("config")], program.programId)[0],
           stream: streamPda,
           milestone: milestonePda,
           systemProgram: SystemProgram.programId,

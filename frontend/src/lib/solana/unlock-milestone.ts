@@ -119,10 +119,13 @@ export async function unlockMilestoneOnChain({
 
   const { blockhash, lastValidBlockHeight } = await connection.getLatestBlockhash(commitment);
 
+  const [configPda] = PublicKey.findProgramAddressSync([Buffer.from("config")], PROGRAM_ID);
+
   const anchorInstruction = await program.methods
     .unlockMilestone()
     .accountsStrict({
       creator,
+      config: configPda,
       stream: streamAddress,
       milestone: milestoneAddress,
       systemProgram: SystemProgram.programId,
@@ -133,6 +136,7 @@ export async function unlockMilestoneOnChain({
     programAddress: PROGRAM_ID.toBase58(),
     accounts: [
       { address: creator.toBase58(), role: AccountRole.WRITABLE_SIGNER, signer: kitSigner },
+      { address: configPda.toBase58(), role: AccountRole.READONLY },
       { address: streamAddress.toBase58(), role: AccountRole.WRITABLE },
       { address: milestoneAddress.toBase58(), role: AccountRole.WRITABLE },
       { address: SystemProgram.programId.toBase58(), role: AccountRole.READONLY },
