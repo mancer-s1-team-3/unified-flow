@@ -836,6 +836,26 @@ pub fn edit_linear(
 
     Ok(())
 }
+pub fn set_pause(ctx: Context<SetPause>, paused: bool) -> Result<()> {
+    let now = Clock::get()?.unix_timestamp;
+
+    require_keys_eq!(
+        ctx.accounts.admin.key(),
+        ctx.accounts.config.admin_authority,
+        ErrorCode::Unauthorized
+    );
+
+    let config = &mut ctx.accounts.config;
+    config.paused = paused;
+
+    emit!(ProtocolPaused {
+        admin: ctx.accounts.admin.key(),
+        timestamp: now,
+        paused,
+    });
+
+    Ok(())
+}
     pub fn initialize_config(
     ctx: Context<InitializeConfig>,
     ) -> Result<()> {
@@ -866,7 +886,18 @@ pub fn edit_linear(
     Ok(())
 }
 }
+#[derive(Accounts)]
+pub struct SetPause<'info> {
+    #[account(mut)]
+    pub admin: Signer<'info>,
 
+    #[account(
+        mut,
+        seeds = [b"config"],
+        bump = config.bump,
+    )]
+    pub config: Account<'info, ConfigAccount>,
+}
 #[derive(Accounts)]
 #[instruction(amount: u64, start_ts: i64, cliff_ts: i64, end_ts: i64, vesting_type: u8, milestones: Vec<MilestoneInput>, nonce: u64)]
 pub struct CreateStream<'info> {
@@ -1527,6 +1558,12 @@ pub struct TokensClaimed {
     pub fee_lamports: u64,
     pub withdrawn_total: u64,
     pub timestamp: i64,
+}
+#[event]
+pub struct ProtocolPaused {
+    pub admin: Pubkey,
+    pub timestamp: i64,
+    pub paused: bool,
 }
 #[derive(AnchorSerialize, AnchorDeserialize, Clone)]
 pub struct MilestoneInput {
