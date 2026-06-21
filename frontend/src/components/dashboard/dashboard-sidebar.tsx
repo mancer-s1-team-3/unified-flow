@@ -217,16 +217,15 @@ export const DashboardSidebar = memo(function DashboardSidebar({
     adminConfig &&
     connectedWalletAddress &&
     adminConfig.adminAuthority !== connectedWalletAddress;
-    
+    const canAccessAdmin =
+  connected &&
+  !!adminConfig &&
+  !isUnauthorized;
   return (
     <>
       {/* Mobile bottom nav */}
       <div className="md:hidden">
-        <MobileBottomNav showAdmin={
-    connected &&
-    !!adminConfig &&
-    !isUnauthorized
-  } activeTab={activeTab} onSelect={setActiveTab} streamsCount={streamsCount} />
+        <MobileBottomNav   showAdmin={canAccessAdmin}activeTab={activeTab} onSelect={setActiveTab} streamsCount={streamsCount} />
       </div>
 
       {/* Desktop sidebar */}
