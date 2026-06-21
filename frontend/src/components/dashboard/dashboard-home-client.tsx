@@ -20,7 +20,7 @@ import { editStreamBatchOnChain } from "@/lib/solana/edit-stream";
 import { withdrawFromStreamOnChain } from "@/lib/solana/withdraw";
 import { cancelStreamOnChain } from "@/lib/solana/cancel";
 import { unlockMilestoneOnChain } from "@/lib/solana/unlock-milestone";
-import { setPauseOnChain, withdrawFeesOnChain } from "@/lib/solana/admin";
+import { fetchAdminConfig, setPauseOnChain, withdrawFeesOnChain } from "@/lib/solana/admin";
 import { parseTransactionError } from "@/lib/parse-tx-error";
 import { useNotifications } from "@/lib/notification-context";
 import { getExplorerClusterParam, getNetworkByEndpoint } from "@/lib/solana/network-config";
@@ -370,7 +370,22 @@ export default function Home({ initialStreams = [] }: Props) {
       setLoading(false);
     }
   }, [showNotification]);
+const [adminConfig, setAdminConfig] = useState<any | null>(null);
+const [adminConfigLoading, setAdminConfigLoading] = useState(true);
 
+const loadAdminConfig = useCallback(async () => {
+  setAdminConfigLoading(true);
+  const config = await fetchAdminConfig({ endpoint });
+  setAdminConfig(config);
+  setAdminConfigLoading(false);
+}, [endpoint]);
+
+useEffect(() => { loadAdminConfig(); }, [loadAdminConfig]);
+
+// Refetch setelah transaksi admin selesai (gantikan effect serupa di AdminPanel)
+useEffect(() => {
+  if (!activeTxAction && !activeTxPhase) loadAdminConfig();
+}, [activeTxAction, activeTxPhase, loadAdminConfig]);
   // ── CSV versioning ────────────────────────────────────────────────────────
   const [csvVersions,           setCsvVersions]          = useState<any[]>([]);
   const [compareVersionSelected, setCompareVersionSelected] = useState<string>("0");
@@ -898,32 +913,42 @@ export default function Home({ initialStreams = [] }: Props) {
     }
 
     // ── set_pause ───────────────────────────────────────────────────────────
-    if (actionName === "set_pause") {
-      if (!wallet) { showNotification("error", "Connect the admin wallet before modifying the pause state."); return; }
-      try {
-        await setPauseOnChain({ wallet, endpoint, paused: data.paused, onStatus: setTxStatus });
-        addNotification({ type: "success", event: "stream_edited", title: "Protocol State Updated", message: `Protocol has been ${data.paused ? "paused" : "unpaused"}.` });
-      } catch (err: any) {
-        clearTxStatus();
-        showParsedTxError(err, "Failed to update protocol pause state.");
-      } finally { clearTxStatus(); }
-      return;
+if (actionName === "set_pause") {
+  if (!wallet) { showNotification("error", "Connect the admin wallet before modifying the pause state."); return; }
+  try {
+    // Re-fetch config terbaru tepat sebelum submit, supaya tidak pakai
+    // adminConfig.paused yang stale (misal sudah diubah dari sesi lain).
+    const freshConfig = await fetchAdminConfig({ endpoint });
+    if (!freshConfig) throw new Error("Failed to load current protocol config.");
+    if (connectedWalletAddress && freshConfig.adminAuthority !== connectedWalletAddress) {
+      throw new Error("Connected wallet is not the admin authority.");
     }
+    await setPauseOnChain({ wallet, endpoint, paused: data.paused, onStatus: setTxStatus });
+    addNotification({ type: "success", event: "stream_edited", title: "Protocol State Updated", message: `Protocol has been ${data.paused ? "paused" : "unpaused"}.` });
+  } catch (err: any) {
+    clearTxStatus();
+    showParsedTxError(err, "Failed to update protocol pause state.");
+  } finally { clearTxStatus(); }
+  return;
+} 
 
     // ── withdraw_fees ───────────────────────────────────────────────────────
-    if (actionName === "withdraw_fees") {
-      if (!wallet) { showNotification("error", "Connect the admin wallet before withdrawing fees."); return; }
-      try {
-        const amountBaseUnits = parseBaseUnits(data.amount);
-        if (amountBaseUnits <= BigInt(0)) throw new Error("Amount must be greater than zero.");
-        await withdrawFeesOnChain({ wallet, endpoint, destination: data.destination, amountBaseUnits, onStatus: setTxStatus });
-        addNotification({ type: "success", event: "tokens_withdrawn", title: "Fees Withdrawn", message: "Successfully withdrawn SOL from the protocol fee vault." });
-      } catch (err: any) {
-        clearTxStatus();
-        showParsedTxError(err, "Failed to withdraw fees.");
-      } finally { clearTxStatus(); }
-      return;
-    }
+   if (actionName === "withdraw_fees") {
+  if (!wallet) { showNotification("error", "Connect the admin wallet before withdrawing fees."); return; }
+  try {
+    // data.amount berupa SOL desimal (mis. "0.558343467"), bukan lamports.
+    // parseBaseUnits salah karena BigInt() tidak terima string desimal —
+    // gunakan parseTokenAmountToBaseUnits dengan decimals=9 (lamports per SOL).
+    const amountBaseUnits = parseTokenAmountToBaseUnits(data.amount, 9);
+    if (amountBaseUnits <= BigInt(0)) throw new Error("Amount must be greater than zero.");
+    await withdrawFeesOnChain({ wallet, endpoint, destination: data.destination, amountBaseUnits, onStatus: setTxStatus });
+    addNotification({ type: "success", event: "tokens_withdrawn", title: "Fees Withdrawn", message: "Successfully withdrawn SOL from the protocol fee vault." });
+  } catch (err: any) {
+    clearTxStatus();
+    showParsedTxError(err, "Failed to withdraw fees.");
+  } finally { clearTxStatus(); }
+  return;
+}
 
     showNotification("success", `Transaction submitted: Successfully executed ${actionName}!`);
   };
@@ -987,12 +1012,13 @@ export default function Home({ initialStreams = [] }: Props) {
 
       <div className="max-w-7xl mx-auto w-full px-4 py-4 sm:px-6 sm:py-8 pb-20 md:pb-8 flex-grow flex flex-col md:flex-row gap-4 md:gap-8 relative z-10">
 
-        <DashboardSidebar
-        connectedWalletAddress={connectedWalletAddress}
-        endpoint={endpoint}
-        connected={connected}
-        activeTab={activeTab} setActiveTab={setActiveTab} streamsCount={filteredStreamsCount} />
-
+    <DashboardSidebar
+  connectedWalletAddress={connectedWalletAddress}
+  adminConfig={adminConfig}
+  adminConfigLoading={adminConfigLoading}
+  connected={connected}
+  activeTab={activeTab} setActiveTab={setActiveTab} streamsCount={filteredStreamsCount}
+/>
         <section className="flex-grow min-w-0 max-w-full bg-zinc-900/25 border border-zinc-800/80 rounded-3xl p-4 sm:p-6 md:backdrop-blur-sm md:shadow-2xl shadow-none flex flex-col justify-between relative overflow-x-hidden">
           <div className="w-full">
 
