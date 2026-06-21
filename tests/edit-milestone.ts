@@ -395,6 +395,8 @@ describe("edit-milestone", () => {
             .editMilestone(newAmount)
             .accountsStrict({
                 creator: creator.publicKey,
+
+                config: PublicKey.findProgramAddressSync([Buffer.from("config")], program.programId)[0],
                 stream: streamPda,
                 milestone: milestonePda,
                 mint,
@@ -427,6 +429,8 @@ describe("edit-milestone", () => {
             .unlockMilestone()
             .accountsStrict({
                 creator: creator.publicKey,
+
+                config: PublicKey.findProgramAddressSync([Buffer.from("config")], program.programId)[0],
                 stream: streamPda,
                 milestone: milestonePdas[0],
                 systemProgram: SystemProgram.programId,
@@ -439,6 +443,8 @@ describe("edit-milestone", () => {
                 .editMilestone(new BN(300_000))
                 .accountsStrict({
                     creator: creator.publicKey,
+
+                    config: PublicKey.findProgramAddressSync([Buffer.from("config")], program.programId)[0],
                     stream: streamPda,
                     milestone: milestonePdas[0],
                     mint,
@@ -471,6 +477,8 @@ describe("edit-milestone", () => {
             .editMilestone(newAmount)
             .accountsStrict({
                 creator: creator.publicKey,
+
+                config: PublicKey.findProgramAddressSync([Buffer.from("config")], program.programId)[0],
                 stream: streamPda,
                 milestone: milestonePda,
                 mint,
@@ -519,6 +527,8 @@ describe("edit-milestone", () => {
             .editMilestone(sameAmount)
             .accountsStrict({
                 creator: creator.publicKey,
+
+                config: PublicKey.findProgramAddressSync([Buffer.from("config")], program.programId)[0],
                 stream: streamPda,
                 milestone: milestonePda,
                 mint,
@@ -560,6 +570,8 @@ describe("edit-milestone", () => {
                 .editMilestone(new BN(0))
                 .accountsStrict({
                     creator: creator.publicKey,
+
+                    config: PublicKey.findProgramAddressSync([Buffer.from("config")], program.programId)[0],
                     stream: streamPda,
                     milestone: milestonePdas[0],
                     mint,
@@ -593,6 +605,8 @@ describe("edit-milestone", () => {
                 .editMilestone(new BN(300_000))
                 .accountsStrict({
                     creator: creator.publicKey,
+
+                    config: PublicKey.findProgramAddressSync([Buffer.from("config")], program.programId)[0],
                     stream: streamPda,
                     milestone: fakeMilestonePda,
                     mint,
@@ -642,6 +656,8 @@ describe("edit-milestone", () => {
                 .editMilestone(new BN(300_000))
                 .accountsStrict({
                     creator: creator.publicKey,
+
+                    config: PublicKey.findProgramAddressSync([Buffer.from("config")], program.programId)[0],
                     stream: streamPda,
                     milestone: milestonePdas[0],
                     mint,
@@ -672,6 +688,7 @@ describe("edit-milestone", () => {
                 .editMilestone(new BN(300_000))
                 .accountsStrict({
                     creator: recipient.publicKey,  // bukan creator asli
+                    config: PublicKey.findProgramAddressSync([Buffer.from("config")], program.programId)[0],
                     stream: streamPda,
                     milestone: milestonePdas[0],
                     mint,
@@ -709,6 +726,8 @@ describe("edit-milestone", () => {
             .editMilestone(new BN(1))
             .accountsStrict({
                 creator: creator.publicKey,
+
+                config: PublicKey.findProgramAddressSync([Buffer.from("config")], program.programId)[0],
                 stream: streamPda,
                 milestone: milestonePdas[1],
                 mint,
@@ -750,6 +769,8 @@ describe("edit-milestone", () => {
             .editMilestone(newAmount)
             .accountsStrict({
                 creator: creator.publicKey,
+
+                config: PublicKey.findProgramAddressSync([Buffer.from("config")], program.programId)[0],
                 stream: streamPda,
                 milestone: milestonePda,
                 mint,
@@ -794,6 +815,8 @@ describe("edit-milestone", () => {
             .editMilestone(new BN(500_000))
             .accountsStrict({
                 creator: creator.publicKey,
+
+                config: PublicKey.findProgramAddressSync([Buffer.from("config")], program.programId)[0],
                 stream: streamPda,
                 milestone: milestonePda,
                 mint,
@@ -812,6 +835,8 @@ describe("edit-milestone", () => {
             .editMilestone(new BN(100_000))
             .accountsStrict({
                 creator: creator.publicKey,
+
+                config: PublicKey.findProgramAddressSync([Buffer.from("config")], program.programId)[0],
                 stream: streamPda,
                 milestone: milestonePda,
                 mint,
@@ -830,6 +855,8 @@ describe("edit-milestone", () => {
             .editMilestone(new BN(300_000))
             .accountsStrict({
                 creator: creator.publicKey,
+
+                config: PublicKey.findProgramAddressSync([Buffer.from("config")], program.programId)[0],
                 stream: streamPda,
                 milestone: milestonePda,
                 mint,
@@ -862,6 +889,8 @@ describe("edit-milestone", () => {
             .unlockMilestone()
             .accountsStrict({
                 creator: creator.publicKey,
+
+                config: PublicKey.findProgramAddressSync([Buffer.from("config")], program.programId)[0],
                 stream: streamPda,
                 milestone: milestonePdas[0],
                 systemProgram: SystemProgram.programId,
@@ -873,6 +902,8 @@ describe("edit-milestone", () => {
             .unlockMilestone()
             .accountsStrict({
                 creator: creator.publicKey,
+
+                config: PublicKey.findProgramAddressSync([Buffer.from("config")], program.programId)[0],
                 stream: streamPda,
                 milestone: milestonePdas[1],
                 systemProgram: SystemProgram.programId,
@@ -889,6 +920,8 @@ describe("edit-milestone", () => {
             .editMilestone(newAmount)
             .accountsStrict({
                 creator: creator.publicKey,
+
+                config: PublicKey.findProgramAddressSync([Buffer.from("config")], program.programId)[0],
                 stream: streamPda,
                 milestone: milestonePdas[3],
                 mint,
@@ -920,6 +953,8 @@ describe("edit-milestone", () => {
             .unlockMilestone()
             .accountsStrict({
                 creator: creator.publicKey,
+
+                config: PublicKey.findProgramAddressSync([Buffer.from("config")], program.programId)[0],
                 stream: streamPda,
                 milestone: milestonePdas[0],
                 systemProgram: SystemProgram.programId,
@@ -936,6 +971,8 @@ describe("edit-milestone", () => {
                 .editMilestone(new BN(300_000))
                 .accountsStrict({
                     creator: creator.publicKey,
+
+                    config: PublicKey.findProgramAddressSync([Buffer.from("config")], program.programId)[0],
                     stream: streamPda,
                     milestone: milestonePdas[0],
                     mint,
@@ -970,6 +1007,8 @@ describe("edit-milestone", () => {
         await program.methods.unlockMilestone()
             .accountsStrict({
                 creator: creator.publicKey,
+
+                config: PublicKey.findProgramAddressSync([Buffer.from("config")], program.programId)[0],
                 stream: streamPda,
                 milestone: milestonePdas[0],
                 systemProgram: SystemProgram.programId,
@@ -1075,6 +1114,8 @@ describe("edit-milestone", () => {
         await program.methods.unlockMilestone()
             .accountsStrict({
                 creator: creator.publicKey,
+
+                config: PublicKey.findProgramAddressSync([Buffer.from("config")], program.programId)[0],
                 stream: streamPda,
                 milestone: milestonePdas[0],
                 systemProgram: SystemProgram.programId,
@@ -1117,6 +1158,8 @@ describe("edit-milestone", () => {
             .editMilestone(new BN(1))
             .accountsStrict({
                 creator: creator.publicKey,
+
+                config: PublicKey.findProgramAddressSync([Buffer.from("config")], program.programId)[0],
                 stream: streamPda,
                 milestone: milestonePdas[1],
                 mint,
@@ -1160,6 +1203,8 @@ describe("edit-milestone", () => {
                 .editMilestone(new BN(300_000))
                 .accountsStrict({
                     creator: attacker.publicKey,
+
+                    config: PublicKey.findProgramAddressSync([Buffer.from("config")], program.programId)[0],
                     stream: streamPda,
                     milestone: milestonePdas[1],
                     mint,
@@ -1192,6 +1237,8 @@ describe("edit-milestone", () => {
                 .editMilestone(new BN(300_000))
                 .accountsStrict({
                     creator: creator.publicKey,
+
+                    config: PublicKey.findProgramAddressSync([Buffer.from("config")], program.programId)[0],
                     stream: streamA,
                     milestone: milestonesB[0], // milestone dari stream lain
                     mint,
@@ -1223,6 +1270,8 @@ describe("edit-milestone", () => {
                 .editMilestone(u64Max)
                 .accountsStrict({
                     creator: creator.publicKey,
+
+                    config: PublicKey.findProgramAddressSync([Buffer.from("config")], program.programId)[0],
                     stream: streamPda,
                     milestone: milestonePdas[0],
                     mint,
@@ -1254,6 +1303,8 @@ describe("edit-milestone", () => {
             .editMilestone(new BN(1))
             .accountsStrict({
                 creator: creator.publicKey,
+
+                config: PublicKey.findProgramAddressSync([Buffer.from("config")], program.programId)[0],
                 stream: streamPda,
                 milestone: milestonePdas[0],
                 mint,
@@ -1289,6 +1340,8 @@ describe("edit-milestone", () => {
                 .editMilestone(new BN(300_000))
                 .accountsStrict({
                     creator: creator.publicKey,
+
+                    config: PublicKey.findProgramAddressSync([Buffer.from("config")], program.programId)[0],
                     stream: streamA,
                     milestone: milestonesA[1],
                     mint,
@@ -1323,6 +1376,8 @@ describe("edit-milestone", () => {
                 .editMilestone(new BN(999_999_999))
                 .accountsStrict({
                     creator: creator.publicKey,
+
+                    config: PublicKey.findProgramAddressSync([Buffer.from("config")], program.programId)[0],
                     stream: streamPda,
                     milestone: milestonePdas[0],
                     mint,
@@ -1428,6 +1483,8 @@ describe("edit-milestone", () => {
                 .editMilestone(new BN(350_000))
                 .accountsStrict({
                     creator: freshCreator.publicKey,
+
+                    config: PublicKey.findProgramAddressSync([Buffer.from("config")], program.programId)[0],
                     stream: streamPda,
                     milestone: milestonePdas[0],
                     mint,
@@ -1469,6 +1526,7 @@ describe("edit-milestone", () => {
                 .editMilestone(new BN(300_000))
                 .accountsStrict({
                     creator: recipient.publicKey,   // recipient impersonate creator
+                    config: PublicKey.findProgramAddressSync([Buffer.from("config")], program.programId)[0],
                     stream: streamPda,
                     milestone: milestonePdas[0],
                     mint,
@@ -1501,6 +1559,8 @@ describe("edit-milestone", () => {
                 .editMilestone(new BN(300_000))
                 .accountsStrict({
                     creator: creator.publicKey,
+
+                    config: PublicKey.findProgramAddressSync([Buffer.from("config")], program.programId)[0],
                     stream: streamPda,
                     milestone: streamPda,  // stream dipass sebagai milestone
                     mint,
@@ -1528,6 +1588,8 @@ describe("edit-milestone", () => {
                 .editMilestone(new BN(300_000))
                 .accountsStrict({
                     creator: creator.publicKey,
+
+                    config: PublicKey.findProgramAddressSync([Buffer.from("config")], program.programId)[0],
                     stream: streamPda,
                     milestone: milestonePdas[1],
                     mint,
@@ -1557,6 +1619,8 @@ describe("edit-milestone", () => {
                 .editMilestone(new BN(100_000))
                 .accountsStrict({
                     creator: creator.publicKey,
+
+                    config: PublicKey.findProgramAddressSync([Buffer.from("config")], program.programId)[0],
                     stream: streamPda,
                     milestone: milestonePdas[0],
                     mint,
@@ -1589,6 +1653,8 @@ describe("edit-milestone", () => {
             .editMilestone(new BN(350_000))
             .accountsStrict({
                 creator: creator.publicKey,
+
+                config: PublicKey.findProgramAddressSync([Buffer.from("config")], program.programId)[0],
                 stream: streamPda,
                 milestone: milestonePdas[2],
                 mint,
@@ -1636,6 +1702,8 @@ describe("edit-milestone", () => {
                 .editMilestone(new BN(1))   // decrease → harusnya drain vaultB
                 .accountsStrict({
                     creator: creator.publicKey,
+
+                    config: PublicKey.findProgramAddressSync([Buffer.from("config")], program.programId)[0],
                     stream: streamB,          // target stream B
                     milestone: milestonesA[0], // milestone dari stream A
                     mint,

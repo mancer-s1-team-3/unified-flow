@@ -788,6 +788,8 @@ describe("withdraw", () => {
         .unlockMilestone()
         .accountsStrict({
           creator: creator.publicKey,
+
+          config: PublicKey.findProgramAddressSync([Buffer.from("config")], program.programId)[0],
           stream: streamPda,
           milestone: milestonePda,
           systemProgram: SystemProgram.programId,

@@ -235,6 +235,7 @@ fn main() {
         program_id: unified_flow::ID,
         accounts: vec![
             AccountMeta::new(harness.creator, true),
+            AccountMeta::new_readonly(config, false),
             AccountMeta::new(ms_stream, false),
             AccountMeta::new(milestone0, false),
             AccountMeta::new_readonly(system_program::ID, false),
@@ -358,6 +359,7 @@ fn main() {
         program_id: unified_flow::ID,
         accounts: vec![
             AccountMeta::new(harness.creator, true),
+            AccountMeta::new_readonly(config, false),
             AccountMeta::new(ms_stream, false),
             AccountMeta::new(milestone1, false),
             AccountMeta::new_readonly(mint, false),

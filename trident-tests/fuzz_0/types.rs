@@ -693,6 +693,8 @@ pub mod unified_flow {
     pub struct EditMilestoneInstructionAccountMetas {
         pub creator: AccountMeta,
 
+        pub config: AccountMeta,
+
         pub stream: AccountMeta,
 
         pub milestone: AccountMeta,
@@ -711,6 +713,8 @@ pub mod unified_flow {
     pub struct EditMilestoneInstructionAccounts {
         pub creator: Pubkey,
 
+        pub config: Pubkey,
+
         pub stream: Pubkey,
 
         pub milestone: Pubkey,
@@ -728,6 +732,8 @@ pub mod unified_flow {
         pub fn new(
             creator: Pubkey,
 
+            config: Pubkey,
+
             stream: Pubkey,
 
             milestone: Pubkey,
@@ -742,6 +748,8 @@ pub mod unified_flow {
         ) -> Self {
             Self {
                 creator,
+
+                config,
 
                 stream,
 
@@ -787,6 +795,8 @@ pub mod unified_flow {
         pub fn accounts(mut self, accounts: EditMilestoneInstructionAccounts) -> Self {
             self.accounts.creator = AccountMeta::new(accounts.creator, true);
 
+            self.accounts.config = AccountMeta::new_readonly(accounts.config, false);
+
             self.accounts.stream = AccountMeta::new(accounts.stream, false);
 
             self.accounts.milestone = AccountMeta::new(accounts.milestone, false);
@@ -812,6 +822,8 @@ pub mod unified_flow {
             let mut metas = Vec::new();
 
             metas.push(self.accounts.creator.clone());
+
+            metas.push(self.accounts.config.clone());
 
             metas.push(self.accounts.stream.clone());
 
@@ -955,6 +967,8 @@ pub mod unified_flow {
     pub struct UnlockMilestoneInstructionAccountMetas {
         pub creator: AccountMeta,
 
+        pub config: AccountMeta,
+
         pub stream: AccountMeta,
 
         pub milestone: AccountMeta,
@@ -967,15 +981,19 @@ pub mod unified_flow {
     pub struct UnlockMilestoneInstructionAccounts {
         pub creator: Pubkey,
 
+        pub config: Pubkey,
+
         pub stream: Pubkey,
 
         pub milestone: Pubkey,
     }
 
     impl UnlockMilestoneInstructionAccounts {
-        pub fn new(creator: Pubkey, stream: Pubkey, milestone: Pubkey) -> Self {
+        pub fn new(creator: Pubkey, config: Pubkey, stream: Pubkey, milestone: Pubkey) -> Self {
             Self {
                 creator,
+
+                config,
 
                 stream,
 
@@ -1011,6 +1029,8 @@ pub mod unified_flow {
         pub fn accounts(mut self, accounts: UnlockMilestoneInstructionAccounts) -> Self {
             self.accounts.creator = AccountMeta::new(accounts.creator, true);
 
+            self.accounts.config = AccountMeta::new_readonly(accounts.config, false);
+
             self.accounts.stream = AccountMeta::new(accounts.stream, false);
 
             self.accounts.milestone = AccountMeta::new(accounts.milestone, false);
@@ -1030,6 +1050,8 @@ pub mod unified_flow {
             let mut metas = Vec::new();
 
             metas.push(self.accounts.creator.clone());
+
+            metas.push(self.accounts.config.clone());
 
             metas.push(self.accounts.stream.clone());
 

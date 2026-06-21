@@ -333,6 +333,8 @@ describe("unlock-milestone", () => {
                 .unlockMilestone()
                 .accountsStrict({
                     creator: creator.publicKey,
+
+                    config: PublicKey.findProgramAddressSync([Buffer.from("config")], program.programId)[0],
                     stream: streamPDA,
                     milestone: remainingAccounts[i].pubkey,
                     systemProgram: anchor.web3.SystemProgram.programId,
@@ -356,6 +358,8 @@ describe("unlock-milestone", () => {
                 .unlockMilestone()
                 .accountsStrict({
                     creator: stranger.publicKey,
+
+                    config: PublicKey.findProgramAddressSync([Buffer.from("config")], program.programId)[0],
                     stream: streamPDA,
                     milestone: remainingAccounts[0].pubkey,
                     systemProgram: anchor.web3.SystemProgram.programId,
@@ -377,6 +381,8 @@ describe("unlock-milestone", () => {
                 .unlockMilestone()
                 .accountsStrict({
                     creator: creator.publicKey,
+
+                    config: PublicKey.findProgramAddressSync([Buffer.from("config")], program.programId)[0],
                     stream: streamPDA,
                     milestone: remainingAccounts[1].pubkey,
                     systemProgram: anchor.web3.SystemProgram.programId,
@@ -397,6 +403,8 @@ describe("unlock-milestone", () => {
             .unlockMilestone()
             .accountsStrict({
                 creator: creator.publicKey,
+
+                config: PublicKey.findProgramAddressSync([Buffer.from("config")], program.programId)[0],
                 stream: streamPDA,
                 milestone: remainingAccounts[0].pubkey,
                 systemProgram: anchor.web3.SystemProgram.programId,
@@ -411,6 +419,8 @@ describe("unlock-milestone", () => {
                 .unlockMilestone()
                 .accountsStrict({
                     creator: creator.publicKey,
+
+                    config: PublicKey.findProgramAddressSync([Buffer.from("config")], program.programId)[0],
                     stream: streamPDA,
                     milestone: remainingAccounts[0].pubkey,
                     systemProgram: anchor.web3.SystemProgram.programId,
@@ -453,6 +463,8 @@ describe("unlock-milestone", () => {
                 .unlockMilestone()
                 .accountsStrict({
                     creator: creator.publicKey,
+
+                    config: PublicKey.findProgramAddressSync([Buffer.from("config")], program.programId)[0],
                     stream: streamPDA,
                     milestone: remainingAccounts[0].pubkey,
                     systemProgram: anchor.web3.SystemProgram.programId,
@@ -509,6 +521,8 @@ describe("unlock-milestone", () => {
                 .unlockMilestone()
                 .accountsStrict({
                     creator: creator.publicKey,
+
+                    config: PublicKey.findProgramAddressSync([Buffer.from("config")], program.programId)[0],
                     stream: linearStreamPDA,
                     milestone: fakeMilestonePda,
                     systemProgram: anchor.web3.SystemProgram.programId,
@@ -541,6 +555,8 @@ describe("unlock-milestone", () => {
             await program.methods.unlockMilestone()
                 .accountsStrict({
                     creator: creator.publicKey,
+
+                    config: PublicKey.findProgramAddressSync([Buffer.from("config")], program.programId)[0],
                     stream: streamPDA,
                     milestone: remainingAccounts[i].pubkey,
                     systemProgram: anchor.web3.SystemProgram.programId,
@@ -580,6 +596,8 @@ describe("unlock-milestone", () => {
             .unlockMilestone()
             .accountsStrict({
                 creator: creator.publicKey,
+
+                config: PublicKey.findProgramAddressSync([Buffer.from("config")], program.programId)[0],
                 stream: streamPDA,
                 milestone: remainingAccounts[0].pubkey,
                 systemProgram: anchor.web3.SystemProgram.programId,
@@ -602,6 +620,8 @@ describe("unlock-milestone", () => {
             .unlockMilestone()
             .accountsStrict({
                 creator: creator.publicKey,
+
+                config: PublicKey.findProgramAddressSync([Buffer.from("config")], program.programId)[0],
                 stream: streamPDA,
                 milestone: remainingAccounts[0].pubkey,
                 systemProgram: anchor.web3.SystemProgram.programId,
@@ -662,6 +682,8 @@ describe("unlock-milestone", () => {
                 .unlockMilestone()
                 .accountsStrict({
                     creator: creatorB.publicKey,
+
+                    config: PublicKey.findProgramAddressSync([Buffer.from("config")], program.programId)[0],
                     stream: streamA,
                     milestone: milestonesA[0].pubkey,
                     systemProgram: anchor.web3.SystemProgram.programId,
@@ -688,6 +710,8 @@ describe("unlock-milestone", () => {
                 .unlockMilestone()
                 .accountsStrict({
                     creator: creator.publicKey,
+
+                    config: PublicKey.findProgramAddressSync([Buffer.from("config")], program.programId)[0],
                     stream: streamA,
                     milestone: milestonesB[0].pubkey,
                     systemProgram: anchor.web3.SystemProgram.programId,
@@ -725,6 +749,8 @@ describe("unlock-milestone", () => {
             await program.methods.unlockMilestone()
                 .accountsStrict({
                     creator: creator.publicKey,
+
+                    config: PublicKey.findProgramAddressSync([Buffer.from("config")], program.programId)[0],
                     stream: streamPDA,
                     milestone: remainingAccounts[i].pubkey,
                     systemProgram: anchor.web3.SystemProgram.programId,
@@ -758,6 +784,8 @@ describe("unlock-milestone", () => {
         await program.methods.unlockMilestone()
             .accountsStrict({
                 creator: creator.publicKey,
+
+                config: PublicKey.findProgramAddressSync([Buffer.from("config")], program.programId)[0],
                 stream: streamPDA,
                 milestone: remainingAccounts[0].pubkey,
                 systemProgram: anchor.web3.SystemProgram.programId,
@@ -794,6 +822,8 @@ describe("unlock-milestone", () => {
                 .unlockMilestone()
                 .accountsStrict({
                     creator: recipient.publicKey,
+
+                    config: PublicKey.findProgramAddressSync([Buffer.from("config")], program.programId)[0],
                     stream: streamPDA,
                     milestone: remainingAccounts[0].pubkey,
                     systemProgram: anchor.web3.SystemProgram.programId,
@@ -815,6 +845,8 @@ describe("unlock-milestone", () => {
                 .unlockMilestone()
                 .accountsStrict({
                     creator: creator.publicKey,
+
+                    config: PublicKey.findProgramAddressSync([Buffer.from("config")], program.programId)[0],
                     stream: streamPDA,
                     milestone: streamPDA,
                     systemProgram: anchor.web3.SystemProgram.programId,
@@ -836,6 +868,8 @@ describe("unlock-milestone", () => {
                 .unlockMilestone()
                 .accountsStrict({
                     creator: creator.publicKey,
+
+                    config: PublicKey.findProgramAddressSync([Buffer.from("config")], program.programId)[0],
                     stream: streamPDA,
                     milestone: remainingAccounts[0].pubkey,
                     systemProgram: TOKEN_PROGRAM_ID,
@@ -865,6 +899,8 @@ describe("unlock-milestone", () => {
             .unlockMilestone()
             .accountsStrict({
                 creator: creator.publicKey,
+
+                config: PublicKey.findProgramAddressSync([Buffer.from("config")], program.programId)[0],
                 stream: streamPDA,
                 milestone: remainingAccounts[0].pubkey,
                 systemProgram: anchor.web3.SystemProgram.programId,
@@ -890,6 +926,8 @@ describe("unlock-milestone", () => {
                 .unlockMilestone()
                 .accountsStrict({
                     creator: creator.publicKey,
+
+                    config: PublicKey.findProgramAddressSync([Buffer.from("config")], program.programId)[0],
                     stream: streamPDA,
                     milestone: streamPDA,
                     systemProgram: anchor.web3.SystemProgram.programId,

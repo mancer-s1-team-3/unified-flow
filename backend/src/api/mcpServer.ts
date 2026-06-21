@@ -679,10 +679,16 @@ server.tool(
                 PROGRAM_ID
             );
 
+            const [configPda] = PublicKey.findProgramAddressSync(
+                [Buffer.from("config")],
+                PROGRAM_ID
+            );
+
             const tx = await program.methods
                 .unlockMilestone()
                 .accountsStrict({
                     creator: creator.publicKey,
+                    config: configPda,
                     stream: streamPubkey,
                     milestone: milestonePda,
                     systemProgram: SystemProgram.programId,
@@ -786,10 +792,16 @@ server.tool(
                         ),
                     ];
 
+            const [configPda] = PublicKey.findProgramAddressSync(
+                [Buffer.from("config")],
+                PROGRAM_ID
+            );
+
             const tx = await program.methods
                 .editMilestone(amountBN)
                 .accounts({
                     creator: creator.publicKey,
+                    config: configPda,
                     stream: streamPubkey,
                     milestone: milestonePda,
                     mint: mint,

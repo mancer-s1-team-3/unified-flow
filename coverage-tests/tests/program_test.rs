@@ -448,6 +448,7 @@ async fn store_milestone(&mut self, key: Pubkey, milestone: MilestoneAccount) {
         let data = unified_flow::instruction::UnlockMilestone {}.data();
         let metas = unified_flow::accounts::UnlockMilestone {
             creator: self.creator.pubkey(),
+            config: Self::config_pda(),
             stream,
             milestone,
             system_program: system_program::id(),
@@ -471,6 +472,7 @@ async fn store_milestone(&mut self, key: Pubkey, milestone: MilestoneAccount) {
         let data = unified_flow::instruction::EditMilestone { new_amount }.data();
         let metas = unified_flow::accounts::EditMilestone {
             creator: self.creator.pubkey(),
+            config: Self::config_pda(),
             stream,
             milestone,
             mint,

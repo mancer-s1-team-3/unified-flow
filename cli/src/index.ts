@@ -737,11 +737,13 @@ ${C_BLUE}${C_BOLD}🌊 Vesting Stream Details:${C_RESET}
                     PROGRAM_ID
                 );
 
+                const [configPda] = PublicKey.findProgramAddressSync([Buffer.from("config")], PROGRAM_ID);
                 logInfo(`Unlocking milestone #${nextIndex} (${milestonePda.toBase58()})...`);
                 const tx = await program.methods
                     .unlockMilestone()
                     .accountsStrict({
                         creator: signer.publicKey,
+                        config: configPda,
                         stream: streamPubkey,
                         milestone: milestonePda,
                         systemProgram: SystemProgram.programId,
@@ -792,11 +794,13 @@ ${C_BLUE}${C_BOLD}🌊 Vesting Stream Details:${C_RESET}
                     ),
                 ];
 
+                const [configPda] = PublicKey.findProgramAddressSync([Buffer.from("config")], PROGRAM_ID);
                 logInfo(`Modifying milestone #${idx} allocation to ${amtStr} tokens...`);
                 const tx = await program.methods
                     .editMilestone(newAmountBN)
                     .accounts({
                         creator: signer.publicKey,
+                        config: configPda,
                         stream: streamPubkey,
                         milestone: milestonePda,
                         mint: mint,
