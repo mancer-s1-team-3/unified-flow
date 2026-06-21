@@ -4278,41 +4278,34 @@ function EditMilestonePanel({
 
   // ── Current state preview ──────────────────────────────────────────────
   const currentPreview = useMemo(() => {
-    if (!stream) return null;
+  if (!stream) return null;
 
-    const streamDecimals = typeof stream.mintDecimals === "number" ? stream.mintDecimals : 6;
-    const milestoneCount = Number(stream.milestoneCount ?? 0);
-    const rawStr = String(stream.milestones || "").trim();
-    const rawAmounts = rawStr ? rawStr.split(";").map((v: string) => {
-      try { return BigInt(v.trim()); } catch { return BigInt(0); }
-    }) : [];
-    
-    const totalBase = parseBaseUnits(stream.totalAmount);
-    let currentAmounts: bigint[];
-    if (rawAmounts.length === milestoneCount) {
-      currentAmounts = rawAmounts;
-    } else {
-      const base = totalBase / BigInt(milestoneCount || 1);
-      const remainder = totalBase % BigInt(milestoneCount || 1);
-      currentAmounts = Array.from({ length: milestoneCount }, (_, i) =>
-        base + (BigInt(i) < remainder ? BigInt(1) : BigInt(0))
-      );
-    }
+  const streamDecimals = typeof stream.mintDecimals === "number" ? stream.mintDecimals : 6;
+  const milestoneCount = Number(stream.milestoneCount ?? 0);
+  const rawStr = String(stream.milestones || "").trim();
+  const rawAmounts = rawStr ? rawStr.split(";").map((v: string) => {
+    try { return BigInt(v.trim()); } catch { return BigInt(0); }
+  }) : [];
+  
+  const totalBase = parseBaseUnits(stream.totalAmount);
+  let currentAmounts: bigint[];
+  if (rawAmounts.length === milestoneCount) {
+    currentAmounts = rawAmounts;
+  } else {
+    const base = totalBase / BigInt(milestoneCount || 1);
+    const remainder = totalBase % BigInt(milestoneCount || 1);
+    currentAmounts = Array.from({ length: milestoneCount }, (_, i) =>
+      base + (BigInt(i) < remainder ? BigInt(1) : BigInt(0))
+    );
+  }
 
-    const startTs = Number(stream.startTs ?? 0);
-    const endTs = Number(stream.endTs ?? 0);
-
-    return {
-      totalAmount: formatBaseUnitsToTokenAmount(totalBase, streamDecimals),
-      milestoneCount,
-      amounts: currentAmounts.map((a: bigint) => formatBaseUnitsToTokenAmount(a, streamDecimals)),
-      recipient: String(stream.recipient ?? ""),
-      startDateStr: formatDateLabel(startTs),
-      endDateLabel: formatDateLabel(endTs),
-      durationStr: formatDuration(endTs - startTs),
-    };
-  }, [stream]);
-
+  return {
+    totalAmount: formatBaseUnitsToTokenAmount(totalBase, streamDecimals),
+    milestoneCount,
+    amounts: currentAmounts.map((a: bigint) => formatBaseUnitsToTokenAmount(a, streamDecimals)),
+    recipient: String(stream.recipient ?? ""),
+  };
+}, [stream]);
   // ── Decimals ───────────────────────────────────────────────────────────
   const decimals = Math.max(
     typeof editMilestoneForm.mintDecimals === "number" &&
