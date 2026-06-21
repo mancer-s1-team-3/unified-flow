@@ -61,6 +61,11 @@ const EVENT_META: Record<
     Icon: Wrench,
     color: "text-orange-400",
   },
+  tokens_withdrawn: {
+    label: "Tokens Withdrawn",
+    Icon: Coins,
+    color: "text-blue-400",
+  },
   generic: { label: "Notification", Icon: Info, color: "text-indigo-400" },
 };
 

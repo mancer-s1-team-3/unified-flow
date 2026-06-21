@@ -37,6 +37,7 @@ const EVENT_META: Record<
   csv_deployed: { label: "CSV Deployed", Icon: PackagePlus, color: "text-purple-400" },
   csv_edited: { label: "CSV Edited", Icon: FileSpreadsheet, color: "text-cyan-400" },
   stream_edited: { label: "Stream Edited", Icon: Wrench, color: "text-orange-400" },
+  tokens_withdrawn: { label: "Tokens Withdrawn", Icon: Coins, color: "text-blue-400" },
   generic: { label: "Notification", Icon: Info, color: "text-indigo-400" },
 };
 
