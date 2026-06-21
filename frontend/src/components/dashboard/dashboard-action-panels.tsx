@@ -4610,33 +4610,41 @@ function EditMilestonePanel({
             </div>
           )}
 
-          {/* ── Current state preview ─────────────────────────────────── */}
-          {currentPreview && !isWrongType && (
-            <div className="sm:col-span-2 rounded-2xl border border-zinc-800 overflow-hidden mb-2">
-              <div className="flex items-center gap-2 px-4 py-3 border-b border-zinc-900 bg-zinc-950/60">
-                <Lock className="w-3.5 h-3.5 text-violet-400" />
-                <span className="text-[10px] font-black uppercase tracking-widest text-zinc-400">
-                  Current Milestone State
-                </span>
-              </div>
-              <div className="p-4 bg-zinc-950/30">
-                <div className="flex items-center justify-between mb-2">
-                  <span className="text-xs text-zinc-500">Total Allocation</span>
-                  <span className="font-mono text-sm font-bold text-zinc-200">
-                    {currentPreview.totalAmount}
-                  </span>
-                </div>
-                <div className="space-y-1">
-                  {currentPreview.amounts.map((amt, idx) => (
-                    <div key={idx} className="flex justify-between items-center py-1 border-t border-zinc-900/50">
-                      <span className="text-xs text-zinc-500">Milestone #{idx}</span>
-                      <span className="font-mono text-xs text-zinc-400">{amt}</span>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            </div>
-          )}
+      {/* ── Current state preview ─────────────────────────────────── */}
+{currentPreview && !isWrongType && (
+  <div className="sm:col-span-2 rounded-2xl border border-zinc-800 overflow-hidden mb-2">
+    <div className="flex items-center gap-2 px-4 py-3 border-b border-zinc-900 bg-zinc-950/60">
+      <Lock className="w-3.5 h-3.5 text-violet-400" />
+      <span className="text-[10px] font-black uppercase tracking-widest text-zinc-400">
+        Current Milestone State
+      </span>
+    </div>
+    <div className="p-4 bg-zinc-950/30">
+      {currentPreview.recipient && (
+        <div className="flex items-center justify-between mb-2 gap-3">
+          <span className="text-xs text-zinc-500 shrink-0">Recipient</span>
+          <span className="font-mono text-xs font-bold text-zinc-300 truncate select-all">
+            {currentPreview.recipient}
+          </span>
+        </div>
+      )}
+      <div className="flex items-center justify-between mb-2">
+        <span className="text-xs text-zinc-500">Total Allocation</span>
+        <span className="font-mono text-sm font-bold text-zinc-200">
+          {currentPreview.totalAmount}
+        </span>
+      </div>
+      <div className="space-y-1">
+        {currentPreview.amounts.map((amt, idx) => (
+          <div key={idx} className="flex justify-between items-center py-1 border-t border-zinc-900/50">
+            <span className="text-xs text-zinc-500">Milestone #{idx}</span>
+            <span className="font-mono text-xs text-zinc-400">{amt}</span>
+          </div>
+        ))}
+      </div>
+    </div>
+  </div>
+)}
 
           {/* ── Total amount input — full width ───────────────────────── */}
           {amounts.length > 0 && !isWrongType && (
@@ -4782,35 +4790,6 @@ function EditMilestonePanel({
                 </span>
               </div>
             )}
-        </div>
-      )}
-
-      {/* ── Stream summary (recipient · amount · start→end) ──────────── */}
-      {!isCsvCreated && currentPreview && !isWrongType && (
-        <div className="mt-6 rounded-2xl border border-zinc-800 overflow-hidden">
-          <div className="flex items-center gap-2 px-4 py-3 border-b border-zinc-900 bg-zinc-950/60">
-            <Settings className="w-3.5 h-3.5 text-indigo-400" />
-            <span className="text-[10px] font-black uppercase tracking-widest text-zinc-400">
-              Current Stream State
-            </span>
-            <span className="ml-auto text-[10px] font-mono text-zinc-600">Milestone</span>
-          </div>
-          <div className="divide-y divide-zinc-900/60">
-            {currentPreview.recipient && (
-              <div className="flex items-center justify-between px-4 py-3 gap-3">
-                <span className="text-xs text-zinc-500 shrink-0">Recipient</span>
-                <span className="font-mono text-xs font-bold text-zinc-300 truncate select-all">
-                  {currentPreview.recipient}
-                </span>
-              </div>
-            )}
-            <div className="flex items-center justify-between px-4 py-3">
-              <span className="text-xs text-zinc-500">Total allocation</span>
-              <span className="font-mono text-sm font-bold text-zinc-200">
-                {Number(currentPreview.totalAmount).toLocaleString()}
-              </span>
-            </div>
-          </div>
         </div>
       )}
 
