@@ -121,6 +121,7 @@ export default function StreamsPage() {
     router.push("/?tab=edit_csv");
   }, [router]);
 
+
   return (
     <div className="min-h-screen bg-zinc-950 text-zinc-50">
       <DashboardHeader />
@@ -134,6 +135,7 @@ export default function StreamsPage() {
         {/* Mobile bottom tab bar */}
         <div className="md:hidden">
           <MobileBottomNav
+          showAdmin={false}
             activeTab="streams"
             onSelect={(tab: TabId) => router.push(`/?tab=${tab}`)}
             streamsCount={streams.length}
