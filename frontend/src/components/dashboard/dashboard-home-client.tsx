@@ -659,6 +659,25 @@ useEffect(() => {
       }, TX_TIMEOUT_MS);
     };
 
+    // ── Pause guard (UX fail-fast) ────────────────────────────────────────────
+    // The real boundary is the on-chain `require!(!config.paused)`; this just
+    // avoids a wallet popup + fee for a tx that would be rejected. set_pause is
+    // intentionally excluded so admins can always unpause.
+    const PAUSED_BLOCKED_ACTIONS = [
+      "create_stream", "create_stream_csv", "withdraw", "cancel",
+      "unlock_milestone", "edit_milestone", "edit_cliff", "edit_linear",
+      "edit_stream_csv", "withdraw_fees",
+    ];
+    if (PAUSED_BLOCKED_ACTIONS.includes(actionName)) {
+      // Refetch fresh so a stale UI (paused from another session) is caught here.
+      const freshConfig = await fetchAdminConfig({ endpoint });
+      if (freshConfig) setAdminConfig(freshConfig);
+      if (freshConfig?.paused) {
+        showNotification("error", "Protocol is paused by the admin. This action is temporarily disabled.");
+        return;
+      }
+    }
+
     // ── Wallet-kind guards ──────────────────────────────────────────────────
     const walletKind = classifyConnector(currentConnector?.name);
 
@@ -1012,6 +1031,18 @@ if (actionName === "set_pause") {
 
       <OnboardingCompletedBanner />
 
+      {adminConfig?.paused && (
+        <div className="max-w-7xl mx-auto w-full px-4 sm:px-6 pt-4 relative z-10">
+          <div className="flex items-center gap-3 rounded-2xl border border-amber-500/30 bg-amber-950/40 px-4 py-3 text-amber-200">
+            <AlertTriangle className="h-5 w-5 shrink-0 text-amber-400" />
+            <div className="text-sm">
+              <span className="font-bold">Protocol paused.</span>{" "}
+              On-chain actions (create, withdraw, cancel, milestone &amp; stream edits, fee withdrawal) are temporarily disabled by the admin. Browsing stays available; actions re-enable once the protocol is unpaused.
+            </div>
+          </div>
+        </div>
+      )}
+
       <div className="max-w-7xl mx-auto w-full px-4 py-4 sm:px-6 sm:py-8 pb-20 md:pb-8 flex-grow flex flex-col md:flex-row gap-4 md:gap-8 relative z-10">
 
     <DashboardSidebar
@@ -1065,6 +1096,7 @@ connectedWalletAddress={connectedWalletAddress}  // ← tambah ini
                 isMilestoneUnlocked={isMilestoneUnlocked}
                 activeTxAction={activeTxAction} activeTxPhase={activeTxPhase}
                 connected={!!connected}
+                paused={Boolean(adminConfig?.paused)}
               />
             )}
 
@@ -1075,6 +1107,7 @@ connectedWalletAddress={connectedWalletAddress}  // ← tambah ini
               setCsvEditText={setCsvEditText} setSelectedStream={setSelectedStream}
               connectedWalletAddress={connectedWalletAddress} currentTimeTs={nowTs}
               endpoint={endpoint}
+              paused={Boolean(adminConfig?.paused)}
             />
 
           </div>

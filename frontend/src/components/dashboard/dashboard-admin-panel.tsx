@@ -58,6 +58,7 @@ export function AdminPanel({
     adminConfig &&
     !isUnauthorized &&
     !isSubmittingWithdraw &&
+    !adminConfig.paused &&
     withdrawForm.destination.trim() !== "" &&
     withdrawForm.amount.trim() !== "";
 
