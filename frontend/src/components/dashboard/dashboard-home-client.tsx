@@ -383,7 +383,9 @@ const loadAdminConfig = useCallback(async () => {
 useEffect(() => { loadAdminConfig(); }, [loadAdminConfig]);
 
 // Refetch setelah transaksi admin selesai (gantikan effect serupa di AdminPanel)
+const isFirstAdminLoad = useRef(true);
 useEffect(() => {
+  if (isFirstAdminLoad.current) { isFirstAdminLoad.current = false; return; }
   if (!activeTxAction && !activeTxPhase) loadAdminConfig();
 }, [activeTxAction, activeTxPhase, loadAdminConfig]);
   // ── CSV versioning ────────────────────────────────────────────────────────
