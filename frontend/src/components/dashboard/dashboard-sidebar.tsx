@@ -69,6 +69,7 @@ const MORE_TABS: Array<{ value: TabId; label: string; icon: ReactNode; highlight
   { value: "edit_milestone",   label: "Edit Milestone Struct", icon: <Settings className="w-4 h-4" /> },
   { value: "edit_linear",      label: "Edit Linear Timeline",  icon: <Clock className="w-4 h-4" /> },
   { value: "edit_cliff",       label: "Edit Cliff Conditions", icon: <Shield className="w-4 h-4" /> },
+  { value: "admin",            label: "Admin Dashboard",       icon: <Shield className="w-4 h-4 text-indigo-400" />, highlight: "font-bold text-indigo-400" },
 ];
 
 export function MobileBottomNav({
@@ -272,6 +273,16 @@ export const DashboardSidebar = memo(function DashboardSidebar({
           onClick={() => setActiveTab("edit_cliff")}
           icon={<Shield className="w-4 h-4" />}
           label="Edit Cliff Conditions"
+        />
+
+        <div className="text-[10px] text-zinc-500 font-bold uppercase tracking-widest px-3 mt-6 mb-2">Admin</div>
+
+        <TabButton
+          active={activeTab === "admin"}
+          onClick={() => setActiveTab("admin")}
+          icon={<Shield className="w-4 h-4 text-indigo-400" />}
+          label="Admin Dashboard"
+          highlight="font-bold text-indigo-400"
         />
       </aside>
     </>

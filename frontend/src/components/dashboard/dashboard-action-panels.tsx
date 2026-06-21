@@ -6,6 +6,7 @@ import { createPortal } from "react-dom";
 import Image from "next/image";
 import { AlertTriangle, Check, ChevronDown, Shield, Download, Layers, Lock, RefreshCw, Terminal, Upload, XCircle, Settings } from "lucide-react";
 import { CsvDiffPanel } from "@/components/dashboard/csv-diff-panel";
+import { AdminPanel } from "./dashboard-admin-panel";
 import type { MintPreset } from "@/components/dashboard/token-mints";
 import { PreflightChecklist } from "./preflight-checklist";
 import { useTokenBalance } from "@/lib/use-token-balance";
@@ -3057,6 +3058,17 @@ const editCsvDisabled =
   />
 )}
 
+{activeTab === "admin" && (
+  <AdminPanel
+    connectedWalletAddress={connectedWalletAddress}
+    endpoint={endpoint}
+    handleAction={handleAction}
+    activeTxAction={activeTxAction}
+    activeTxPhase={activeTxPhase}
+    connected={connected}
+  />
+)}
+
       <div className={`mt-12 bg-zinc-950 border border-zinc-900 rounded-2xl p-4 font-mono text-[11px] relative overflow-hidden ${mobileNarrowFormClass}`}>
         <div className="absolute top-0 right-0 p-3 flex gap-2"><span className="w-2.5 h-2.5 rounded-full bg-red-500/60" /><span className="w-2.5 h-2.5 rounded-full bg-amber-500/60" /><span className="w-2.5 h-2.5 rounded-full bg-green-500/60" /></div>
         <div className="flex items-center gap-2 text-indigo-400 font-bold mb-2"><Terminal className="w-4 h-4 shrink-0" /><span>Equivalent CLI / Agent Skill Call</span></div>
@@ -3127,6 +3139,12 @@ const editCsvDisabled =
   {activeTab === "edit_csv" && (
     <span>
       $ unifiedflow edit-batch ./edits.csv
+    </span>
+  )}
+
+  {activeTab === "admin" && (
+    <span>
+      $ unifiedflow admin
     </span>
   )}
 
