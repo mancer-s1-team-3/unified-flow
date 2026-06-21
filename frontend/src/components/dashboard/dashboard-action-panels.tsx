@@ -235,6 +235,7 @@ function formatDuration(seconds: number): string {
 
 // ─── Unlock Milestone Panel ────────────────────────────────────────────────
 function UnlockMilestonePanel({
+  paused = false,
   unlockForm,
   setUnlockForm,
   handleAction,
@@ -247,6 +248,7 @@ function UnlockMilestonePanel({
   unlockForm: { streamId: string };
   setUnlockForm: (value: { streamId: string }) => void;
   handleAction: (actionName: string, data: any) => Promise<void> | void;
+  paused?: boolean;
   streams: any[];
   connectedWalletAddress: string | null;
   activeTxAction: string | null;
@@ -779,7 +781,7 @@ function UnlockMilestonePanel({
 
       {/* Submit button */}
       <button
-        disabled={!canSubmit}
+        disabled={!canSubmit || paused}
         onClick={() => handleAction("unlock_milestone", unlockForm)}
         className={`w-full mt-2 text-white font-bold text-xs py-3 rounded-xl transition-all shadow-lg flex items-center justify-center gap-2 ${
           !canSubmit
@@ -811,6 +813,7 @@ function UnlockMilestonePanel({
 }
 // ─── Withdraw Panel ────────────────────────────────────────────────────────
 function WithdrawPanel({
+  paused = false,
   withdrawForm,
   setWithdrawForm,
   handleAction,
@@ -823,6 +826,7 @@ function WithdrawPanel({
   withdrawForm: { streamId: string };
   setWithdrawForm: (value: { streamId: string }) => void;
   handleAction: (actionName: string, data: any) => Promise<void> | void;
+  paused?: boolean;
   streams: any[];
   connectedWalletAddress: string | null;
   activeTxAction: string | null;
@@ -1378,7 +1382,7 @@ const canSubmit =
 
       {/* Submit button */}
       <button
-        disabled={!canSubmit}
+        disabled={!canSubmit || paused}
         onClick={() => handleAction("withdraw", withdrawForm)}
         className={`w-full text-white font-bold text-xs py-3 rounded-xl transition-all shadow-lg flex items-center justify-center gap-2 ${
           !canSubmit
@@ -1404,6 +1408,7 @@ const canSubmit =
 }
 // ─── Cancel Panel ─────────────────────────────────────────────────────────
 function CancelPanel({
+  paused = false,
   cancelForm,
   setCancelForm,
   handleAction,
@@ -1415,6 +1420,7 @@ function CancelPanel({
   cancelForm: { streamId: string };
   setCancelForm: (value: { streamId: string }) => void;
   handleAction: (actionName: string, data: any) => Promise<void> | void;
+  paused?: boolean;
   isSubmitting: boolean;
   submitLabel: string;
   streams: any[];
@@ -1660,7 +1666,7 @@ const isNotConnected = !connectedWalletAddress;
 
       {/* Trigger button */}
   <button
-        disabled={!canSubmit}
+        disabled={!canSubmit || paused}
         onClick={() => setShowDialog(true)}
         className={`w-full font-bold text-xs py-3 rounded-xl transition-all shadow-lg flex items-center justify-center gap-2 ${
           !canSubmit
@@ -1745,6 +1751,7 @@ type Props = {
   endpoint: string;
   streams: any[];
 connectedWalletAddress: string | null;
+  paused?: boolean;
 };
 const BASE58_REGEX = /^[1-9A-HJ-NP-Za-km-z]{32,44}$/;
 // Real pubkey validation: base58 pre-filter (cheap, avoids throwing on obvious
@@ -1813,6 +1820,7 @@ export function DashboardActionPanels(props: Props) {
     endpoint,
     streams,
     connectedWalletAddress,
+    paused = false,
   } = props;
 
   const recipientHistory = useAddressHistory("recipient");
@@ -1979,6 +1987,7 @@ const exceedsBalance =
     (createForm.type === "2" ? Boolean(createForm.milestoneCount?.trim()) : Boolean(createForm.duration?.trim())) &&
     (createForm.type !== "1" || Boolean(createForm.cliffDuration?.trim()));
 const createDisabled =
+  paused ||
   !connected ||
   !createRequiredValid ||
   startDateInPast ||
@@ -2009,6 +2018,7 @@ const csvEditStructuralValidation = useCsvStructuralValidation(csvEditText, "edi
 });
 
 const createCsvDisabled =
+  paused ||
   !connected ||
   !csvCreateText?.trim() ||
   activeTxAction === "create_stream_csv" ||
@@ -2024,6 +2034,7 @@ const csvEditExceedsBalance =
   (csvEditTotalByMint[createForm.mint] ?? 0) > tokenBalance.balance;
 
 const editCsvDisabled =
+  paused ||
   !connected ||
   !csvEditText?.trim() ||
   activeTxAction === "edit_stream_csv" ||
@@ -2970,6 +2981,7 @@ const editCsvDisabled =
 
       {activeTab === "withdraw" && (
         <WithdrawPanel
+    paused={paused}
     withdrawForm={withdrawForm}
     setWithdrawForm={setWithdrawForm}
     handleAction={handleAction}
@@ -2983,6 +2995,7 @@ const editCsvDisabled =
 
 {activeTab === "cancel" && (
   <CancelPanel
+    paused={paused}
     cancelForm={cancelForm}
     setCancelForm={setCancelForm}
     handleAction={handleAction}
@@ -2995,6 +3008,7 @@ const editCsvDisabled =
 
     {activeTab === "unlock_milestone" && (
   <UnlockMilestonePanel
+    paused={paused}
   endpoint={endpoint}
     unlockForm={unlockForm}
     setUnlockForm={setUnlockForm}
@@ -3009,6 +3023,7 @@ const editCsvDisabled =
 
      {activeTab === "edit_milestone" && (
   <EditMilestonePanel
+    paused={paused}
     editMilestoneForm={editMilestoneForm}
     setEditMilestoneForm={setEditMilestoneForm}
     handleAction={handleAction}
@@ -3027,6 +3042,7 @@ const editCsvDisabled =
 
     {activeTab === "edit_linear" && (
   <EditLinearPanel
+    paused={paused}
     editLinearForm={editLinearForm}
     setEditLinearForm={setEditLinearForm}
     handleAction={handleAction}
@@ -3046,6 +3062,7 @@ const editCsvDisabled =
 
      {activeTab === "edit_cliff" && (
   <EditCliffPanel
+    paused={paused}
     editCliffForm={editCliffForm}
     setEditCliffForm={setEditCliffForm}
     handleAction={handleAction}
@@ -4161,6 +4178,7 @@ function useCsvTotalByMint(csvText: string): Record<string, number> {
   }, [csvText]);
 }
 function EditMilestonePanel({
+  paused = false,
   editMilestoneForm,
   setEditMilestoneForm,
   handleAction,
@@ -4183,6 +4201,7 @@ function EditMilestonePanel({
   };
   setEditMilestoneForm: (value: any) => void;
   handleAction: (actionName: string, data: any) => Promise<void> | void;
+  paused?: boolean;
   streams: any[];
   connectedWalletAddress: string | null;
   activeTxAction: string | null;
@@ -4842,7 +4861,7 @@ function EditMilestonePanel({
 
       {/* Submit button */}
       <button
-        disabled={!canSubmit}
+        disabled={!canSubmit || paused}
         onClick={() => handleAction("edit_milestone", editMilestoneForm)}
         className={`w-full mt-6 text-white font-bold text-xs py-3 rounded-xl transition-all shadow-lg flex items-center justify-center gap-2 ${
           !canSubmit
@@ -4880,6 +4899,7 @@ function EditMilestonePanel({
 }
 // ─── Edit Cliff Panel ──────────────────────────────────────────────────────
 function EditCliffPanel({
+  paused = false,
   editCliffForm,
   setEditCliffForm,
   handleAction,
@@ -4893,6 +4913,7 @@ function EditCliffPanel({
   editCliffForm: { streamId: string; newCliffDuration: string };
   setEditCliffForm: (value: any) => void;
   handleAction: (actionName: string, data: any) => Promise<void> | void;
+  paused?: boolean;
   streams: any[];
   connectedWalletAddress: string | null;
   activeTxAction: string | null;
@@ -5354,7 +5375,7 @@ function EditCliffPanel({
 
       {/* Submit button */}
       <button
-        disabled={!canSubmit}
+        disabled={!canSubmit || paused}
         onClick={() => handleAction("edit_cliff", editCliffForm)}
         className={`w-full mt-6 text-white font-bold text-xs py-3 rounded-xl transition-all shadow-lg flex items-center justify-center gap-2 ${
           !canSubmit
@@ -5392,6 +5413,7 @@ function EditCliffPanel({
 }
 // ─── Edit Linear Panel ─────────────────────────────────────────────────────
 function EditLinearPanel({
+  paused = false,
   editLinearForm,
   setEditLinearForm,
   handleAction,
@@ -5410,6 +5432,7 @@ function EditLinearPanel({
   editLinearForm: { streamId: string; newEndDuration: string; topupAmount: string };
   setEditLinearForm: (value: any) => void;
   handleAction: (actionName: string, data: any) => Promise<void> | void;
+  paused?: boolean;
   streams: any[];
   connectedWalletAddress: string | null;
   activeTxAction: string | null;
@@ -5915,7 +5938,7 @@ editLinearBalance: { balance: number | null; loading: boolean; error: string | n
 
       {/* Submit button */}
       <button
-        disabled={!canSubmit}
+        disabled={!canSubmit || paused}
         onClick={() => handleAction("edit_linear", editLinearForm)}
         className={`w-full mt-6 text-white font-bold text-xs py-3 rounded-xl transition-all shadow-lg flex items-center justify-center gap-2 ${
           !canSubmit

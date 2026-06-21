@@ -18,6 +18,7 @@ export const StreamDetailsDrawer = memo(function StreamDetailsDrawer({
   connectedWalletAddress,
   currentTimeTs,
   endpoint,
+  paused = false,
 }: {
   selectedStream: any;
   loadingDetails: boolean;
@@ -30,6 +31,7 @@ export const StreamDetailsDrawer = memo(function StreamDetailsDrawer({
   connectedWalletAddress: string | null;
   currentTimeTs: number;
   endpoint: string;
+  paused?: boolean;
 }) {
   useEffect(() => {
     if (!selectedStream) return;
@@ -64,7 +66,7 @@ export const StreamDetailsDrawer = memo(function StreamDetailsDrawer({
   const isMilestoneCompleted = selectedStream.vestingType === 2 && (Number(selectedStream.completedAt || 0) > 0 || (total > 0 && unlocked >= total));
   const isFullyClaimed = total > 0 && withdrawn >= total;
   const isEnded = !isCancelled && (selectedStream.vestingType === 2 ? isMilestoneCompleted : currentTimeTs >= end);
-  const cancelDisabled = isCancelled || isEnded || isFullyClaimed;
+  const cancelDisabled = isCancelled || isEnded || isFullyClaimed || paused;
 const hasClaimable = selectedStream.vestingType === 2
   ? unlocked > withdrawn && unlocked > 0          // milestone: harus ada yg di-unlock dulu
   : !isEnded
@@ -303,7 +305,7 @@ const hasClaimable = selectedStream.vestingType === 2
             <div className="text-[10px] text-zinc-500 font-bold uppercase tracking-widest">Instant Action Shortcuts</div>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs font-semibold min-w-0">
               {isRecipientWallet && (
-                isCancelled || isFullyClaimed || (selectedStream.vestingType === 2 && unlocked === 0) || !hasClaimable ? (
+                paused || isCancelled || isFullyClaimed || (selectedStream.vestingType === 2 && unlocked === 0) || !hasClaimable ? (
                   <div className="flex items-center justify-center gap-1.5 bg-zinc-900 text-zinc-500 border border-zinc-800 py-2.5 rounded-xl text-center">
                     <ArrowDownRight className="w-3.5 h-3.5" />
                     Claim Disabled
@@ -332,7 +334,7 @@ const hasClaimable = selectedStream.vestingType === 2
               {isCreatorWallet && selectedStream.isCsvCreated ? (
                    <>
                 {selectedStream.vestingType === 2 && (
-      isCancelled|| isEnded ? (
+      isCancelled || isEnded || paused ? (
         <div className="sm:col-span-2 flex items-center justify-center gap-1.5 bg-zinc-900 text-zinc-500 border border-zinc-800 py-2.5 rounded-xl text-center">
           <Unlock className="w-3.5 h-3.5" />
           Unlock Disabled
@@ -344,7 +346,7 @@ const hasClaimable = selectedStream.vestingType === 2
         </button>
       )
     )}
-     {isCancelled || isEnded ? (
+     {isCancelled || isEnded || paused ? (
       <div className="sm:col-span-2 flex items-center justify-center gap-1.5 bg-zinc-900 text-zinc-500 border border-zinc-800 py-2.5 rounded-xl text-center">
         <FileText className="w-3.5 h-3.5" />
         Edit Disabled
