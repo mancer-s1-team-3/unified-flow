@@ -4810,15 +4810,6 @@ function EditMilestonePanel({
                 {Number(currentPreview.totalAmount).toLocaleString()}
               </span>
             </div>
-            <div className="flex items-center justify-between px-4 py-3">
-              <span className="text-xs text-zinc-500">Start → End</span>
-              <span className="font-mono text-xs font-bold text-zinc-300 text-right">
-                {currentPreview.startDateStr} → {currentPreview.endDateLabel}
-                <span className="block text-[10px] font-semibold text-zinc-500">
-                  duration {currentPreview.durationStr}
-                </span>
-              </span>
-            </div>
           </div>
         </div>
       )}
@@ -5214,6 +5205,26 @@ function EditCliffPanel({
                   </span>
                   <span className="font-mono text-sm font-bold text-zinc-200">
                     {currentPreview.totalAmount}
+                  </span>
+                </div>
+                <div className="flex items-center justify-between px-4 py-3">
+                  <span className="text-xs text-zinc-500">Start → End</span>
+                  <span className="font-mono text-xs font-bold text-zinc-300 text-right">
+                    {currentPreview.startDateStr} → {currentPreview.endDateLabel}
+                    <span className="block text-[10px] font-semibold text-zinc-500">
+                      duration {currentPreview.streamDurationStr}
+                    </span>
+                  </span>
+                </div>
+                <div className="flex items-center justify-between px-4 py-3">
+                  <span className="text-xs text-zinc-500">
+                    Current cliff date
+                  </span>
+                  <span className="font-mono text-sm font-bold text-violet-300 text-right">
+                    {currentPreview.cliffDateStr}
+                    <span className="block text-[10px] font-semibold text-zinc-500">
+                      {currentPreview.cliffDurationStr} from start
+                    </span>
                   </span>
                 </div>
               </div>
