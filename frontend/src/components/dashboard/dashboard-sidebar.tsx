@@ -4,6 +4,7 @@ import { memo, useState, useEffect } from "react";
 import type { ReactNode } from "react";
 import { ArrowDownRight, Clock, FileText, Layers, MoreHorizontal, PlusCircle, Settings, Shield, Unlock, X, XCircle } from "lucide-react";
 import type { TabId } from "./types";
+import { fetchAdminConfig } from "@/lib/solana/admin";
 
 const baseClass =
   "w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all";
@@ -192,11 +193,36 @@ export const DashboardSidebar = memo(function DashboardSidebar({
   activeTab,
   setActiveTab,
   streamsCount,
+
+    connectedWalletAddress,
+  endpoint,
+  connected
 }: {
   activeTab: TabId;
   setActiveTab: (tab: TabId) => void;
   streamsCount: number;
+connectedWalletAddress: string | null;
+  endpoint: string;
+  connected: boolean;
 }) {
+
+    const [adminConfig, setAdminConfig] = useState<any | null>(null);
+    const [loading, setLoading] = useState(true);
+   const loadConfig = async () => {
+      setLoading(true);
+      const config = await fetchAdminConfig({ endpoint });
+      setAdminConfig(config);
+      setLoading(false);
+    };
+      useEffect(() => {
+        loadConfig();
+      }, [endpoint]); // eslint-disable-line react-hooks/exhaustive-deps
+    
+  const isUnauthorized =
+    !loading &&
+    adminConfig &&
+    connectedWalletAddress &&
+    adminConfig.adminAuthority !== connectedWalletAddress;
   return (
     <>
       {/* Mobile bottom nav */}
@@ -274,16 +300,21 @@ export const DashboardSidebar = memo(function DashboardSidebar({
           icon={<Shield className="w-4 h-4" />}
           label="Edit Cliff Conditions"
         />
+{!loading && connected && !isUnauthorized && adminConfig && (
+  <>
+    <div className="text-[10px] text-zinc-500 font-bold uppercase tracking-widest px-3 mt-6 mb-2">
+      Admin
+    </div>
 
-        <div className="text-[10px] text-zinc-500 font-bold uppercase tracking-widest px-3 mt-6 mb-2">Admin</div>
-
-        <TabButton
-          active={activeTab === "admin"}
-          onClick={() => setActiveTab("admin")}
-          icon={<Shield className="w-4 h-4 text-indigo-400" />}
-          label="Admin Dashboard"
-          highlight="font-bold text-indigo-400"
-        />
+    <TabButton
+      active={activeTab === "admin"}
+      onClick={() => setActiveTab("admin")}
+      icon={<Shield className="w-4 h-4 text-indigo-400" />}
+      label="Admin Dashboard"
+      highlight="font-bold text-indigo-400"
+    />
+  </>
+)}
       </aside>
     </>
   );
