@@ -1,7 +1,7 @@
 "use client";
 
 import * as anchor from "@coral-xyz/anchor";
-import idl from "../../../../backend/src/idl/unified_flow.json";
+import idl from "@/lib/idl/unified_flow.json";
 import {
   ASSOCIATED_TOKEN_PROGRAM_ADDRESS,
   TOKEN_PROGRAM_ADDRESS,

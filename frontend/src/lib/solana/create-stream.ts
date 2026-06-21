@@ -18,7 +18,7 @@ import {
   setTransactionMessageLifetimeUsingBlockhash,
 } from "@solana/kit";
 import type { WalletSession } from "@solana/client";
-import idl from "../../../../backend/src/idl/unified_flow.json";
+import idl from "@/lib/idl/unified_flow.json";
 import { getExplorerClusterParam, getProgramIdForEndpoint } from "@/lib/solana/network-config";
 import {
   buildWsolWrapInstructions,
