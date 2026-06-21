@@ -20,6 +20,7 @@ import { editStreamBatchOnChain } from "@/lib/solana/edit-stream";
 import { withdrawFromStreamOnChain } from "@/lib/solana/withdraw";
 import { cancelStreamOnChain } from "@/lib/solana/cancel";
 import { unlockMilestoneOnChain } from "@/lib/solana/unlock-milestone";
+import { setPauseOnChain, withdrawFeesOnChain } from "@/lib/solana/admin";
 import { parseTransactionError } from "@/lib/parse-tx-error";
 import { useNotifications } from "@/lib/notification-context";
 import { getExplorerClusterParam, getNetworkByEndpoint } from "@/lib/solana/network-config";
@@ -892,6 +893,34 @@ export default function Home({ initialStreams = [] }: Props) {
       } catch (err: any) {
         clearTxStatus();
         showParsedTxError(err, "Failed to update cliff timestamp.");
+      } finally { clearTxStatus(); }
+      return;
+    }
+
+    // ── set_pause ───────────────────────────────────────────────────────────
+    if (actionName === "set_pause") {
+      if (!wallet) { showNotification("error", "Connect the admin wallet before modifying the pause state."); return; }
+      try {
+        await setPauseOnChain({ wallet, endpoint, paused: data.paused, onStatus: setTxStatus });
+        addNotification({ type: "success", event: "stream_edited", title: "Protocol State Updated", message: `Protocol has been ${data.paused ? "paused" : "unpaused"}.` });
+      } catch (err: any) {
+        clearTxStatus();
+        showParsedTxError(err, "Failed to update protocol pause state.");
+      } finally { clearTxStatus(); }
+      return;
+    }
+
+    // ── withdraw_fees ───────────────────────────────────────────────────────
+    if (actionName === "withdraw_fees") {
+      if (!wallet) { showNotification("error", "Connect the admin wallet before withdrawing fees."); return; }
+      try {
+        const amountBaseUnits = parseBaseUnits(data.amount);
+        if (amountBaseUnits <= BigInt(0)) throw new Error("Amount must be greater than zero.");
+        await withdrawFeesOnChain({ wallet, endpoint, destination: data.destination, amountBaseUnits, onStatus: setTxStatus });
+        addNotification({ type: "success", event: "tokens_withdrawn", title: "Fees Withdrawn", message: "Successfully withdrawn SOL from the protocol fee vault." });
+      } catch (err: any) {
+        clearTxStatus();
+        showParsedTxError(err, "Failed to withdraw fees.");
       } finally { clearTxStatus(); }
       return;
     }

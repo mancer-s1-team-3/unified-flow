@@ -18,6 +18,7 @@ export type NotificationEventType =
   | "csv_deployed"
   | "csv_edited"
   | "stream_edited"
+  | "tokens_withdrawn"
   | "generic";
 
 export type NotificationType = "success" | "error" | "info";

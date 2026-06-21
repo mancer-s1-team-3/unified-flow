@@ -7,5 +7,6 @@ export type TabId =
   | "edit_linear"
   | "edit_cliff"
   | "unlock_milestone"
-  | "edit_csv";
+  | "edit_csv"
+  | "admin";
 
