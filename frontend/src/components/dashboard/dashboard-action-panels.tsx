@@ -784,7 +784,7 @@ function UnlockMilestonePanel({
         disabled={!canSubmit || paused}
         onClick={() => handleAction("unlock_milestone", unlockForm)}
         className={`w-full mt-2 text-white font-bold text-xs py-3 rounded-xl transition-all shadow-lg flex items-center justify-center gap-2 ${
-          !canSubmit
+          !canSubmit || paused
             ? "bg-zinc-800 text-zinc-500 cursor-not-allowed shadow-none"
             : "bg-indigo-600 hover:bg-indigo-700 hover:shadow-indigo-500/20"
         }`}
@@ -1385,7 +1385,7 @@ const canSubmit =
         disabled={!canSubmit || paused}
         onClick={() => handleAction("withdraw", withdrawForm)}
         className={`w-full text-white font-bold text-xs py-3 rounded-xl transition-all shadow-lg flex items-center justify-center gap-2 ${
-          !canSubmit
+          !canSubmit || paused
             ? "bg-zinc-800 text-zinc-500 cursor-not-allowed shadow-none"
             : "bg-indigo-600 hover:bg-indigo-700 hover:shadow-indigo-500/20"
         }`}
@@ -1669,7 +1669,7 @@ const isNotConnected = !connectedWalletAddress;
         disabled={!canSubmit || paused}
         onClick={() => setShowDialog(true)}
         className={`w-full font-bold text-xs py-3 rounded-xl transition-all shadow-lg flex items-center justify-center gap-2 ${
-          !canSubmit
+          !canSubmit || paused
             ? "bg-zinc-900 text-zinc-600 border border-zinc-800 cursor-not-allowed shadow-none"
             : "bg-rose-950/30 hover:bg-rose-600 text-rose-400 hover:text-white border border-rose-500/30 hover:border-rose-600 hover:shadow-rose-900/30"
         }`}
@@ -4864,7 +4864,7 @@ function EditMilestonePanel({
         disabled={!canSubmit || paused}
         onClick={() => handleAction("edit_milestone", editMilestoneForm)}
         className={`w-full mt-6 text-white font-bold text-xs py-3 rounded-xl transition-all shadow-lg flex items-center justify-center gap-2 ${
-          !canSubmit
+          !canSubmit || paused
             ? "bg-zinc-850 border border-zinc-800 text-zinc-550 cursor-not-allowed opacity-50"
             : "bg-indigo-600 hover:bg-indigo-700 hover:shadow-indigo-500/20"
         }`}
@@ -5378,7 +5378,7 @@ function EditCliffPanel({
         disabled={!canSubmit || paused}
         onClick={() => handleAction("edit_cliff", editCliffForm)}
         className={`w-full mt-6 text-white font-bold text-xs py-3 rounded-xl transition-all shadow-lg flex items-center justify-center gap-2 ${
-          !canSubmit
+          !canSubmit || paused
             ? "bg-zinc-800 text-zinc-500 cursor-not-allowed shadow-none"
             : "bg-indigo-600 hover:bg-indigo-700 hover:shadow-indigo-500/20"
         }`}
@@ -5941,7 +5941,7 @@ editLinearBalance: { balance: number | null; loading: boolean; error: string | n
         disabled={!canSubmit || paused}
         onClick={() => handleAction("edit_linear", editLinearForm)}
         className={`w-full mt-6 text-white font-bold text-xs py-3 rounded-xl transition-all shadow-lg flex items-center justify-center gap-2 ${
-          !canSubmit
+          !canSubmit || paused
             ? "bg-zinc-800 text-zinc-500 cursor-not-allowed shadow-none"
             : "bg-indigo-600 hover:bg-indigo-700 hover:shadow-indigo-500/20"
         }`}

@@ -6147,17 +6147,17 @@ export namespace Prisma {
 
   export type TransactionWhereUniqueInput = Prisma.AtLeast<{
     id?: string
-    signature?: string
     AND?: TransactionWhereInput | TransactionWhereInput[]
     OR?: TransactionWhereInput[]
     NOT?: TransactionWhereInput | TransactionWhereInput[]
+    signature?: StringFilter<"Transaction"> | string
     slot?: BigIntFilter<"Transaction"> | bigint | number
     streamId?: StringNullableFilter<"Transaction"> | string | null
     type?: StringFilter<"Transaction"> | string
     raw?: JsonFilter<"Transaction">
     createdAt?: DateTimeFilter<"Transaction"> | Date | string
     stream?: XOR<StreamNullableScalarRelationFilter, StreamWhereInput> | null
-  }, "id" | "signature">
+  }, "id">
 
   export type TransactionOrderByWithAggregationInput = {
     id?: SortOrder
