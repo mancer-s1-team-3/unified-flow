@@ -17,6 +17,7 @@ import {
 import idl from "../idl/unified_flow.json";
 import { logger, captureException } from "./logger";
 import { indexerState } from "./indexerState";
+import { recordTransaction } from "./transactionRecorder";
 
 dotenv.config();
 
@@ -211,18 +212,7 @@ async function handleStreamCreated(
         }
     });
 
-    await prisma.transaction.upsert({
-        where: { signature },
-        update: {},
-        create: {
-            id: signature,
-            signature,
-            slot: BigInt(tx.slot),
-            streamId: streamId,
-            type: "CREATE_STREAM",
-            raw: JSON.parse(JSON.stringify(tx)),
-        },
-    });
+    await recordTransaction({ signature, slot: tx.slot, streamId: streamId, type: "CREATE_STREAM", raw: tx });
 
     console.log("Indexed stream:", streamId);
 }
@@ -265,18 +255,7 @@ async function handleTokensClaimed(
         console.log(`Stream ${streamId} not found in database, skipping balance update.`);
     }
 
-    await prisma.transaction.upsert({
-        where: { signature },
-        update: {},
-        create: {
-            id: signature,
-            signature,
-            slot: BigInt(tx.slot),
-            streamId: stream ? streamId : null,
-            type: "WITHDRAW",
-            raw: JSON.parse(JSON.stringify(tx)),
-        }
-    });
+    await recordTransaction({ signature, slot: tx.slot, streamId: stream ? streamId : null, type: "WITHDRAW", raw: tx });
 
     console.log(`Indexed withdrawal for stream ${streamId}: ${normalized.claimable.toString()} tokens`);
 }
@@ -320,18 +299,7 @@ async function handleMilestoneUnlocked(
         console.log(`Stream ${streamId} not found in database during milestone unlock, skipping.`);
     }
 
-    await prisma.transaction.upsert({
-        where: { signature },
-        update: {},
-        create: {
-            id: signature,
-            signature,
-            slot: BigInt(tx.slot),
-            streamId: stream ? streamId : null,
-            type: "MILESTONE_UNLOCKED",
-            raw: JSON.parse(JSON.stringify(tx)),
-        }
-    });
+    await recordTransaction({ signature, slot: tx.slot, streamId: stream ? streamId : null, type: "MILESTONE_UNLOCKED", raw: tx });
 
     console.log(`Indexed milestone unlock for stream ${streamId}: unlocked ${milestoneAmount.toString()} tokens`);
 }
@@ -369,18 +337,7 @@ async function handleStreamCancelled(
         console.log(`Stream ${streamId} not found in database, skipping cancel update.`);
     }
 
-    await prisma.transaction.upsert({
-        where: { signature },
-        update: {},
-        create: {
-            id: signature,
-            signature,
-            slot: BigInt(tx.slot),
-            streamId: stream ? streamId : null,
-            type: "CANCEL",
-            raw: JSON.parse(JSON.stringify(tx)),
-        }
-    });
+    await recordTransaction({ signature, slot: tx.slot, streamId: stream ? streamId : null, type: "CANCEL", raw: tx });
 
     console.log(`Indexed cancel for stream ${streamId}: vested ${normalized.vestedAmount.toString()} tokens`);
 }
@@ -416,18 +373,7 @@ async function handleMilestoneEdited(event: any, tx: any, signature: string) {
         });
     }
 
-    await prisma.transaction.upsert({
-        where: { signature },
-        update: {},
-        create: {
-            id: signature,
-            signature,
-            slot: BigInt(tx.slot),
-            streamId: stream ? streamId : null,
-            type: "MILESTONE_EDITED",
-            raw: JSON.parse(JSON.stringify(tx)),
-        }
-    });
+    await recordTransaction({ signature, slot: tx.slot, streamId: stream ? streamId : null, type: "MILESTONE_EDITED", raw: tx });
 }
 
 async function handleLinearEdited(event: any, tx: any, signature: string) {
@@ -452,18 +398,7 @@ async function handleLinearEdited(event: any, tx: any, signature: string) {
         });
     }
 
-    await prisma.transaction.upsert({
-        where: { signature },
-        update: {},
-        create: {
-            id: signature,
-            signature,
-            slot: BigInt(tx.slot),
-            streamId: stream ? streamId : null,
-            type: "LINEAR_EDITED",
-            raw: JSON.parse(JSON.stringify(tx)),
-        }
-    });
+    await recordTransaction({ signature, slot: tx.slot, streamId: stream ? streamId : null, type: "LINEAR_EDITED", raw: tx });
 }
 
 async function handleCliffEdited(event: any, tx: any, signature: string) {
@@ -487,16 +422,5 @@ async function handleCliffEdited(event: any, tx: any, signature: string) {
         });
     }
 
-    await prisma.transaction.upsert({
-        where: { signature },
-        update: {},
-        create: {
-            id: signature,
-            signature,
-            slot: BigInt(tx.slot),
-            streamId: stream ? streamId : null,
-            type: "CLIFF_EDITED",
-            raw: JSON.parse(JSON.stringify(tx)),
-        }
-    });
+    await recordTransaction({ signature, slot: tx.slot, streamId: stream ? streamId : null, type: "CLIFF_EDITED", raw: tx });
 }

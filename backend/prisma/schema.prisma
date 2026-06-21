@@ -50,7 +50,7 @@ model Stream {
 
 model Transaction {
   id          String @id
-  signature   String @unique
+  signature   String
   slot        BigInt
 
   streamId    String ?
@@ -61,6 +61,8 @@ model Transaction {
   raw         Json
 
   createdAt   DateTime @default (now())
+
+  @@index([signature])
 }
 
 model CsvUpload {

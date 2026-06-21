@@ -396,7 +396,7 @@ const hasClaimable = selectedStream.vestingType === 2
              ) : isCreatorWallet ? (
   <>
     {selectedStream.vestingType === 2 && (
-      isCancelled || isEnded ? (
+      isCancelled || isEnded || paused ? (
         <div className="sm:col-span-2 flex items-center justify-center gap-1.5 bg-zinc-900 text-zinc-500 border border-zinc-800 py-2.5 rounded-xl text-center">
           <Unlock className="w-3.5 h-3.5" />
           Unlock Disabled
@@ -409,7 +409,7 @@ const hasClaimable = selectedStream.vestingType === 2
       )
     )}
 
-   {isCancelled || isEnded ? (
+   {isCancelled || isEnded || paused ? (
   <div className="sm:col-span-2 flex items-center justify-center gap-1.5 bg-zinc-900 text-zinc-500 border border-zinc-800 py-2.5 rounded-xl text-center">
     <Settings className="w-3.5 h-3.5" />
     Modify Disabled

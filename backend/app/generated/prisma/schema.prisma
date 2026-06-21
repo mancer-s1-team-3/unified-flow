@@ -49,7 +49,10 @@ model Stream {
 
 model Transaction {
   id        String @id
-  signature String @unique
+  // NOT @unique: one on-chain tx (signature) can touch many streams in a single
+  // transaction (CSV batch create / batch edit). We store one row per
+  // (signature, stream) pair; uniqueness is enforced by the composite `id`.
+  signature String
   slot      BigInt
 
   streamId String?
@@ -60,6 +63,8 @@ model Transaction {
   raw Json
 
   createdAt DateTime @default(now())
+
+  @@index([signature])
 }
 
 model CsvUpload {
