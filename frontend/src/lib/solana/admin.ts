@@ -28,7 +28,21 @@ function parsePublicKey(value: string, label: string) {
     throw new Error(`Invalid ${label}.`);
   }
 }
-
+async function fetchWithRetry<T>(fn: () => Promise<T>, retries = 3, delayMs = 1500): Promise<T | null> {
+  for (let i = 0; i < retries; i++) {
+    try {
+      return await fn();
+    } catch (err: any) {
+      const is429 = err?.message?.includes("429") || err?.status === 429;
+      if (!is429 || i === retries - 1) {
+        console.error("Failed after retries:", err);
+        return null;
+      }
+      await new Promise((r) => setTimeout(r, delayMs * (i + 1)));
+    }
+  }
+  return null;
+}
 function getAnchorWallet(session: WalletSession) {
   return {
     publicKey: new PublicKey(session.account.address.toString()),
@@ -55,43 +69,44 @@ export type AdminConfigData = {
   feeVaultBalance: number;
 };
 
-export async function fetchAdminConfig({
-  endpoint,
-  commitment = "confirmed",
-}: {
-  endpoint: string;
-  commitment?: Commitment;
-}): Promise<AdminConfigData | null> {
+export async function fetchAdminConfig({ endpoint, commitment = "confirmed" }: { endpoint: string; commitment?: Commitment }): Promise<AdminConfigData | null> {
   const PROGRAM_ID = getProgramIdForEndpoint(endpoint);
   const connection = new Connection(endpoint, commitment);
-  
   const [configPda] = PublicKey.findProgramAddressSync([Buffer.from("config")], PROGRAM_ID);
   const [feeVaultPda] = PublicKey.findProgramAddressSync([Buffer.from("fee_vault")], PROGRAM_ID);
 
-  try {
-    // Need a dummy provider just to fetch the account
-    const dummyWallet = {
-      publicKey: PublicKey.default,
-      signTransaction: async () => { throw new Error("Read-only dummy wallet"); },
-      signAllTransactions: async () => { throw new Error("Read-only dummy wallet"); },
-    };
-    const provider = new anchor.AnchorProvider(connection, dummyWallet, { commitment });
-    const program = new anchor.Program(ADMIN_IDL, provider) as any;
+  const maxRetries = 3;
+  for (let attempt = 0; attempt < maxRetries; attempt++) {
+    try {
+      const dummyWallet = {
+        publicKey: PublicKey.default,
+        signTransaction: async () => { throw new Error("Read-only dummy wallet"); },
+        signAllTransactions: async () => { throw new Error("Read-only dummy wallet"); },
+      };
+      const provider = new anchor.AnchorProvider(connection, dummyWallet, { commitment });
+      const program = new anchor.Program(ADMIN_IDL, provider) as any;
 
-    const configData = await program.account.configAccount.fetch(configPda);
-    const feeVaultBalance = await connection.getBalance(feeVaultPda, commitment);
+      const configData = await program.account.configAccount.fetch(configPda);
+      const feeVaultBalance = await connection.getBalance(feeVaultPda, commitment);
 
-    return {
-      adminAuthority: configData.adminAuthority.toString(),
-      feeAuthority: configData.feeAuthority.toString(),
-      paused: configData.paused,
-      withdrawFeeBps: configData.withdrawFeeBps,
-      feeVaultBalance,
-    };
-  } catch (err) {
-    console.error("Failed to fetch admin config:", err);
-    return null;
+      return {
+        adminAuthority: configData.adminAuthority.toString(),
+        feeAuthority: configData.feeAuthority.toString(),
+        paused: configData.paused,
+        withdrawFeeBps: configData.withdrawFeeBps,
+        feeVaultBalance,
+      };
+    } catch (err: any) {
+      const is429 = err?.message?.includes("429");
+      if (is429 && attempt < maxRetries - 1) {
+        await new Promise((r) => setTimeout(r, 2000 * (attempt + 1))); // 2s, 4s
+        continue;
+      }
+      console.error("Failed to fetch admin config:", err);
+      return null;
+    }
   }
+  return null;
 }
 
 export async function setPauseOnChain({
@@ -195,7 +210,7 @@ export async function withdrawFeesOnChain({
   const PROGRAM_ID = getProgramIdForEndpoint(endpoint);
   const admin = new PublicKey(wallet.account.address.toString());
   const destPubkey = parsePublicKey(destination, "destination address");
-  
+
   const { signer: walletSigner, mode: walletSignerMode } = createWalletTransactionSigner(wallet);
   const kitSigner = walletSigner as any;
 
