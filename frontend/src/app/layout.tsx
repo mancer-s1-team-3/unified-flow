@@ -53,7 +53,7 @@ export default function RootLayout({
         <link rel="shortcut icon" href="/logo-192.png" />
         <link rel="apple-touch-icon" sizes="192x192" href="/logo-192.png" />
       </head>
-      <body>
+      <body suppressHydrationWarning>
         <PwaRegister />
         <Providers>
           <WalletUserSync />
