@@ -256,7 +256,6 @@ export default function Home({ initialStreams = [] }: Props) {
   const router = useRouter();
 
   // ── Wallet ────────────────────────────────────────────────────────────────
-  // NOTE: currentConnector added to destructure so classifyConnector can read it
   const { wallet, connected, currentConnector } = useWalletConnection();
   const { endpoint } = useClusterState();
 
@@ -338,13 +337,12 @@ export default function Home({ initialStreams = [] }: Props) {
     setTimeout(() => setCopiedId(null), 2000);
   }, []);
 
-  // ── Transaction state (component-level, not inside handleAction) ──────────
+  // ── Transaction state ─────────────────────────────────────────────────────
   const [activeTxAction, setActiveTxAction] = useState<string | null>(null);
   const [activeTxPhase,  setActiveTxPhase]  = useState<TxPhase | null>(null);
   const [txFrozen,       setTxFrozen]       = useState(false);
   const txTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  // clearTxStatus at component scope so every catch block can call it
   const clearTxStatus = useCallback(() => {
     if (txTimeoutRef.current) clearTimeout(txTimeoutRef.current);
     setActiveTxAction(null);
@@ -352,7 +350,6 @@ export default function Home({ initialStreams = [] }: Props) {
     setTxFrozen(false);
   }, []);
 
-  // Manual reset button handler
   const handleResetTxState = useCallback(() => {
     clearTxStatus();
     showNotification("info", "Transaction state reset. You can safely retry.");
@@ -371,31 +368,30 @@ export default function Home({ initialStreams = [] }: Props) {
       setLoading(false);
     }
   }, [showNotification]);
-const [adminConfig, setAdminConfig] = useState<any | null>(null);
-const [adminConfigLoading, setAdminConfigLoading] = useState(true);
 
-const loadAdminConfig = useCallback(async () => {
-  setAdminConfigLoading(true);
-  const config = await fetchAdminConfig({ endpoint });
-  setAdminConfig(config);
-  setAdminConfigLoading(false);
-}, [endpoint]);
+  const [adminConfig, setAdminConfig] = useState<any | null>(null);
+  const [adminConfigLoading, setAdminConfigLoading] = useState(true);
 
-useEffect(() => { loadAdminConfig(); }, [loadAdminConfig]);
+  const loadAdminConfig = useCallback(async () => {
+    setAdminConfigLoading(true);
+    const config = await fetchAdminConfig({ endpoint });
+    setAdminConfig(config);
+    setAdminConfigLoading(false);
+  }, [endpoint]);
 
-// Refetch setelah transaksi admin selesai (gantikan effect serupa di AdminPanel)
-const isFirstAdminLoad = useRef(true);
-useEffect(() => {
-  if (isFirstAdminLoad.current) { isFirstAdminLoad.current = false; return; }
-  if (!activeTxAction && !activeTxPhase) loadAdminConfig();
-}, [activeTxAction, activeTxPhase, loadAdminConfig]);
+  useEffect(() => { loadAdminConfig(); }, [loadAdminConfig]);
+
+  const isFirstAdminLoad = useRef(true);
+  useEffect(() => {
+    if (isFirstAdminLoad.current) { isFirstAdminLoad.current = false; return; }
+    if (!activeTxAction && !activeTxPhase) loadAdminConfig();
+  }, [activeTxAction, activeTxPhase, loadAdminConfig]);
+
   // ── CSV versioning ────────────────────────────────────────────────────────
   const [csvVersions,           setCsvVersions]          = useState<any[]>([]);
   const [compareVersionSelected, setCompareVersionSelected] = useState<string>("0");
   const [csvDiffResult,         setCsvDiffResult]        = useState<any | null>(null);
   const [loadingDiff,           setLoadingDiff]          = useState(false);
-  // Snapshot of exactly what was diffed (text + mode + compared version), so we
-  // can tell whether the displayed diff still reflects the current payload.
   const [diffSnapshot, setDiffSnapshot] = useState<{ text: string; mode: "create" | "edit"; version: string } | null>(null);
 
   const fetchCsvVersions = useCallback(async () => {
@@ -439,10 +435,6 @@ useEffect(() => {
     } finally { setLoadingDiff(false); }
   };
 
-  // A diff is "fresh" only when the currently displayed result matches the
-  // current payload text, mode, and compared version. Editing the CSV or
-  // switching the compare version invalidates it — which re-gates Apply so the
-  // user must review an up-to-date diff before sending the transaction.
   const createDiffFresh =
     !!csvDiffResult && csvDiffResult.mode === "create" &&
     !!diffSnapshot && diffSnapshot.mode === "create" &&
@@ -516,9 +508,6 @@ useEffect(() => {
       ...prev,
       amounts:      buildMilestoneAmountsFromStream(stream),
       totalAmount:  String(stream?.totalAmount ?? ""),
-      // MUST match the decimals buildMilestoneAmountsFromStream() used to build
-      // `amounts` (it falls back to 0). Storing null here let the panel re-parse
-      // those amounts at a different scale (6) → allocation counter showed wrong %.
       mintDecimals: typeof stream?.mintDecimals === "number" ? stream.mintDecimals : 0,
     }));
   }, [activeTab, editMilestoneForm.streamId, editMilestoneForm.totalAmount, streams]);
@@ -542,38 +531,37 @@ useEffect(() => {
   // ── CSV helpers ───────────────────────────────────────────────────────────
   const shorten = (address: string) => address ? `${address.slice(0, 6)}...${address.slice(-6)}` : "";
 
- const parseCsv = (csvText: string, mode: "create" | "edit" = "create") => {
-  const lines = csvText.trim().split("\n");
-  if (lines.length < 2) return [];
-  const headers = lines[0].split(",").map((h) => h.trim().toLowerCase());
-  return lines.slice(1).map((line) => {
-    const values = line.split(",").map((v) => v.trim());
-    const obj: any = {};
-    headers.forEach((header, index) => {
-      if (values[index] === undefined) return;
-      const rawValue = values[index];
-      const parsedValue = rawValue === "true" ? true
-        : rawValue === "false" ? false
-        : rawValue;
+  const parseCsv = (csvText: string, mode: "create" | "edit" = "create") => {
+    const lines = csvText.trim().split("\n");
+    if (lines.length < 2) return [];
+    const headers = lines[0].split(",").map((h) => h.trim().toLowerCase());
+    return lines.slice(1).map((line) => {
+      const values = line.split(",").map((v) => v.trim());
+      const obj: any = {};
+      headers.forEach((header, index) => {
+        if (values[index] === undefined) return;
+        const rawValue = values[index];
+        const parsedValue = rawValue === "true" ? true
+          : rawValue === "false" ? false
+          : rawValue;
 
-      if (header === "cliff_duration" || header === "cliffduration") {
-        obj.cliffDuration = parsedValue; return;
-      }
-      if (header === "milestone_count" || header === "milestonecount") {
-        obj.milestoneCount = parsedValue; return;
-      }
-      if (header === "milestones") {
-        obj.milestones = values.slice(index).map((v) => v.trim()).filter(Boolean).join(";"); return;
-      }
-      // ← Khusus edit mode: kolom "amount" = topup delta, bukan total baru
-      if (mode === "edit" && header === "amount") {
-        obj.topupAmount = parsedValue; return;
-      }
-      obj[header] = parsedValue;
+        if (header === "cliff_duration" || header === "cliffduration") {
+          obj.cliffDuration = parsedValue; return;
+        }
+        if (header === "milestone_count" || header === "milestonecount") {
+          obj.milestoneCount = parsedValue; return;
+        }
+        if (header === "milestones") {
+          obj.milestones = values.slice(index).map((v) => v.trim()).filter(Boolean).join(";"); return;
+        }
+        if (mode === "edit" && header === "amount") {
+          obj.topupAmount = parsedValue; return;
+        }
+        obj[header] = parsedValue;
+      });
+      return obj;
     });
-    return obj;
-  });
-};
+  };
 
   const buildCsvCreateInput = (item: any, index: number) => {
     const milestones = String(item.milestones || "").split(";").map((v: string) => v.trim()).filter(Boolean);
@@ -625,8 +613,6 @@ useEffect(() => {
     return stream ? stream.isCsvCreated : false;
   };
 
-  // True when a cliff-type stream's cliff timestamp has already elapsed — the
-  // cliff can no longer be edited on-chain, so the edit-cliff button is disabled.
   const isCliffPassed = (streamId: string) => {
     const stream = streams.find((s) => String(s?.id || "") === streamId);
     if (!stream || Number(stream.vestingType) !== 1) return false;
@@ -634,19 +620,61 @@ useEffect(() => {
     return cliffTs > 0 && nowTs >= cliffTs;
   };
 
-  // True when a milestone-type stream has already had at least one milestone
-  // unlocked — the program rejects edit_milestone on an unlocked milestone
-  // (MilestoneAlreadyUnlocked), so the edit-milestone button is disabled.
   const isMilestoneUnlocked = (streamId: string) => {
     const stream = streams.find((s) => String(s?.id || "") === streamId);
     if (!stream || Number(stream.vestingType) !== 2) return false;
     return Number(stream.unlockedAmount || 0) > 0;
   };
 
+  // ── Resolve active mint for WsolUnwrapWidget ──────────────────────────────
+  // Maps the running tx action → the mint of the stream being operated on.
+  // Widget only shows when this resolves to the WSOL mint address.
+  const activeMint = useMemo(() => {
+    if (!activeTxAction) return null;
+
+    // create_stream: mint comes directly from the create form
+    if (activeTxAction === "create_stream") return createForm.mint;
+
+    // create_stream_csv: inspect the first row of the CSV for the mint column
+    if (activeTxAction === "create_stream_csv") {
+      const parsed = parseCsv(csvCreateText, "create");
+      return parsed[0]?.mint ?? defaultMint;
+    }
+
+    // All stream-id-based actions: look up the stream's mint from the list
+    const streamIdMap: Record<string, string | undefined> = {
+      withdraw:         withdrawForm.streamId,
+      cancel:           cancelForm.streamId,
+      unlock_milestone: unlockForm.streamId,
+      edit_milestone:   editMilestoneForm.streamId,
+      edit_linear:      editLinearForm.streamId,
+      edit_cliff:       editCliffForm.streamId,
+      // edit_stream_csv touches multiple streams with mixed mints — skip
+      edit_stream_csv:  undefined,
+    };
+
+    const streamId = streamIdMap[activeTxAction];
+    if (!streamId) return null;
+
+    const stream = streams.find((s) => String(s?.id ?? "") === streamId);
+    return stream?.mint ?? null;
+  }, [
+    activeTxAction,
+    createForm.mint,
+    csvCreateText,
+    defaultMint,
+    withdrawForm.streamId,
+    cancelForm.streamId,
+    unlockForm.streamId,
+    editMilestoneForm.streamId,
+    editLinearForm.streamId,
+    editCliffForm.streamId,
+    streams,
+  ]);
+
   // ── handleAction ──────────────────────────────────────────────────────────
   const handleAction = async (actionName: string, data: any) => {
 
-    // setTxStatus is local to handleAction (uses component-level state setters)
     const setTxStatus = (phase: TxPhase) => {
       setActiveTxAction(actionName);
       setActiveTxPhase(phase);
@@ -660,17 +688,12 @@ useEffect(() => {
       }, TX_TIMEOUT_MS);
     };
 
-    // ── Pause guard (UX fail-fast) ────────────────────────────────────────────
-    // The real boundary is the on-chain `require!(!config.paused)`; this just
-    // avoids a wallet popup + fee for a tx that would be rejected. set_pause is
-    // intentionally excluded so admins can always unpause.
     const PAUSED_BLOCKED_ACTIONS = [
       "create_stream", "create_stream_csv", "withdraw", "cancel",
       "unlock_milestone", "edit_milestone", "edit_cliff", "edit_linear",
       "edit_stream_csv", "withdraw_fees",
     ];
     if (PAUSED_BLOCKED_ACTIONS.includes(actionName)) {
-      // Refetch fresh so a stale UI (paused from another session) is caught here.
       const freshConfig = await fetchAdminConfig({ endpoint });
       if (freshConfig) setAdminConfig(freshConfig);
       if (freshConfig?.paused) {
@@ -679,7 +702,6 @@ useEffect(() => {
       }
     }
 
-    // ── Wallet-kind guards ──────────────────────────────────────────────────
     const walletKind = classifyConnector(currentConnector?.name);
 
     if (walletKind === "cold" && actionName === "create_stream_csv") {
@@ -687,7 +709,6 @@ useEffect(() => {
       return;
     }
 
-    // useMultisig toggle OR auto-detected multisig wallet
     const isMultisigFlow = useMultisig || walletKind === "multisig";
     if (isMultisigFlow && !["create_stream", "withdraw", "create_stream_csv"].includes(actionName)) {
       showNotification("info", `Squads multisig proposal queued for "${actionName}". Approve it inside the Squads UI.`);
@@ -781,7 +802,7 @@ useEffect(() => {
     if (actionName === "create_stream_csv") {
       if (!wallet) { showNotification("error", "Connect a Solana wallet before bulk creating streams."); return; }
       try {
-       const parsedItems = parseCsv(csvCreateText, "create");
+        const parsedItems = parseCsv(csvCreateText, "create");
         if (parsedItems.length === 0) { showNotification("error", "CSV format invalid. Please provide correct headers."); return; }
         const normalizedItems = parsedItems.map((item, index) => {
           if (!item.recipient) throw new Error(`CSV Row #${index + 1}: recipient is required.`);
@@ -810,77 +831,63 @@ useEffect(() => {
     }
 
     // ── edit_stream_csv ─────────────────────────────────────────────────────
-   if (actionName === "edit_stream_csv") {
-  if (!wallet) { showNotification("error", "Connect the creator wallet before bulk editing streams."); return; }
-  try {
-    const parsedItems = parseCsv(csvEditText, "edit");
-    if (parsedItems.length === 0) { showNotification("error", "CSV format invalid. Please provide correct headers."); return; }
+    if (actionName === "edit_stream_csv") {
+      if (!wallet) { showNotification("error", "Connect the creator wallet before bulk editing streams."); return; }
+      try {
+        const parsedItems = parseCsv(csvEditText, "edit");
+        if (parsedItems.length === 0) { showNotification("error", "CSV format invalid. Please provide correct headers."); return; }
 
-    const inputs = parsedItems.map((item: any) => {
-  const streamId = String(item.id || "");
-  
-  // item.topupAmount sudah ter-set dari parseCsv("edit") mode
-  // tapi kita override dengan delta calculation
-  let resolvedTopup: string | undefined = undefined;
+        const inputs = parsedItems.map((item: any) => {
+          const streamId = String(item.id || "");
+          let resolvedTopup: string | undefined = undefined;
+          const rawAmount = item.topupAmount ?? item.amount;
 
-  const rawAmount = item.topupAmount ?? item.amount; // fallback kalau mode tidak di-pass
+          if (rawAmount !== undefined && rawAmount !== "" && rawAmount !== null) {
+            const currentStream = streams.find((s) => String(s?.id || "") === streamId);
+            if (currentStream && Number(currentStream.vestingType) === 0) {
+              const decimals = typeof currentStream.mintDecimals === "number"
+                ? currentStream.mintDecimals : 6;
+              const currentTotal = Number(
+                formatBaseUnitsToTokenAmount(parseBaseUnits(currentStream.totalAmount), decimals)
+              );
+              const newTotal = parseFloat(String(rawAmount)) || 0;
+              const delta = newTotal - currentTotal;
+              if (delta > 0) resolvedTopup = String(delta);
+            }
+          }
 
-  if (rawAmount !== undefined && rawAmount !== "" && rawAmount !== null) {
-    const currentStream = streams.find((s) => String(s?.id || "") === streamId);
+          return {
+            id:            streamId,
+            amount:        resolvedTopup,
+            duration:      item.duration,
+            cliffDuration: item.cliffDuration,
+            milestones:    item.milestones,
+          };
+        });
 
-    if (currentStream && Number(currentStream.vestingType) === 0) {
-      const decimals = typeof currentStream.mintDecimals === "number"
-        ? currentStream.mintDecimals : 6;
-      const currentTotal = Number(
-        formatBaseUnitsToTokenAmount(parseBaseUnits(currentStream.totalAmount), decimals)
-      );
-      const newTotal = parseFloat(String(rawAmount)) || 0;
-      const delta = newTotal - currentTotal;
+        const batchEditResult = await editStreamBatchOnChain({ wallet, endpoint, inputs, onStatus: setTxStatus });
 
-      if (delta > 0) {
-        resolvedTopup = String(delta);
-      }
-      // delta <= 0 → pure extend, tidak perlu topup
+        if (batchEditResult.signatures.length === 0)
+          throw new Error("No editable rows found. Provide duration, cliff_duration, or milestones columns for CSV-created streams.");
+
+        await api.post("/csv/upload", {
+          content: csvEditText,
+          filename: `bulk_edit_v${csvVersions.length + 1}.csv`,
+          uploader: connectedWalletAddress || "Anonymous"
+        });
+
+        addNotification({
+          type: "success", event: "csv_edited", title: "CSV Edited",
+          message: `v${csvVersions.length + 1} — ${batchEditResult.streamAddresses.length} streams updated in ${batchEditResult.signatures.length} tx(s).`
+        });
+
+        setCsvDiffResult(null); fetchCsvVersions(); fetchStreams(); setActiveTab("streams");
+      } catch (err: any) {
+        clearTxStatus();
+        showParsedTxError(err, "Bulk edit failed.");
+      } finally { clearTxStatus(); }
+      return;
     }
-  }
-
-  return {
-    id:            streamId,
-    amount:        resolvedTopup,   // ← topup delta, undefined kalau pure extend
-    duration:      item.duration,
-    cliffDuration: item.cliffDuration,
-    milestones:    item.milestones,
-  };
-});
-
-    const batchEditResult = await editStreamBatchOnChain({
-      wallet,
-      endpoint,
-      inputs,
-      onStatus: setTxStatus,
-    });
-
-    if (batchEditResult.signatures.length === 0)
-      throw new Error("No editable rows found. Provide duration, cliff_duration, or milestones columns for CSV-created streams.");
-
-    await api.post("/csv/upload", {
-      content: csvEditText,
-      filename: `bulk_edit_v${csvVersions.length + 1}.csv`,
-      uploader: connectedWalletAddress || "Anonymous"
-    });
-
-    addNotification({
-      type: "success", event: "csv_edited", title: "CSV Edited",
-      message: `v${csvVersions.length + 1} — ${batchEditResult.streamAddresses.length} streams updated in ${batchEditResult.signatures.length} tx(s).`
-    });
-
-    setCsvDiffResult(null); fetchCsvVersions(); fetchStreams(); setActiveTab("streams");
-  } catch (err: any) {
-    clearTxStatus();
-    showParsedTxError(err, "Bulk edit failed.");
-  } finally { clearTxStatus(); }
-  return;
-}
 
     // ── edit_linear ─────────────────────────────────────────────────────────
     if (actionName === "edit_linear") {
@@ -902,9 +909,6 @@ useEffect(() => {
       try {
         const amounts = Array.isArray(data.amounts) ? data.amounts : [];
         if (amounts.length === 0) throw new Error("Milestone amounts are required.");
-        // Changing the total is allowed: the program tops up (total increase) or
-        // refunds (total decrease) the difference per milestone on-chain. We only
-        // reject non-positive amounts, which edit_milestone rejects anyway.
         if (amounts.some((amt: any) => !(Number(amt) > 0))) {
           throw new Error("Each milestone amount must be greater than zero.");
         }
@@ -935,47 +939,42 @@ useEffect(() => {
     }
 
     // ── set_pause ───────────────────────────────────────────────────────────
-if (actionName === "set_pause") {
-  if (!wallet) { showNotification("error", "Connect the admin wallet before modifying the pause state."); return; }
-  try {
-    // Re-fetch config terbaru tepat sebelum submit, supaya tidak pakai
-    // adminConfig.paused yang stale (misal sudah diubah dari sesi lain).
-    const freshConfig = await fetchAdminConfig({ endpoint });
-    if (!freshConfig) throw new Error("Failed to load current protocol config.");
-    if (connectedWalletAddress && freshConfig.adminAuthority !== connectedWalletAddress) {
-      throw new Error("Connected wallet is not the admin authority.");
+    if (actionName === "set_pause") {
+      if (!wallet) { showNotification("error", "Connect the admin wallet before modifying the pause state."); return; }
+      try {
+        const freshConfig = await fetchAdminConfig({ endpoint });
+        if (!freshConfig) throw new Error("Failed to load current protocol config.");
+        if (connectedWalletAddress && freshConfig.adminAuthority !== connectedWalletAddress) {
+          throw new Error("Connected wallet is not the admin authority.");
+        }
+        await setPauseOnChain({ wallet, endpoint, paused: data.paused, onStatus: setTxStatus });
+        addNotification({ type: "success", event: "stream_edited", title: "Protocol State Updated", message: `Protocol has been ${data.paused ? "paused" : "unpaused"}.` });
+      } catch (err: any) {
+        clearTxStatus();
+        showParsedTxError(err, "Failed to update protocol pause state.");
+      } finally { clearTxStatus(); }
+      return;
     }
-    await setPauseOnChain({ wallet, endpoint, paused: data.paused, onStatus: setTxStatus });
-    addNotification({ type: "success", event: "stream_edited", title: "Protocol State Updated", message: `Protocol has been ${data.paused ? "paused" : "unpaused"}.` });
-  } catch (err: any) {
-    clearTxStatus();
-    showParsedTxError(err, "Failed to update protocol pause state.");
-  } finally { clearTxStatus(); }
-  return;
-} 
 
     // ── withdraw_fees ───────────────────────────────────────────────────────
-   if (actionName === "withdraw_fees") {
-  if (!wallet) { showNotification("error", "Connect the admin wallet before withdrawing fees."); return; }
-  try {
-    // data.amount berupa SOL desimal (mis. "0.558343467"), bukan lamports.
-    // parseBaseUnits salah karena BigInt() tidak terima string desimal —
-    // gunakan parseTokenAmountToBaseUnits dengan decimals=9 (lamports per SOL).
-    const amountBaseUnits = parseTokenAmountToBaseUnits(data.amount, 9);
-    if (amountBaseUnits <= BigInt(0)) throw new Error("Amount must be greater than zero.");
-    await withdrawFeesOnChain({ wallet, endpoint, destination: data.destination, amountBaseUnits, onStatus: setTxStatus });
-    addNotification({ type: "success", event: "tokens_withdrawn", title: "Fees Withdrawn", message: "Successfully withdrawn SOL from the protocol fee vault." });
-  } catch (err: any) {
-    clearTxStatus();
-    showParsedTxError(err, "Failed to withdraw fees.");
-  } finally { clearTxStatus(); }
-  return;
-}
+    if (actionName === "withdraw_fees") {
+      if (!wallet) { showNotification("error", "Connect the admin wallet before withdrawing fees."); return; }
+      try {
+        const amountBaseUnits = parseTokenAmountToBaseUnits(data.amount, 9);
+        if (amountBaseUnits <= BigInt(0)) throw new Error("Amount must be greater than zero.");
+        await withdrawFeesOnChain({ wallet, endpoint, destination: data.destination, amountBaseUnits, onStatus: setTxStatus });
+        addNotification({ type: "success", event: "tokens_withdrawn", title: "Fees Withdrawn", message: "Successfully withdrawn SOL from the protocol fee vault." });
+      } catch (err: any) {
+        clearTxStatus();
+        showParsedTxError(err, "Failed to withdraw fees.");
+      } finally { clearTxStatus(); }
+      return;
+    }
 
     showNotification("success", `Transaction submitted: Successfully executed ${actionName}!`);
   };
 
-  // ── prefillAction (unchanged) ─────────────────────────────────────────────
+  // ── prefillAction ─────────────────────────────────────────────────────────
   const prefillAction = (tab: TabId, streamOrId: any) => {
     const streamId = typeof streamOrId === "string" ? streamOrId : String(streamOrId?.id || "");
     const stream   = typeof streamOrId === "string" ? streams.find((s) => String(s?.id || "") === streamId) : streamOrId;
@@ -985,8 +984,6 @@ if (actionName === "set_pause") {
     if (tab === "unlock_milestone") setUnlockForm({ streamId });
     if (tab === "edit_milestone") {
       setEditMilestoneForm(stream
-        // mintDecimals MUST equal the decimals buildMilestoneAmountsFromStream()
-        // used (fallback 0), so the panel parses `amounts` at the same scale.
         ? { streamId, amounts: buildMilestoneAmountsFromStream(stream), totalAmount: String(stream?.totalAmount ?? ""), mintDecimals: typeof stream?.mintDecimals === "number" ? stream.mintDecimals : 0 }
         : { streamId, amounts: ["250", "250", "250", "250"], totalAmount: "", mintDecimals: null }
       );
@@ -1001,9 +998,7 @@ if (actionName === "set_pause") {
     }
     setSelectedStream(null);
   };
-  // Map the active cluster (from the network switcher) to the wallet-adapter
-  // network instead of pinning Devnet, so deep-link/explorer behaviour follows
-  // whichever cluster the user selected.
+
   const network = useMemo(() => {
     const c = getNetworkByEndpoint(endpoint)?.cluster;
     return c === "mainnet"
@@ -1044,22 +1039,25 @@ if (actionName === "set_pause") {
         </div>
       )}
 
+      {/* WsolUnwrapWidget — only shows when activeMint is WSOL */}
       <WsolUnwrapWidget
         wallet={wallet ?? null}
         endpoint={endpoint}
         connected={!!connected}
         refreshSignal={`${activeTxAction ?? ""}-${activeTxPhase ?? ""}`}
+        activeMint={activeMint}
       />
 
       <div className="max-w-7xl mx-auto w-full px-4 py-4 sm:px-6 sm:py-8 pb-20 md:pb-8 flex-grow flex flex-col md:flex-row gap-4 md:gap-8 relative z-10">
 
-    <DashboardSidebar
-  connectedWalletAddress={connectedWalletAddress}
-  adminConfig={adminConfig}
-  adminConfigLoading={adminConfigLoading}
-  connected={connected}
-  activeTab={activeTab} setActiveTab={setActiveTab} streamsCount={filteredStreamsCount}
-/>
+        <DashboardSidebar
+          connectedWalletAddress={connectedWalletAddress}
+          adminConfig={adminConfig}
+          adminConfigLoading={adminConfigLoading}
+          connected={connected}
+          activeTab={activeTab} setActiveTab={setActiveTab} streamsCount={filteredStreamsCount}
+        />
+
         <section className="flex-grow min-w-0 max-w-full bg-zinc-900/25 border border-zinc-800/80 rounded-3xl p-4 sm:p-6 md:backdrop-blur-sm md:shadow-2xl shadow-none flex flex-col justify-between relative overflow-x-hidden">
           <div className="w-full">
 
@@ -1074,8 +1072,8 @@ if (actionName === "set_pause") {
 
             {activeTab !== "streams" && (
               <DashboardActionPanels
-connectedWalletAddress={connectedWalletAddress}  // ← tambah ini
-              streams={streams}
+                connectedWalletAddress={connectedWalletAddress}
+                streams={streams}
                 endpoint={endpoint} activeTab={activeTab}
                 useMultisig={useMultisig} setUseMultisig={setUseMultisig}
                 createMode={createMode} setCreateMode={setCreateMode}
@@ -1123,7 +1121,7 @@ connectedWalletAddress={connectedWalletAddress}  // ← tambah ini
 
       </div>
 
-      {/* ── Floating tx status / reset pill ────────────────────────────────── */}
+      {/* ── Floating tx status / reset pill ──────────────────────────────── */}
       {(activeTxAction || txFrozen) && (
         <div className={`fixed bottom-24 md:bottom-8 right-4 md:right-8 z-[90] flex items-center gap-2.5 rounded-2xl border px-4 py-3 shadow-2xl backdrop-blur-xl transition-all duration-300 ${txFrozen ? "border-red-500/30 bg-red-950/80 text-red-200" : "border-zinc-700/60 bg-zinc-900/90 text-zinc-300"}`}>
           {txFrozen ? (
