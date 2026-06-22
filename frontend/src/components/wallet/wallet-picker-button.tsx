@@ -20,7 +20,7 @@ import {
 import { useWalletConnection } from "@solana/react-hooks";
 import { useNetwork } from "@/components/wallet/network-context";
 import { WalletBalances } from "@/components/wallet/wallet-balances";
-
+import { unwrapWsolOnChain, TxProgressPhase } from "@/lib/solana/unwrap-wsol";
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
@@ -150,7 +150,25 @@ export function WalletPickerButton({ className = "" }: { className?: string }) {
   const rootRef = useRef<HTMLDivElement | null>(null);
   const mobileBrowser = useMemo(() => isMobileBrowser(), []);
   const safariDesktop = useMemo(() => isSafariDesktop(), []);
+const [activeTxAction, setActiveTxAction] = useState<string | null>(null);
+const [activeTxPhase, setActiveTxPhase] = useState<TxProgressPhase | null>(null);
 
+const handleUnwrapWsol = async (mint: string) => {
+  if (!wallet) return;
+
+  try {
+    setActiveTxAction("unwrap_wsol");
+
+    await unwrapWsolOnChain({
+      wallet,
+      endpoint: network.rpc,
+      onStatus: setActiveTxPhase,
+    });
+  } finally {
+    setActiveTxAction(null);
+    setActiveTxPhase(null);
+  }
+};
   // Classify the currently connected / selected connector
   const activeKind = useMemo(
     () => classifyConnector(currentConnector?.name ?? connectors[0]?.name),
@@ -345,7 +363,11 @@ export function WalletPickerButton({ className = "" }: { className?: string }) {
             </div>
 
             {/* Balances */}
-            <WalletBalances address={connectedAddress} />
+            <WalletBalances
+  address={connectedAddress}
+  onUnwrapWsol={handleUnwrapWsol}
+  unwrapping={activeTxAction === "unwrap_wsol"}
+/>
 
             {/* Disconnect */}
             <button
