@@ -298,7 +298,6 @@ const executeToolWithFeedback = async (toolName: string, args: string) => {
     }
 
     try {
-      console.log(`Executing tool: ${toolName}`, parsedArgs);
 
       switch (toolName) {
         case "create_stream": {
