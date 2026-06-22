@@ -629,48 +629,41 @@ export default function Home({ initialStreams = [] }: Props) {
   // ── Resolve active mint for WsolUnwrapWidget ──────────────────────────────
   // Maps the running tx action → the mint of the stream being operated on.
   // Widget only shows when this resolves to the WSOL mint address.
-  const activeMint = useMemo(() => {
-    if (!activeTxAction) return null;
+  // ── Capture active mint ke ref saat tx dimulai ────────────────────────────
+// Tidak pakai useMemo karena activeTxAction sudah null saat useEffect
+// di widget fired (setelah clearTxStatus). Ref persist sampai tx berikutnya.
+const activeMintRef = useRef<string | null>(null);
 
-    // create_stream: mint comes directly from the create form
-    if (activeTxAction === "create_stream") return createForm.mint;
+useEffect(() => {
+  if (!activeTxAction) return; // jangan reset saat idle — biarkan nilai lama
 
-    // create_stream_csv: inspect the first row of the CSV for the mint column
-    if (activeTxAction === "create_stream_csv") {
-      const parsed = parseCsv(csvCreateText, "create");
-      return parsed[0]?.mint ?? defaultMint;
-    }
+  if (activeTxAction === "create_stream") {
+    activeMintRef.current = createForm.mint;
+    return;
+  }
 
-    // All stream-id-based actions: look up the stream's mint from the list
-    const streamIdMap: Record<string, string | undefined> = {
-      withdraw:         withdrawForm.streamId,
-      cancel:           cancelForm.streamId,
-      unlock_milestone: unlockForm.streamId,
-      edit_milestone:   editMilestoneForm.streamId,
-      edit_linear:      editLinearForm.streamId,
-      edit_cliff:       editCliffForm.streamId,
-      // edit_stream_csv touches multiple streams with mixed mints — skip
-      edit_stream_csv:  undefined,
-    };
+  if (activeTxAction === "create_stream_csv") {
+    const parsed = parseCsv(csvCreateText, "create");
+    activeMintRef.current = parsed[0]?.mint ?? defaultMint;
+    return;
+  }
 
-    const streamId = streamIdMap[activeTxAction];
-    if (!streamId) return null;
+  const streamIdMap: Record<string, string | undefined> = {
+    withdraw:         withdrawForm.streamId,
+    cancel:           cancelForm.streamId,
+    unlock_milestone: unlockForm.streamId,
+    edit_milestone:   editMilestoneForm.streamId,
+    edit_linear:      editLinearForm.streamId,
+    edit_cliff:       editCliffForm.streamId,
+    edit_stream_csv:  undefined,
+  };
 
-    const stream = streams.find((s) => String(s?.id ?? "") === streamId);
-    return stream?.mint ?? null;
-  }, [
-    activeTxAction,
-    createForm.mint,
-    csvCreateText,
-    defaultMint,
-    withdrawForm.streamId,
-    cancelForm.streamId,
-    unlockForm.streamId,
-    editMilestoneForm.streamId,
-    editLinearForm.streamId,
-    editCliffForm.streamId,
-    streams,
-  ]);
+  const streamId = streamIdMap[activeTxAction];
+  if (!streamId) { activeMintRef.current = null; return; }
+
+  const stream = streams.find((s) => String(s?.id ?? "") === streamId);
+  activeMintRef.current = stream?.mint ?? null;
+}, [activeTxAction]); // intentionally minimal deps — capture saat action berubah
 
   // ── handleAction ──────────────────────────────────────────────────────────
   const handleAction = async (actionName: string, data: any) => {
@@ -1045,7 +1038,7 @@ export default function Home({ initialStreams = [] }: Props) {
         endpoint={endpoint}
         connected={!!connected}
         refreshSignal={`${activeTxAction ?? ""}-${activeTxPhase ?? ""}`}
-        activeMint={activeMint}
+        activeMint={activeMintRef.current}
       />
 
       <div className="max-w-7xl mx-auto w-full px-4 py-4 sm:px-6 sm:py-8 pb-20 md:pb-8 flex-grow flex flex-col md:flex-row gap-4 md:gap-8 relative z-10">
