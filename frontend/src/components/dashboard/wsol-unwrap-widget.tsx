@@ -8,6 +8,10 @@ import { fetchWsolBalanceRaw, unwrapWsolOnChain } from "@/lib/solana/unwrap-wsol
 
 const WSOL_DECIMALS = 9;
 const HIDE_AFTER_MS = 15_000;
+const WSOL_MINT = "So11111111111111111111111111111111111111112";
+
+const isWsolMint = (mint?: string | null) =>
+  mint?.toLowerCase() === WSOL_MINT.toLowerCase();
 
 const WSOL_OUT_ACTIONS = new Set([
   "withdraw",
@@ -23,11 +27,13 @@ export function WsolUnwrapWidget({
   endpoint,
   connected,
   refreshSignal,
+  activeMint,
 }: {
   wallet: WalletSession | null;
   endpoint: string;
   connected: boolean;
   refreshSignal?: string | number;
+  activeMint?: string | null;
 }) {
   const { addNotification } = useNotifications();
   const [wsolRaw, setWsolRaw] = useState<bigint>(BigInt(0));
@@ -60,12 +66,15 @@ export function WsolUnwrapWidget({
     const idleNow = curr === "" || curr === "-";
     if (!idleNow || !WSOL_OUT_ACTIONS.has(prevAction)) return;
 
+    // Only show widget when the stream's mint is WSOL
+    if (!isWsolMint(activeMint)) return;
+
     const t = setTimeout(async () => {
       const raw = await refresh();
       if (raw > BigInt(0)) setVisible(true);
     }, 1200);
     return () => clearTimeout(t);
-  }, [refreshSignal, refresh]);
+  }, [refreshSignal, activeMint, refresh]);
 
   useEffect(() => {
     if (!visible || hovered || busy) return;
