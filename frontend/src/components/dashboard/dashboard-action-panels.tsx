@@ -69,6 +69,102 @@ function buildEvenMilestoneBaseUnits(totalBaseUnits: bigint, count: number) {
   );
 }
 
+type CsvMilestoneRebalanceRow = {
+  rowNum: number;
+  recipient: string;
+  original: string[];
+  rebalanced: string[];
+};
+
+// For a "create" CSV, find the milestone rows (type 2) whose milestone sum does
+// NOT match the row amount and therefore get auto-rebalanced at deploy time
+// (mirrors buildCsvCreateInput in dashboard-home-client.tsx). Returns a per-row
+// preview AND a rewritten CSV text the user can apply, so the editor and the
+// saved version reflect exactly what goes on-chain instead of the raw mismatch.
+function computeCsvMilestoneRebalance(
+  csvText: string,
+  mintPresets: { mint: string; decimals?: number }[],
+  fallbackMint: string,
+  fallbackDecimals: number
+): { rows: CsvMilestoneRebalanceRow[]; rebalancedText: string } {
+  const empty = {
+    rows: [] as CsvMilestoneRebalanceRow[],
+    rebalancedText: csvText,
+  };
+  if (!csvText?.trim()) return empty;
+
+  const lines = csvText.replace(/\r/g, "").split("\n");
+  const headerIdx = lines.findIndex((l) => l.trim() !== "");
+  if (headerIdx === -1) return empty;
+
+  const headers = lines[headerIdx]
+    .split(",")
+    .map((h) => h.trim().toLowerCase());
+  const typeIdx = headers.indexOf("type");
+  const amountIdx = headers.indexOf("amount");
+  const mintIdx = headers.indexOf("mint");
+  const milestonesIdx = headers.indexOf("milestones");
+  const recipientIdx = headers.indexOf("recipient");
+  if (typeIdx === -1 || amountIdx === -1 || milestonesIdx === -1) return empty;
+
+  const rows: CsvMilestoneRebalanceRow[] = [];
+  const outLines = [...lines];
+
+  for (let i = headerIdx + 1; i < lines.length; i++) {
+    if (!lines[i].trim()) continue;
+    const values = lines[i].split(",").map((v) => v.trim());
+    if (values[typeIdx] !== "2") continue;
+
+    const tail = values.slice(milestonesIdx).filter(Boolean);
+    const original = tail
+      .join(";")
+      .split(/[;,]/)
+      .map((v) => v.trim())
+      .filter(Boolean);
+    if (original.length === 0) continue;
+    if (!original.every((v) => /^\d+(\.\d+)?$/.test(v) && Number(v) > 0))
+      continue;
+
+    const mint = (mintIdx !== -1 ? values[mintIdx] : "") || fallbackMint;
+    const decimals =
+      mintPresets.find((p) => p.mint === mint)?.decimals ??
+      fallbackDecimals ??
+      6;
+
+    const totalBase = parseTokenAmountToBaseUnits(
+      values[amountIdx] ?? "0",
+      decimals
+    );
+    const sumBase = original.reduce(
+      (acc, v) => acc + parseTokenAmountToBaseUnits(v, decimals),
+      BigInt(0)
+    );
+    if (sumBase === totalBase) continue; // already balanced — nothing to do
+
+    const rebalanced = buildEvenMilestoneBaseUnits(
+      totalBase,
+      original.length
+    ).map((b) => formatBaseUnitsToTokenAmount(b, decimals));
+
+    rows.push({
+      rowNum: i - headerIdx,
+      recipient: recipientIdx !== -1 ? values[recipientIdx] ?? "" : "",
+      original,
+      rebalanced,
+    });
+
+    // Rewrite the row preserving the original delimiter style: a single field
+    // with ";" stays semicolon-joined; trailing comma columns stay comma-split.
+    const head = values.slice(0, milestonesIdx);
+    outLines[i] =
+      tail.length <= 1
+        ? [...head, rebalanced.join(";")].join(",")
+        : [...head, ...rebalanced].join(",");
+  }
+
+  return { rows, rebalancedText: outLines.join("\n") };
+}
+
 // ─── Cancel Confirmation Dialog ───────────────────────────────────────────
 function CancelConfirmDialog({
   streamId,
@@ -2187,6 +2283,19 @@ export function DashboardActionPanels(props: Props) {
   // validation panel always agree on whether the CSV is acceptable.
   const csvWalletDecimals =
     tokenBalance.decimals ?? selectedMintPreset?.decimals ?? 6;
+  // Preview of milestone rows that will be auto-rebalanced on deploy, so the
+  // user sees (and can apply) the values that actually go on-chain instead of
+  // the raw mismatched payload.
+  const csvCreateRebalance = useMemo(
+    () =>
+      computeCsvMilestoneRebalance(
+        csvCreateText,
+        mintPresets,
+        createForm.mint,
+        csvWalletDecimals
+      ),
+    [csvCreateText, mintPresets, createForm.mint, csvWalletDecimals]
+  );
   const csvStructuralValidation = useCsvStructuralValidation(
     csvCreateText,
     "create",
@@ -3241,6 +3350,45 @@ export function DashboardActionPanels(props: Props) {
                   className="w-full bg-zinc-950 border border-zinc-800 rounded-xl px-4 py-3 text-xs focus:outline-none focus:border-indigo-500 font-mono"
                 />
               </div>
+              {/* ─── Milestone Auto-Rebalance Preview ─── */}
+              {csvCreateRebalance.rows.length > 0 && (
+                <div className="bg-amber-950/20 border border-amber-500/25 rounded-xl px-4 py-3 space-y-2">
+                  <div className="flex items-center gap-2">
+                    <Layers className="w-3.5 h-3.5 text-amber-400 shrink-0" />
+                    <span className="text-[11px] font-semibold text-amber-300">
+                      Milestone auto-rebalance
+                    </span>
+                  </div>
+                  <p className="text-[11px] text-amber-300/80 leading-relaxed">
+                    These milestone rows don&apos;t sum to their amount and will
+                    be rebalanced evenly on deploy. Apply to preview the exact
+                    on-chain values (also saved with the CSV version).
+                  </p>
+                  <ul className="space-y-1">
+                    {csvCreateRebalance.rows.map((r) => (
+                      <li
+                        key={r.rowNum}
+                        className="text-[10px] font-mono text-amber-200/90 break-all"
+                      >
+                        Row {r.rowNum}: {r.original.join(";")}{" "}
+                        <span className="text-amber-400">→</span>{" "}
+                        <span className="text-emerald-300">
+                          {r.rebalanced.join(";")}
+                        </span>
+                      </li>
+                    ))}
+                  </ul>
+                  <button
+                    type="button"
+                    onClick={() =>
+                      setCsvCreateText(csvCreateRebalance.rebalancedText)
+                    }
+                    className="text-[11px] font-semibold px-3 py-1.5 rounded-lg bg-amber-500/20 hover:bg-amber-500/30 text-amber-200 transition-all"
+                  >
+                    Apply auto-rebalance
+                  </button>
+                </div>
+              )}
               {/* ─── Milestone Validation ─── */}
               <CsvValidationPanel
                 csvText={csvCreateText}

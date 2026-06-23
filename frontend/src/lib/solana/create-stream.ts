@@ -994,15 +994,32 @@ export async function createStreamBatchOnChain({
       );
     }
 
-    const { signature, simulationLogs } = await sendVersionedTransactionMessage(
-      {
+    let signature: string;
+    let simulationLogs: string[];
+    try {
+      const sent = await sendVersionedTransactionMessage({
         connection,
         transactionMessage,
         commitment,
         walletSignerMode,
         onStatus,
+      });
+      signature = sent.signature;
+      simulationLogs = sent.simulationLogs;
+    } catch (err: any) {
+      // Preserve the batches that already succeeded so the caller can still
+      // mark their streams as CSV origin. Without this, an earlier linear/cliff
+      // transaction that succeeded before a later milestone transaction failed
+      // would be orphaned and indexed as a manual-origin stream.
+      if (err && typeof err === "object") {
+        err.partial = {
+          batches: [...batches],
+          streamAddresses: batches.flatMap((b) => b.streamAddresses),
+          vaultAddresses: batches.flatMap((b) => b.vaultAddresses),
+        };
       }
-    );
+      throw err;
+    }
 
     batches.push({
       signature,

@@ -438,7 +438,11 @@ export function validateCsvContent(
       } else if (!isNumeric(amtRaw) || Number(amtRaw) <= 0) {
         errors.push(`Row ${rowNum}: amount must be a positive number.`);
       }
-      // Milestone (type 2): the milestone amounts must sum to the row amount.
+      // Milestone (type 2): milestone amounts must be present and positive.
+      // We intentionally do NOT require the milestone sum to equal the row
+      // amount: a mismatch is auto-rebalanced at create time (frontend
+      // buildCsvCreateInput + normalizeCsvRecord's rebalanceMilestonesToBaseUnits),
+      // so rejecting it here would block the very payloads the gated UI accepts.
       if (typeRaw === "2" && milestonesIdx !== -1 && isNumeric(amtRaw)) {
         const parts = values
           .slice(milestonesIdx)
@@ -452,13 +456,6 @@ export function validateCsvContent(
           errors.push(
             `Row ${rowNum}: milestone amounts must all be positive numbers.`
           );
-        } else {
-          const sum = parts.reduce((acc, p) => acc + Number(p), 0);
-          if (Math.abs(sum - Number(amtRaw)) > 1e-6) {
-            errors.push(
-              `Row ${rowNum}: milestone sum (${sum}) must equal amount (${amtRaw}).`
-            );
-          }
         }
       }
       const rowKey = values.join("|").toLowerCase();

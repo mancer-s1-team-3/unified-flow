@@ -1323,20 +1323,34 @@ export default function Home({ initialStreams = [] }: Props) {
           throw new Error(
             "No streams were created on-chain, so the CSV version was not saved."
           );
-        await api.post("/csv/upload", {
-          content: csvCreateText,
-          filename: `bulk_create_v${csvVersions.length + 1}.csv`,
-          uploader: connectedWalletAddress || "Anonymous",
-        });
-        if (batchResult.streamAddresses.length > 0) {
-          for (let attempt = 0; attempt < 8; attempt++) {
-            const res = await api.post("/streams/mark-origin", {
-              ids: batchResult.streamAddresses,
-              isCsvCreated: true,
-            });
-            if (res.data.count >= batchResult.streamAddresses.length) break;
-            await new Promise((r) => setTimeout(r, 1500));
-          }
+        // Mark origin FIRST. Once streams exist on-chain they MUST be flagged
+        // CSV-created, regardless of whether saving the CSV version succeeds.
+        // (Previously this ran after /csv/upload, so a validation/save failure
+        // there left already-deployed streams indexed as manual origin.)
+        for (let attempt = 0; attempt < 8; attempt++) {
+          const res = await api.post("/streams/mark-origin", {
+            ids: batchResult.streamAddresses,
+            isCsvCreated: true,
+          });
+          if (res.data.count >= batchResult.streamAddresses.length) break;
+          await new Promise((r) => setTimeout(r, 1500));
+        }
+        // Saving the CSV version is best-effort: a failure here must not undo
+        // the origin marking above nor fail the whole deploy.
+        try {
+          await api.post("/csv/upload", {
+            content: csvCreateText,
+            filename: `bulk_create_v${csvVersions.length + 1}.csv`,
+            uploader: connectedWalletAddress || "Anonymous",
+          });
+        } catch (uploadErr: any) {
+          addNotification({
+            type: "info",
+            event: "generic",
+            title: "CSV version not saved",
+            message:
+              "Streams deployed and marked as CSV origin, but saving the CSV version for diff history failed.",
+          });
         }
         addNotification({
           type: "success",
@@ -1352,6 +1366,28 @@ export default function Home({ initialStreams = [] }: Props) {
         setActiveTab("streams");
       } catch (err: any) {
         clearTxStatus();
+        // Partial on-chain success: some batches deployed before a later batch
+        // failed (e.g. linear/cliff tx ok, milestone tx failed). Mark those
+        // streams as CSV origin so they aren't left as manual-origin orphans,
+        // then surface the original error.
+        const partialIds: string[] = Array.isArray(err?.partial?.streamAddresses)
+          ? err.partial.streamAddresses
+          : [];
+        if (partialIds.length > 0) {
+          try {
+            for (let attempt = 0; attempt < 8; attempt++) {
+              const res = await api.post("/streams/mark-origin", {
+                ids: partialIds,
+                isCsvCreated: true,
+              });
+              if (res.data.count >= partialIds.length) break;
+              await new Promise((r) => setTimeout(r, 1500));
+            }
+            fetchStreams();
+          } catch {
+            /* best-effort; the original deploy error is surfaced below */
+          }
+        }
         showParsedTxError(err, "Bulk deployment failed.");
       } finally {
         clearTxStatus();
