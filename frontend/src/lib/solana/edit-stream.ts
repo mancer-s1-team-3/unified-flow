@@ -486,12 +486,12 @@ export async function editLinearOnChain({
   const preInstructions =
     isWrappedSolMint(mint) && parsedTopupAmount.gt(new anchor.BN(0))
       ? await buildWsolWrapInstructions({
-          connection,
-          owner: creator,
-          walletSigner,
-          amountBn: parsedTopupAmount,
-          commitment,
-        })
+        connection,
+        owner: creator,
+        walletSigner,
+        amountBn: parsedTopupAmount,
+        commitment,
+      })
       : [];
 
   const anchorInstruction = await program.methods
@@ -694,12 +694,12 @@ export async function editCliffOnChain({
   const preInstructions =
     hasTopup && isWrappedSolMint(mint)
       ? await buildWsolWrapInstructions({
-          connection,
-          owner: creator,
-          walletSigner,
-          amountBn: topupAmountBn,
-          commitment,
-        })
+        connection,
+        owner: creator,
+        walletSigner,
+        amountBn: topupAmountBn,
+        commitment,
+      })
       : [];
 
   const { signature, simulationLogs } = await executeInstructions({
@@ -826,12 +826,12 @@ export async function editMilestoneOnChain({
   const preInstructions =
     isWrappedSolMint(mint) && topUpDiff.gt(new anchor.BN(0))
       ? await buildWsolWrapInstructions({
-          connection,
-          owner: creator,
-          walletSigner,
-          amountBn: topUpDiff,
-          commitment,
-        })
+        connection,
+        owner: creator,
+        walletSigner,
+        amountBn: topUpDiff,
+        commitment,
+      })
       : [];
 
   const [configPda] = PublicKey.findProgramAddressSync(
@@ -902,7 +902,7 @@ export async function editStreamBatchOnChain({
 }): Promise<BatchEditCsvResult> {
   const signatures: string[] = [];
   const streamAddresses: string[] = [];
-  const { program } = await getStreamProgram(wallet, endpoint, commitment);
+  const { program, connection } = await getStreamProgram(wallet, endpoint, commitment);
   const programAny = program as any;
 
   for (const item of inputs) {
@@ -1012,6 +1012,9 @@ export async function editStreamBatchOnChain({
       vestingType === 2 &&
       (hasAmount || String(item.milestones ?? "").trim() !== "")
     ) {
+      const mint = streamState.mint as PublicKey;
+      const mintDecimals = await getMintDecimals(connection, mint, commitment); // ← fix
+
       const rawMilestoneValues = String(item.milestones ?? "")
         .split(";")
         .map((value) => value.trim())
@@ -1042,10 +1045,10 @@ export async function editStreamBatchOnChain({
       const amounts = shouldPreserveRawMilestones
         ? rawMilestoneValues
         : buildEvenMilestoneAmountsFromBaseUnits(
-            targetTotalBaseUnits,
-            milestoneCountForEdit,
-            mintDecimals
-          );
+          targetTotalBaseUnits,
+          milestoneCountForEdit,
+          mintDecimals
+        );
       for (let index = 0; index < amounts.length; index += 1) {
         const milestoneResult = await editMilestoneOnChain({
           wallet,
