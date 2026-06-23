@@ -92,6 +92,37 @@ function normalizeMilestones(value: unknown) {
   return String(value).trim();
 }
 
+function parseMilestoneParts(value: unknown) {
+  const raw = normalizeMilestones(value);
+  if (!raw) return [] as string[];
+
+  return raw
+    .split(";")
+    .map((part) => part.trim())
+    .filter(Boolean);
+}
+
+function rebalanceMilestonesToBaseUnits(
+  totalAmountBaseUnits: number,
+  milestoneCount: number
+) {
+  const normalizedCount = Math.floor(milestoneCount);
+  if (!Number.isFinite(totalAmountBaseUnits) || normalizedCount <= 0) {
+    return "";
+  }
+
+  const baseShare = Math.floor(totalAmountBaseUnits / normalizedCount);
+  const remainder = totalAmountBaseUnits % normalizedCount;
+
+  return Array.from({ length: normalizedCount }, (_, index) =>
+    String(baseShare + (index < remainder ? 1 : 0))
+  ).join(";");
+}
+
+function formatMilestonePartToBaseUnits(part: string, decimals: number) {
+  return String(toBaseUnits(toNumber(part, 0), decimals));
+}
+
 // ── NEW: convert a human-readable token amount (e.g. "2" for 2 USDC) into
 // raw base units (e.g. 2_000_000 for 6 decimals), matching the scale that
 // normalizeStreamRecord() already uses for on-chain stream.totalAmount.
@@ -101,25 +132,51 @@ function toBaseUnits(humanAmount: number, decimals: number): number {
   return Math.round(humanAmount * Math.pow(10, decimals));
 }
 
-function normalizeCsvRecord(row: CsvRow | CsvDiffRecord, decimals: number = 0): CsvDiffRecord {
+function normalizeCsvRecord(
+  row: CsvRow | CsvDiffRecord,
+  decimals: number = 0
+): CsvDiffRecord {
   const recipient = String(row.recipient ?? "").trim();
   const id = row.id ? String(row.id).trim() : undefined;
+  const amount = toBaseUnits(toNumber(row.amount, 0), decimals);
+  const milestoneParts = parseMilestoneParts(row.milestones);
+  const milestones =
+    Number(row.type ?? 0) === 2 && milestoneParts.length > 0
+      ? (() => {
+          const parsedMilestoneTotal = milestoneParts.reduce(
+            (sum, part) => sum + toBaseUnits(toNumber(part, 0), decimals),
+            0
+          );
+
+          if (parsedMilestoneTotal === amount) {
+            return milestoneParts
+              .map((part) => formatMilestonePartToBaseUnits(part, decimals))
+              .join(";");
+          }
+
+          return rebalanceMilestonesToBaseUnits(amount, milestoneParts.length);
+        })()
+      : normalizeMilestones(row.milestones);
 
   return {
-    matchKey: id || (recipient ? `recipient:${recipient.toLowerCase()}` : `row:${Math.random().toString(36).slice(2, 10)}`),
+    matchKey:
+      id ||
+      (recipient
+        ? `recipient:${recipient.toLowerCase()}`
+        : `row:${Math.random().toString(36).slice(2, 10)}`),
     id,
     recipient,
     // CSV "amount" is always human-readable (e.g. "2" = 2 tokens), so it must be
     // scaled to base units here to match normalizeStreamRecord()'s output —
     // otherwise rows from CSV and rows from the DB end up mixed at different
     // scales inside the same added/modified/unchanged arrays.
-    amount: toBaseUnits(toNumber(row.amount, 0), decimals),
+    amount,
     mint: String(row.mint ?? "").trim(),
     type: toNumber(row.type, 0),
     duration: toNumber(row.duration, 0),
     cliffDuration: toNumber(row.cliffDuration, 0),
     cancelable: toBoolean(row.cancelable, true),
-    milestones: normalizeMilestones(row.milestones),
+    milestones,
     creator: row.creator,
   };
 }
@@ -129,7 +186,11 @@ function normalizeStreamRecord(stream: any): CsvDiffRecord {
   const id = stream.id ? String(stream.id).trim() : undefined;
 
   return {
-    matchKey: id || (recipient ? `recipient:${recipient.toLowerCase()}` : `row:${Math.random().toString(36).slice(2, 10)}`),
+    matchKey:
+      id ||
+      (recipient
+        ? `recipient:${recipient.toLowerCase()}`
+        : `row:${Math.random().toString(36).slice(2, 10)}`),
     id,
     recipient,
     // stream.totalAmount is already raw base units (BigInt from Prisma) —
@@ -145,7 +206,19 @@ function normalizeStreamRecord(stream: any): CsvDiffRecord {
   };
 }
 
-export function buildExactRecordKey(record: Pick<CsvDiffRecord, "recipient" | "mint" | "type" | "amount" | "duration" | "cliffDuration" | "cancelable" | "milestones">) {
+export function buildExactRecordKey(
+  record: Pick<
+    CsvDiffRecord,
+    | "recipient"
+    | "mint"
+    | "type"
+    | "amount"
+    | "duration"
+    | "cliffDuration"
+    | "cancelable"
+    | "milestones"
+  >
+) {
   return [
     record.recipient.trim().toLowerCase(),
     record.mint.trim(),
@@ -158,8 +231,14 @@ export function buildExactRecordKey(record: Pick<CsvDiffRecord, "recipient" | "m
   ].join("|");
 }
 
-function buildIdentityRecordKey(record: Pick<CsvDiffRecord, "recipient" | "mint" | "type">) {
-  return [record.recipient.trim().toLowerCase(), record.mint.trim(), record.type].join("|");
+function buildIdentityRecordKey(
+  record: Pick<CsvDiffRecord, "recipient" | "mint" | "type">
+) {
+  return [
+    record.recipient.trim().toLowerCase(),
+    record.mint.trim(),
+    record.type,
+  ].join("|");
 }
 
 /**
@@ -179,7 +258,9 @@ export function parseCsvText(csvText: string): CsvRow[] {
 
   if (lines.length === 0) return [];
 
-  const headers = lines[0].split(",").map((header) => header.trim().toLowerCase());
+  const headers = lines[0]
+    .split(",")
+    .map((header) => header.trim().toLowerCase());
   const rows: CsvRow[] = [];
 
   for (let i = 1; i < lines.length; i++) {
@@ -259,13 +340,18 @@ function isValidPubkey(value: string): boolean {
  * rules) so any payload the gated UI accepts also passes here. Returns a list of
  * human-readable error messages; empty array means valid.
  */
-export function validateCsvContent(content: string, mode: "create" | "edit"): string[] {
+export function validateCsvContent(
+  content: string,
+  mode: "create" | "edit"
+): string[] {
   const errors: string[] = [];
   if (typeof content !== "string" || content.trim() === "") {
     return ["CSV content is empty."];
   }
   if (content.charCodeAt(0) === 0xfeff) {
-    errors.push("File starts with a byte-order mark (BOM). Re-save as UTF-8 without BOM.");
+    errors.push(
+      "File starts with a byte-order mark (BOM). Re-save as UTF-8 without BOM."
+    );
   }
 
   const lines = content
@@ -280,7 +366,9 @@ export function validateCsvContent(content: string, mode: "create" | "edit"): st
 
   const headerLine = lines[0];
   if (!headerLine.includes(",") && /[;\t|]/.test(headerLine)) {
-    errors.push("CSV must be comma-delimited (found ';', tab, or '|' in the header).");
+    errors.push(
+      "CSV must be comma-delimited (found ';', tab, or '|' in the header)."
+    );
     return errors;
   }
 
@@ -320,7 +408,9 @@ export function validateCsvContent(content: string, mode: "create" | "edit"): st
     const values = lines[i].split(",").map((v) => v.trim());
 
     if (values.length < minCols) {
-      errors.push(`Row ${rowNum}: malformed — expected at least ${minCols} columns, found ${values.length}.`);
+      errors.push(
+        `Row ${rowNum}: malformed — expected at least ${minCols} columns, found ${values.length}.`
+      );
       continue;
     }
 
@@ -328,7 +418,9 @@ export function validateCsvContent(content: string, mode: "create" | "edit"): st
 
     if (mode === "create") {
       if (typeIdx !== -1 && !/^[012]$/.test(typeRaw)) {
-        errors.push(`Row ${rowNum}: type must be 0 (linear), 1 (cliff), or 2 (milestone).`);
+        errors.push(
+          `Row ${rowNum}: type must be 0 (linear), 1 (cliff), or 2 (milestone).`
+        );
       }
       const recipient = recipientIdx !== -1 ? values[recipientIdx] ?? "" : "";
       if (!recipient.trim()) {
@@ -348,21 +440,34 @@ export function validateCsvContent(content: string, mode: "create" | "edit"): st
       }
       // Milestone (type 2): the milestone amounts must sum to the row amount.
       if (typeRaw === "2" && milestonesIdx !== -1 && isNumeric(amtRaw)) {
-        const parts = values.slice(milestonesIdx).map((v) => v.trim()).filter(Boolean);
+        const parts = values
+          .slice(milestonesIdx)
+          .map((v) => v.trim())
+          .filter(Boolean);
         if (parts.length === 0) {
-          errors.push(`Row ${rowNum}: milestone stream requires milestone amounts.`);
+          errors.push(
+            `Row ${rowNum}: milestone stream requires milestone amounts.`
+          );
         } else if (!parts.every(isNumeric)) {
-          errors.push(`Row ${rowNum}: milestone amounts must all be positive numbers.`);
+          errors.push(
+            `Row ${rowNum}: milestone amounts must all be positive numbers.`
+          );
         } else {
           const sum = parts.reduce((acc, p) => acc + Number(p), 0);
           if (Math.abs(sum - Number(amtRaw)) > 1e-6) {
-            errors.push(`Row ${rowNum}: milestone sum (${sum}) must equal amount (${amtRaw}).`);
+            errors.push(
+              `Row ${rowNum}: milestone sum (${sum}) must equal amount (${amtRaw}).`
+            );
           }
         }
       }
       const rowKey = values.join("|").toLowerCase();
       if (seenRow.has(rowKey)) {
-        errors.push(`Row ${rowNum}: identical to row ${seenRow.get(rowKey)} — remove the duplicate.`);
+        errors.push(
+          `Row ${rowNum}: identical to row ${seenRow.get(
+            rowKey
+          )} — remove the duplicate.`
+        );
       } else {
         seenRow.set(rowKey, rowNum);
       }
@@ -377,7 +482,11 @@ export function validateCsvContent(content: string, mode: "create" | "edit"): st
       const id = idIdx !== -1 ? (values[idIdx] ?? "").trim() : "";
       if (id) {
         if (seenId.has(id)) {
-          errors.push(`Row ${rowNum}: duplicate id — already edited in row ${seenId.get(id)}.`);
+          errors.push(
+            `Row ${rowNum}: duplicate id — already edited in row ${seenId.get(
+              id
+            )}.`
+          );
         } else {
           seenId.set(id, rowNum);
         }
@@ -388,11 +497,22 @@ export function validateCsvContent(content: string, mode: "create" | "edit"): st
   return errors;
 }
 
-function pickFirstUnmatched(candidates: CsvDiffRecord[], matchedRefIds: Set<string>) {
-  return candidates.find((candidate) => !matchedRefIds.has(candidate.matchKey)) ?? null;
+function pickFirstUnmatched(
+  candidates: CsvDiffRecord[],
+  matchedRefIds: Set<string>
+) {
+  return (
+    candidates.find((candidate) => !matchedRefIds.has(candidate.matchKey)) ??
+    null
+  );
 }
 
-function pushChange(changes: DiffChange[], field: string, oldVal: CsvPrimitive, newVal: CsvPrimitive) {
+function pushChange(
+  changes: DiffChange[],
+  field: string,
+  oldVal: CsvPrimitive,
+  newVal: CsvPrimitive
+) {
   if (oldVal === newVal) return;
   changes.push({ field, oldVal, newVal });
 }
@@ -432,7 +552,8 @@ export function computeCsvDiff(
   );
 
   const normalizedRefRows = refStreams.map((stream) =>
-    Object.prototype.hasOwnProperty.call(stream, "totalAmount") || Object.prototype.hasOwnProperty.call(stream, "vestingType")
+    Object.prototype.hasOwnProperty.call(stream, "totalAmount") ||
+    Object.prototype.hasOwnProperty.call(stream, "vestingType")
       ? normalizeStreamRecord(stream)
       : normalizeCsvRecord(stream, resolveDecimals(stream.mint))
   );
@@ -456,12 +577,18 @@ export function computeCsvDiff(
     refIdentityKeyBuckets.get(identityKey)!.push(index);
   });
 
-  const takeFirstUnusedIndex = (indexes: number[]) => indexes.find((index) => !consumedRefIndexes.has(index));
+  const takeFirstUnusedIndex = (indexes: number[]) =>
+    indexes.find((index) => !consumedRefIndexes.has(index));
 
   if (mode === "create") {
     normalizedNewRows.forEach((row, idx) => {
       added.push({
-        id: row.id || `StreamCSV-NEW-${idx}-${Math.random().toString(36).substring(2, 6).toUpperCase()}`,
+        id:
+          row.id ||
+          `StreamCSV-NEW-${idx}-${Math.random()
+            .toString(36)
+            .substring(2, 6)
+            .toUpperCase()}`,
         recipient: row.recipient || "Unknown Recipient",
         amount: row.amount,
         mint: row.mint || "Unknown Mint",
@@ -509,8 +636,18 @@ export function computeCsvDiff(
 
         pushChange(changes, "amount", matchedStream.amount, row.amount);
         pushChange(changes, "duration", matchedStream.duration, row.duration);
-        pushChange(changes, "cliffDuration", matchedStream.cliffDuration, row.cliffDuration);
-        pushChange(changes, "milestones", matchedStream.milestones, row.milestones);
+        pushChange(
+          changes,
+          "cliffDuration",
+          matchedStream.cliffDuration,
+          row.cliffDuration
+        );
+        pushChange(
+          changes,
+          "milestones",
+          matchedStream.milestones,
+          row.milestones
+        );
 
         if (changes.length > 0) {
           modified.push({
@@ -545,10 +682,16 @@ export function computeCsvDiff(
       return;
     }
 
-    const exactKey = buildExactRecordKey(normalizeCsvRecord(row, resolveDecimals(row.mint)));
-    const identityKey = buildIdentityRecordKey(normalizeCsvRecord(row, resolveDecimals(row.mint)));
+    const exactKey = buildExactRecordKey(
+      normalizeCsvRecord(row, resolveDecimals(row.mint))
+    );
+    const identityKey = buildIdentityRecordKey(
+      normalizeCsvRecord(row, resolveDecimals(row.mint))
+    );
 
-    const exactCandidateIndex = takeFirstUnusedIndex(refExactKeyBuckets.get(exactKey) || []);
+    const exactCandidateIndex = takeFirstUnusedIndex(
+      refExactKeyBuckets.get(exactKey) || []
+    );
 
     if (exactCandidateIndex !== undefined) {
       consumedRefIndexes.add(exactCandidateIndex);
@@ -567,7 +710,9 @@ export function computeCsvDiff(
       return;
     }
 
-    const identityCandidateIndex = takeFirstUnusedIndex(refIdentityKeyBuckets.get(identityKey) || []);
+    const identityCandidateIndex = takeFirstUnusedIndex(
+      refIdentityKeyBuckets.get(identityKey) || []
+    );
 
     if (!identityCandidateIndex && identityCandidateIndex !== 0) {
       // Edit mode represents updates to existing on-chain streams only.
@@ -581,7 +726,12 @@ export function computeCsvDiff(
 
     pushChange(changes, "amount", matchedStream.amount, row.amount);
     pushChange(changes, "duration", matchedStream.duration, row.duration);
-    pushChange(changes, "cliffDuration", matchedStream.cliffDuration, row.cliffDuration);
+    pushChange(
+      changes,
+      "cliffDuration",
+      matchedStream.cliffDuration,
+      row.cliffDuration
+    );
 
     pushChange(changes, "milestones", matchedStream.milestones, row.milestones);
 

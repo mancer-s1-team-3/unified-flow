@@ -1,8 +1,17 @@
 "use client";
 
 import * as anchor from "@coral-xyz/anchor";
-import { ASSOCIATED_TOKEN_PROGRAM_ADDRESS, TOKEN_PROGRAM_ADDRESS } from "@solana-program/token";
-import { type Commitment, Connection, PublicKey, SystemProgram, VersionedTransaction } from "@solana/web3.js";
+import {
+  ASSOCIATED_TOKEN_PROGRAM_ADDRESS,
+  TOKEN_PROGRAM_ADDRESS,
+} from "@solana-program/token";
+import {
+  type Commitment,
+  Connection,
+  PublicKey,
+  SystemProgram,
+  VersionedTransaction,
+} from "@solana/web3.js";
 import { Buffer } from "buffer";
 import {
   createWalletTransactionSigner,
@@ -19,7 +28,10 @@ import {
 } from "@solana/kit";
 import type { WalletSession } from "@solana/client";
 import idl from "@/lib/idl/unified_flow.json";
-import { getExplorerClusterParam, getProgramIdForEndpoint } from "@/lib/solana/network-config";
+import {
+  getExplorerClusterParam,
+  getProgramIdForEndpoint,
+} from "@/lib/solana/network-config";
 import {
   buildWsolWrapInstructions,
   fetchWsolBalanceSnapshot,
@@ -28,7 +40,9 @@ import {
 } from "@/lib/solana/wsol";
 
 const TOKEN_PROGRAM_ID = new PublicKey(TOKEN_PROGRAM_ADDRESS);
-const ASSOCIATED_TOKEN_PROGRAM_ID = new PublicKey(ASSOCIATED_TOKEN_PROGRAM_ADDRESS);
+const ASSOCIATED_TOKEN_PROGRAM_ID = new PublicKey(
+  ASSOCIATED_TOKEN_PROGRAM_ADDRESS
+);
 
 const CREATE_STREAM_IDL = idl;
 
@@ -95,10 +109,15 @@ function parseTokenAmount(value: string, decimals: number, label: string) {
   const [wholePart, fractionPart = ""] = trimmed.split(".");
 
   if (fractionPart.length > decimals) {
-    throw new Error(`${label} supports at most ${decimals} decimal places for this mint.`);
+    throw new Error(
+      `${label} supports at most ${decimals} decimal places for this mint.`
+    );
   }
 
-  const normalized = `${wholePart}${fractionPart.padEnd(decimals, "0")}`.replace(/^0+(?=\d)/, "");
+  const normalized = `${wholePart}${fractionPart.padEnd(
+    decimals,
+    "0"
+  )}`.replace(/^0+(?=\d)/, "");
   return new anchor.BN(normalized || "0");
 }
 
@@ -114,42 +133,92 @@ function buildMilestones(
   }
 
   const requestedCount = Number(milestoneCount || milestoneAmounts.length || 0);
-  const normalizedCount = Number.isFinite(requestedCount) && requestedCount > 0 ? Math.floor(requestedCount) : milestoneAmounts.length;
-  const normalizedMilestoneAmounts = Array.from({ length: normalizedCount }, (_, index) => milestoneAmounts[index] ?? "0");
+  const normalizedCount =
+    Number.isFinite(requestedCount) && requestedCount > 0
+      ? Math.floor(requestedCount)
+      : milestoneAmounts.length;
+  if (normalizedCount <= 0) {
+    throw new Error("Milestone streams require at least one milestone.");
+  }
+  const normalizedMilestoneAmounts = Array.from(
+    { length: normalizedCount },
+    (_, index) => milestoneAmounts[index] ?? "0"
+  );
 
   const parsedMilestones = normalizedMilestoneAmounts.map((item, index) =>
     parseTokenAmount(item || "0", decimals, `Milestone #${index + 1} amount`)
   );
 
-  if (parsedMilestones.some((item) => item.lte(new anchor.BN(0)))) {
+  const totalAmount = parseTokenAmount(amount || "0", decimals, "Total amount");
+  const evenMilestones = (() => {
+    if (!Number.isFinite(normalizedCount) || normalizedCount <= 0)
+      return [] as anchor.BN[];
+
+    const total = BigInt(totalAmount.toString());
+    const divisor = BigInt(normalizedCount);
+    if (total < divisor) {
+      throw new Error(
+        "Total amount is too small to split across the milestone count."
+      );
+    }
+
+    const baseShare = total / divisor;
+    const remainder = total % divisor;
+
+    return Array.from(
+      { length: normalizedCount },
+      (_, index) =>
+        new anchor.BN(
+          (
+            baseShare + (BigInt(index) < remainder ? BigInt(1) : BigInt(0))
+          ).toString()
+        )
+    );
+  })();
+
+  if (parsedMilestones.every((item) => item.gt(new anchor.BN(0)))) {
+    const totalMilestones = parsedMilestones.reduce(
+      (sum, item) => sum.add(item),
+      new anchor.BN(0)
+    );
+
+    if (totalMilestones.eq(totalAmount)) {
+      return parsedMilestones.map((item) => ({ amount: item }));
+    }
+  }
+
+  if (evenMilestones.some((item) => item.lte(new anchor.BN(0)))) {
     throw new Error("Each milestone amount must be greater than zero.");
   }
 
-  const totalMilestones = parsedMilestones.reduce((sum, item) => sum.add(item), new anchor.BN(0));
-  const totalAmount = parseTokenAmount(amount || "0", decimals, "Total amount");
-
-  if (!totalMilestones.eq(totalAmount)) {
-    throw new Error(
-      `Milestone total ${totalMilestones.toString()} must match total amount ${totalAmount.toString()}.`
-    );
-  }
-
-  return parsedMilestones.map((item) => ({ amount: item }));
+  return evenMilestones.map((item) => ({ amount: item }));
 }
 
 function getAnchorWallet(session: WalletSession) {
   return {
     publicKey: new PublicKey(session.account.address.toString()),
-    signTransaction: async <T extends anchor.web3.Transaction | anchor.web3.VersionedTransaction>(transaction: T): Promise<T> => {
+    signTransaction: async <
+      T extends anchor.web3.Transaction | anchor.web3.VersionedTransaction
+    >(
+      transaction: T
+    ): Promise<T> => {
       if (session.signTransaction) {
-        return (await session.signTransaction(transaction as never)) as unknown as T;
+        return (await session.signTransaction(
+          transaction as never
+        )) as unknown as T;
       }
 
       return transaction;
     },
-    signAllTransactions: async <T extends anchor.web3.Transaction | anchor.web3.VersionedTransaction>(transactions: T[]): Promise<T[]> => {
+    signAllTransactions: async <
+      T extends anchor.web3.Transaction | anchor.web3.VersionedTransaction
+    >(
+      transactions: T[]
+    ): Promise<T[]> => {
       if (session.signTransaction) {
-        return (await Promise.all(transactions.map((tx) => session.signTransaction!(tx as never)))) as unknown as T[];
+        return (await Promise.all(
+          transactions.map((tx) => session.signTransaction!(tx as never))
+        )) as unknown as T[];
       }
 
       return transactions;
@@ -167,7 +236,11 @@ type PreparedCreateStream = {
   configAddress: PublicKey;
   preInstructions: any[];
   kitInstruction: any;
-  remainingAccounts: { pubkey: PublicKey; isWritable: boolean; isSigner: boolean }[];
+  remainingAccounts: {
+    pubkey: PublicKey;
+    isWritable: boolean;
+    isSigner: boolean;
+  }[];
 };
 
 async function prepareCreateStreamInstruction({
@@ -204,37 +277,63 @@ async function prepareCreateStreamInstruction({
     throw new Error("Invalid vesting type. Expected 0, 1, or 2.");
   }
 
-  const mintInfo = await connection.getParsedAccountInfo(mint, provider.opts.commitment);
-  const parsedMintData = mintInfo.value?.data as { parsed?: { info?: { decimals?: number } } } | undefined;
+  const mintInfo = await connection.getParsedAccountInfo(
+    mint,
+    provider.opts.commitment
+  );
+  const parsedMintData = mintInfo.value?.data as
+    | { parsed?: { info?: { decimals?: number } } }
+    | undefined;
   const mintDecimals = parsedMintData?.parsed?.info?.decimals;
 
   if (typeof mintDecimals !== "number") {
-    throw new Error("Unable to read mint decimals. Make sure the mint exists and is initialized.");
+    throw new Error(
+      "Unable to read mint decimals. Make sure the mint exists and is initialized."
+    );
   }
 
   const nonce = new anchor.BN(String(input.nonce ?? Date.now()));
   const nowTs = Math.floor(Date.now() / 1000);
-  const parsedStartTs = input.startDate ? Math.floor(new Date(input.startDate).getTime() / 1000) : nowTs + 10;
+  const parsedStartTs = input.startDate
+    ? Math.floor(new Date(input.startDate).getTime() / 1000)
+    : nowTs + 10;
   if (!Number.isFinite(parsedStartTs)) {
     throw new Error("Start date is invalid.");
   }
   const startTs = toBn(Math.max(parsedStartTs, nowTs + 1));
   const durationSecs = Number(input.duration || 0);
 
-  if (vestingType !== 2 && (!Number.isFinite(durationSecs) || durationSecs <= 0)) {
+  if (
+    vestingType !== 2 &&
+    (!Number.isFinite(durationSecs) || durationSecs <= 0)
+  ) {
     throw new Error("Duration must be a positive number of seconds.");
   }
 
-  const endTs = toBn(startTs.toNumber() + (durationSecs > 0 ? durationSecs : 1));
-  const cliffTs = vestingType === 1 ? toBn(startTs.toNumber() + Number(input.cliffDuration || 0)) : startTs;
+  const endTs = toBn(
+    startTs.toNumber() + (durationSecs > 0 ? durationSecs : 1)
+  );
+  const cliffTs =
+    vestingType === 1
+      ? toBn(startTs.toNumber() + Number(input.cliffDuration || 0))
+      : startTs;
 
   if (vestingType === 1 && Number(input.cliffDuration || 0) <= 0) {
     throw new Error("Cliff duration must be a positive number of seconds.");
   }
 
-  const milestones = buildMilestones(input.type, input.amount, input.milestoneAmounts, mintDecimals, input.milestoneCount);
+  const milestones = buildMilestones(
+    input.type,
+    input.amount,
+    input.milestoneAmounts,
+    mintDecimals,
+    input.milestoneCount
+  );
   const amountBn = parseTokenAmount(input.amount, mintDecimals, "Total amount");
-  const [configAddress] = PublicKey.findProgramAddressSync([Buffer.from("config")], PROGRAM_ID);
+  const [configAddress] = PublicKey.findProgramAddressSync(
+    [Buffer.from("config")],
+    PROGRAM_ID
+  );
   const [streamAddress] = PublicKey.findProgramAddressSync(
     [
       Buffer.from("stream"),
@@ -255,17 +354,31 @@ async function prepareCreateStreamInstruction({
 
   if (!isWrappedSolMint(mint)) {
     try {
-      const balance = await connection.getTokenAccountBalance(creatorTokenAccount, provider.opts.commitment);
+      const balance = await connection.getTokenAccountBalance(
+        creatorTokenAccount,
+        provider.opts.commitment
+      );
       const availableAmount = new anchor.BN(balance.value.amount);
 
       if (availableAmount.lt(amountBn)) {
         throw new Error(
-          `Insufficient token balance in your creator ATA. Available ${formatTokenAmountFromBaseUnits(availableAmount, mintDecimals)} tokens, need ${formatTokenAmountFromBaseUnits(amountBn, mintDecimals)} tokens.`
+          `Insufficient token balance in your creator ATA. Available ${formatTokenAmountFromBaseUnits(
+            availableAmount,
+            mintDecimals
+          )} tokens, need ${formatTokenAmountFromBaseUnits(
+            amountBn,
+            mintDecimals
+          )} tokens.`
         );
       }
     } catch (balanceError: any) {
-      const notFound = String(balanceError?.message || balanceError).toLowerCase().includes("could not find account") ||
-        String(balanceError?.message || balanceError).toLowerCase().includes("account does not exist");
+      const notFound =
+        String(balanceError?.message || balanceError)
+          .toLowerCase()
+          .includes("could not find account") ||
+        String(balanceError?.message || balanceError)
+          .toLowerCase()
+          .includes("account does not exist");
 
       if (!notFound) {
         throw balanceError;
@@ -276,17 +389,21 @@ async function prepareCreateStreamInstruction({
   const remainingAccounts =
     vestingType === 2
       ? milestones.map((_, index) => {
-        const [milestoneAddress] = PublicKey.findProgramAddressSync(
-          [Buffer.from("milestone"), streamAddress.toBuffer(), Buffer.from([index])],
-          PROGRAM_ID
-        );
+          const [milestoneAddress] = PublicKey.findProgramAddressSync(
+            [
+              Buffer.from("milestone"),
+              streamAddress.toBuffer(),
+              Buffer.from([index]),
+            ],
+            PROGRAM_ID
+          );
 
-        return {
-          pubkey: milestoneAddress,
-          isWritable: true,
-          isSigner: false,
-        };
-      })
+          return {
+            pubkey: milestoneAddress,
+            isWritable: true,
+            isSigner: false,
+          };
+        })
       : [];
 
   const preInstructions: any[] = isWrappedSolMint(mint)
@@ -301,7 +418,15 @@ async function prepareCreateStreamInstruction({
     : [];
 
   const anchorInstruction = await program.methods
-    .createStream(amountBn, startTs, cliffTs, endTs, vestingType, milestones, nonce)
+    .createStream(
+      amountBn,
+      startTs,
+      cliffTs,
+      endTs,
+      vestingType,
+      milestones,
+      nonce
+    )
     .accounts({
       creator,
       recipient,
@@ -321,16 +446,26 @@ async function prepareCreateStreamInstruction({
   const kitInstruction = {
     programAddress: PROGRAM_ID.toBase58(),
     accounts: [
-      { address: creator.toBase58(), role: AccountRole.WRITABLE_SIGNER, signer: kitSigner },
+      {
+        address: creator.toBase58(),
+        role: AccountRole.WRITABLE_SIGNER,
+        signer: kitSigner,
+      },
       { address: recipient.toBase58(), role: AccountRole.READONLY },
       { address: mint.toBase58(), role: AccountRole.READONLY },
       { address: configAddress.toBase58(), role: AccountRole.READONLY },
       { address: streamAddress.toBase58(), role: AccountRole.WRITABLE },
       { address: vaultAddress.toBase58(), role: AccountRole.WRITABLE },
       { address: creatorTokenAccount.toBase58(), role: AccountRole.WRITABLE },
-      { address: SystemProgram.programId.toBase58(), role: AccountRole.READONLY },
+      {
+        address: SystemProgram.programId.toBase58(),
+        role: AccountRole.READONLY,
+      },
       { address: TOKEN_PROGRAM_ID.toBase58(), role: AccountRole.READONLY },
-      { address: ASSOCIATED_TOKEN_PROGRAM_ID.toBase58(), role: AccountRole.READONLY },
+      {
+        address: ASSOCIATED_TOKEN_PROGRAM_ID.toBase58(),
+        role: AccountRole.READONLY,
+      },
       ...remainingAccounts.map((account) => ({
         address: account.pubkey.toBase58(),
         role: account.isWritable ? AccountRole.WRITABLE : AccountRole.READONLY,
@@ -366,10 +501,14 @@ async function sendVersionedTransactionMessage({
   walletSignerMode: string;
   onStatus?: (phase: TxProgressPhase) => void;
 }) {
-  const { blockhash, lastValidBlockHeight } = await connection.getLatestBlockhash(commitment);
+  const { blockhash, lastValidBlockHeight } =
+    await connection.getLatestBlockhash(commitment);
 
   const messageWithLifetime = setTransactionMessageLifetimeUsingBlockhash(
-    { blockhash: blockhash as any, lastValidBlockHeight: BigInt(lastValidBlockHeight) },
+    {
+      blockhash: blockhash as any,
+      lastValidBlockHeight: BigInt(lastValidBlockHeight),
+    },
     transactionMessage
   );
 
@@ -378,19 +517,27 @@ async function sendVersionedTransactionMessage({
 
   onStatus?.("sending");
   if (walletSignerMode === "send") {
-    const sentSignature = await signAndSendTransactionMessageWithSigners(messageWithLifetime as any);
+    const sentSignature = await signAndSendTransactionMessageWithSigners(
+      messageWithLifetime as any
+    );
     signature = sentSignature.toString();
   } else {
-    const signedTransaction = await signTransactionMessageWithSigners(messageWithLifetime as any);
+    const signedTransaction = await signTransactionMessageWithSigners(
+      messageWithLifetime as any
+    );
     const encodedTransaction = transactionToBase64(signedTransaction);
     const rawTransaction = Buffer.from(encodedTransaction, "base64");
-    const versionedTransaction = VersionedTransaction.deserialize(rawTransaction);
+    const versionedTransaction =
+      VersionedTransaction.deserialize(rawTransaction);
 
-    const simulation = await connection.simulateTransaction(versionedTransaction, {
-      commitment,
-      sigVerify: false,
-      replaceRecentBlockhash: false,
-    });
+    const simulation = await connection.simulateTransaction(
+      versionedTransaction,
+      {
+        commitment,
+        sigVerify: false,
+        replaceRecentBlockhash: false,
+      }
+    );
 
     simulationLogs = simulation.value.logs ?? [];
 
@@ -398,9 +545,15 @@ async function sendVersionedTransactionMessage({
       throw new Error(
         [
           "Create stream simulation failed.",
-          `Reason: ${typeof simulation.value.err === "string" ? simulation.value.err : JSON.stringify(simulation.value.err)}`,
+          `Reason: ${
+            typeof simulation.value.err === "string"
+              ? simulation.value.err
+              : JSON.stringify(simulation.value.err)
+          }`,
           ...simulationLogs.slice(-6),
-        ].filter(Boolean).join("\n")
+        ]
+          .filter(Boolean)
+          .join("\n")
       );
     }
 
@@ -412,7 +565,10 @@ async function sendVersionedTransactionMessage({
   }
 
   onStatus?.("confirming");
-  await connection.confirmTransaction({ blockhash, lastValidBlockHeight, signature }, commitment);
+  await connection.confirmTransaction(
+    { blockhash, lastValidBlockHeight, signature },
+    commitment
+  );
 
   return { signature, simulationLogs };
 }
@@ -436,22 +592,34 @@ export async function createStreamOnChain({
   const recipient = parsePublicKey(input.recipient, "recipient address");
   const mint = parsePublicKey(input.mint, "mint address");
   const vestingType = Number(input.type);
-  const { signer: walletSigner, mode: walletSignerMode } = createWalletTransactionSigner(wallet);
+  const { signer: walletSigner, mode: walletSignerMode } =
+    createWalletTransactionSigner(wallet);
 
   if (!Number.isInteger(vestingType) || vestingType < 0 || vestingType > 2) {
     throw new Error("Invalid vesting type. Expected 0, 1, or 2.");
   }
 
   const connection = new Connection(endpoint, commitment);
-  const provider = new anchor.AnchorProvider(connection, getAnchorWallet(wallet), { commitment });
-  const program = new anchor.Program(CREATE_STREAM_IDL as unknown as anchor.Idl, provider);
+  const provider = new anchor.AnchorProvider(
+    connection,
+    getAnchorWallet(wallet),
+    { commitment }
+  );
+  const program = new anchor.Program(
+    CREATE_STREAM_IDL as unknown as anchor.Idl,
+    provider
+  );
 
   const mintInfo = await connection.getParsedAccountInfo(mint, commitment);
-  const parsedMintData = mintInfo.value?.data as { parsed?: { info?: { decimals?: number } } } | undefined;
+  const parsedMintData = mintInfo.value?.data as
+    | { parsed?: { info?: { decimals?: number } } }
+    | undefined;
   const mintDecimals = parsedMintData?.parsed?.info?.decimals;
 
   if (typeof mintDecimals !== "number") {
-    throw new Error("Unable to read mint decimals. Make sure the mint exists and is initialized.");
+    throw new Error(
+      "Unable to read mint decimals. Make sure the mint exists and is initialized."
+    );
   }
 
   const nonce = new anchor.BN(String(input.nonce ?? Date.now()));
@@ -459,7 +627,10 @@ export async function createStreamOnChain({
   const startTs = toBn(nowTs + 10);
   const durationSecs = Number(input.duration || 0);
 
-  if (vestingType !== 2 && (!Number.isFinite(durationSecs) || durationSecs <= 0)) {
+  if (
+    vestingType !== 2 &&
+    (!Number.isFinite(durationSecs) || durationSecs <= 0)
+  ) {
     throw new Error("Duration must be a positive number of seconds.");
   }
 
@@ -473,9 +644,18 @@ export async function createStreamOnChain({
     throw new Error("Cliff duration must be a positive number of seconds.");
   }
 
-  const milestones = buildMilestones(input.type, input.amount, input.milestoneAmounts, mintDecimals, input.milestoneCount);
+  const milestones = buildMilestones(
+    input.type,
+    input.amount,
+    input.milestoneAmounts,
+    mintDecimals,
+    input.milestoneCount
+  );
   const amountBn = parseTokenAmount(input.amount, mintDecimals, "Total amount");
-  const [configAddress] = PublicKey.findProgramAddressSync([Buffer.from("config")], PROGRAM_ID);
+  const [configAddress] = PublicKey.findProgramAddressSync(
+    [Buffer.from("config")],
+    PROGRAM_ID
+  );
   const [streamAddress] = PublicKey.findProgramAddressSync(
     [
       Buffer.from("stream"),
@@ -496,17 +676,31 @@ export async function createStreamOnChain({
 
   if (!isWrappedSolMint(mint)) {
     try {
-      const balance = await connection.getTokenAccountBalance(creatorTokenAccount, commitment);
+      const balance = await connection.getTokenAccountBalance(
+        creatorTokenAccount,
+        commitment
+      );
       const availableAmount = new anchor.BN(balance.value.amount);
 
       if (availableAmount.lt(amountBn)) {
         throw new Error(
-          `Insufficient token balance in your creator ATA. Available ${formatTokenAmountFromBaseUnits(availableAmount, mintDecimals)} tokens, need ${formatTokenAmountFromBaseUnits(amountBn, mintDecimals)} tokens.`
+          `Insufficient token balance in your creator ATA. Available ${formatTokenAmountFromBaseUnits(
+            availableAmount,
+            mintDecimals
+          )} tokens, need ${formatTokenAmountFromBaseUnits(
+            amountBn,
+            mintDecimals
+          )} tokens.`
         );
       }
     } catch (balanceError: any) {
-      const notFound = String(balanceError?.message || balanceError).toLowerCase().includes("could not find account") ||
-        String(balanceError?.message || balanceError).toLowerCase().includes("account does not exist");
+      const notFound =
+        String(balanceError?.message || balanceError)
+          .toLowerCase()
+          .includes("could not find account") ||
+        String(balanceError?.message || balanceError)
+          .toLowerCase()
+          .includes("account does not exist");
 
       if (!notFound) {
         throw balanceError;
@@ -517,17 +711,21 @@ export async function createStreamOnChain({
   const remainingAccounts =
     vestingType === 2
       ? milestones.map((_, index) => {
-        const [milestoneAddress] = PublicKey.findProgramAddressSync(
-          [Buffer.from("milestone"), streamAddress.toBuffer(), Buffer.from([index])],
-          PROGRAM_ID
-        );
+          const [milestoneAddress] = PublicKey.findProgramAddressSync(
+            [
+              Buffer.from("milestone"),
+              streamAddress.toBuffer(),
+              Buffer.from([index]),
+            ],
+            PROGRAM_ID
+          );
 
-        return {
-          pubkey: milestoneAddress,
-          isWritable: true,
-          isSigner: false,
-        };
-      })
+          return {
+            pubkey: milestoneAddress,
+            isWritable: true,
+            isSigner: false,
+          };
+        })
       : [];
 
   const preInstructions: any[] = isWrappedSolMint(mint)
@@ -541,7 +739,15 @@ export async function createStreamOnChain({
     : [];
 
   const anchorInstruction = await program.methods
-    .createStream(amountBn, startTs, cliffTs, endTs, vestingType, milestones, nonce)
+    .createStream(
+      amountBn,
+      startTs,
+      cliffTs,
+      endTs,
+      vestingType,
+      milestones,
+      nonce
+    )
     .accounts({
       creator,
       recipient,
@@ -557,22 +763,33 @@ export async function createStreamOnChain({
     .remainingAccounts(remainingAccounts)
     .instruction();
 
-  const { blockhash, lastValidBlockHeight } = await connection.getLatestBlockhash(commitment);
+  const { blockhash, lastValidBlockHeight } =
+    await connection.getLatestBlockhash(commitment);
   const kitSigner = walletSigner as any;
 
   const kitInstruction = {
     programAddress: PROGRAM_ID.toBase58(),
     accounts: [
-      { address: creator.toBase58(), role: AccountRole.WRITABLE_SIGNER, signer: kitSigner },
+      {
+        address: creator.toBase58(),
+        role: AccountRole.WRITABLE_SIGNER,
+        signer: kitSigner,
+      },
       { address: recipient.toBase58(), role: AccountRole.READONLY },
       { address: mint.toBase58(), role: AccountRole.READONLY },
       { address: configAddress.toBase58(), role: AccountRole.READONLY },
       { address: streamAddress.toBase58(), role: AccountRole.WRITABLE },
       { address: vaultAddress.toBase58(), role: AccountRole.WRITABLE },
       { address: creatorTokenAccount.toBase58(), role: AccountRole.WRITABLE },
-      { address: SystemProgram.programId.toBase58(), role: AccountRole.READONLY },
+      {
+        address: SystemProgram.programId.toBase58(),
+        role: AccountRole.READONLY,
+      },
       { address: TOKEN_PROGRAM_ID.toBase58(), role: AccountRole.READONLY },
-      { address: ASSOCIATED_TOKEN_PROGRAM_ID.toBase58(), role: AccountRole.READONLY },
+      {
+        address: ASSOCIATED_TOKEN_PROGRAM_ID.toBase58(),
+        role: AccountRole.READONLY,
+      },
       ...remainingAccounts.map((account) => ({
         address: account.pubkey.toBase58(),
         role: account.isWritable ? AccountRole.WRITABLE : AccountRole.READONLY,
@@ -587,12 +804,21 @@ export async function createStreamOnChain({
   );
 
   for (const instruction of preInstructions) {
-    transactionMessage = appendTransactionMessageInstruction(instruction as any, transactionMessage);
+    transactionMessage = appendTransactionMessageInstruction(
+      instruction as any,
+      transactionMessage
+    );
   }
 
-  transactionMessage = appendTransactionMessageInstruction(kitInstruction as any, transactionMessage);
+  transactionMessage = appendTransactionMessageInstruction(
+    kitInstruction as any,
+    transactionMessage
+  );
   transactionMessage = setTransactionMessageLifetimeUsingBlockhash(
-    { blockhash: blockhash as any, lastValidBlockHeight: BigInt(lastValidBlockHeight) },
+    {
+      blockhash: blockhash as any,
+      lastValidBlockHeight: BigInt(lastValidBlockHeight),
+    },
     transactionMessage
   );
 
@@ -601,19 +827,27 @@ export async function createStreamOnChain({
 
   onStatus?.("sending");
   if (walletSignerMode === "send") {
-    const sentSignature = await signAndSendTransactionMessageWithSigners(transactionMessage);
+    const sentSignature = await signAndSendTransactionMessageWithSigners(
+      transactionMessage
+    );
     signature = sentSignature.toString();
   } else {
-    const signedTransaction = await signTransactionMessageWithSigners(transactionMessage);
+    const signedTransaction = await signTransactionMessageWithSigners(
+      transactionMessage
+    );
     const encodedTransaction = transactionToBase64(signedTransaction);
     const rawTransaction = Buffer.from(encodedTransaction, "base64");
-    const versionedTransaction = VersionedTransaction.deserialize(rawTransaction);
+    const versionedTransaction =
+      VersionedTransaction.deserialize(rawTransaction);
 
-    const simulation = await connection.simulateTransaction(versionedTransaction, {
-      commitment,
-      sigVerify: false,
-      replaceRecentBlockhash: false,
-    });
+    const simulation = await connection.simulateTransaction(
+      versionedTransaction,
+      {
+        commitment,
+        sigVerify: false,
+        replaceRecentBlockhash: false,
+      }
+    );
 
     simulationLogs = simulation.value.logs ?? [];
 
@@ -621,9 +855,15 @@ export async function createStreamOnChain({
       throw new Error(
         [
           "Create stream simulation failed.",
-          `Reason: ${typeof simulation.value.err === "string" ? simulation.value.err : JSON.stringify(simulation.value.err)}`,
+          `Reason: ${
+            typeof simulation.value.err === "string"
+              ? simulation.value.err
+              : JSON.stringify(simulation.value.err)
+          }`,
           ...simulationLogs.slice(-6),
-        ].filter(Boolean).join("\n")
+        ]
+          .filter(Boolean)
+          .join("\n")
       );
     }
 
@@ -635,13 +875,18 @@ export async function createStreamOnChain({
   }
 
   onStatus?.("confirming");
-  await connection.confirmTransaction({ blockhash, lastValidBlockHeight, signature }, commitment);
+  await connection.confirmTransaction(
+    { blockhash, lastValidBlockHeight, signature },
+    commitment
+  );
 
   return {
     signature,
     streamAddress: streamAddress.toBase58(),
     vaultAddress: vaultAddress.toBase58(),
-    explorerUrl: `https://explorer.solana.com/tx/${signature}?cluster=${getExplorerClusterParam(endpoint)}`,
+    explorerUrl: `https://explorer.solana.com/tx/${signature}?cluster=${getExplorerClusterParam(
+      endpoint
+    )}`,
     simulationLogs,
   };
 }
@@ -668,9 +913,17 @@ export async function createStreamBatchOnChain({
 
   const PROGRAM_ID = getProgramIdForEndpoint(endpoint);
   const connection = new Connection(endpoint, commitment);
-  const provider = new anchor.AnchorProvider(connection, getAnchorWallet(wallet), { commitment });
-  const program = new anchor.Program(CREATE_STREAM_IDL as unknown as anchor.Idl, provider);
-  const { signer: walletSigner, mode: walletSignerMode } = createWalletTransactionSigner(wallet);
+  const provider = new anchor.AnchorProvider(
+    connection,
+    getAnchorWallet(wallet),
+    { commitment }
+  );
+  const program = new anchor.Program(
+    CREATE_STREAM_IDL as unknown as anchor.Idl,
+    provider
+  );
+  const { signer: walletSigner, mode: walletSignerMode } =
+    createWalletTransactionSigner(wallet);
   const kitSigner = walletSigner as any;
 
   // Batch-aware wSOL accounting: snapshot the creator's existing wSOL ONCE, then
@@ -678,17 +931,26 @@ export async function createStreamBatchOnChain({
   // credits the same existing wSOL and later rows under-wrap → the program's
   // InsufficientBalance ("Insufficient Token Balance") error.
   const creator = new PublicKey(wallet.account.address.toString());
-  const hasWsolRow = inputs.some((input) => isWrappedSolMint(parsePublicKey(input.mint, "mint address")));
+  const hasWsolRow = inputs.some((input) =>
+    isWrappedSolMint(parsePublicKey(input.mint, "mint address"))
+  );
   let runningWsol: anchor.BN | null = null;
   if (hasWsolRow) {
-    const snapshot = await fetchWsolBalanceSnapshot(connection, creator, commitment);
+    const snapshot = await fetchWsolBalanceSnapshot(
+      connection,
+      creator,
+      commitment
+    );
     runningWsol = new anchor.BN(snapshot.wsolRaw.toString());
   }
 
   const prepared = [] as PreparedCreateStream[];
   for (const input of inputs) {
     let availableWsolOverride: anchor.BN | undefined;
-    if (runningWsol && isWrappedSolMint(parsePublicKey(input.mint, "mint address"))) {
+    if (
+      runningWsol &&
+      isWrappedSolMint(parsePublicKey(input.mint, "mint address"))
+    ) {
       availableWsolOverride = runningWsol;
       // wSOL is the native mint (9 decimals); this row draws `amount` of it.
       const rowAmount = parseTokenAmount(input.amount, 9, "Total amount");
@@ -720,25 +982,35 @@ export async function createStreamBatchOnChain({
 
     for (const part of group) {
       for (const instruction of part.preInstructions) {
-        transactionMessage = appendTransactionMessageInstruction(instruction as any, transactionMessage);
+        transactionMessage = appendTransactionMessageInstruction(
+          instruction as any,
+          transactionMessage
+        );
       }
 
-      transactionMessage = appendTransactionMessageInstruction(part.kitInstruction as any, transactionMessage);
+      transactionMessage = appendTransactionMessageInstruction(
+        part.kitInstruction as any,
+        transactionMessage
+      );
     }
 
-    const { signature, simulationLogs } = await sendVersionedTransactionMessage({
-      connection,
-      transactionMessage,
-      commitment,
-      walletSignerMode,
-      onStatus,
-    });
+    const { signature, simulationLogs } = await sendVersionedTransactionMessage(
+      {
+        connection,
+        transactionMessage,
+        commitment,
+        walletSignerMode,
+        onStatus,
+      }
+    );
 
     batches.push({
       signature,
       streamAddresses: group.map((part) => part.streamAddress.toBase58()),
       vaultAddresses: group.map((part) => part.vaultAddress.toBase58()),
-      explorerUrl: `https://explorer.solana.com/tx/${signature}?cluster=${getExplorerClusterParam(endpoint)}`,
+      explorerUrl: `https://explorer.solana.com/tx/${signature}?cluster=${getExplorerClusterParam(
+        endpoint
+      )}`,
       simulationLogs,
     });
   }

@@ -2,9 +2,15 @@
 
 import * as anchor from "@coral-xyz/anchor";
 import idl from "@/lib/idl/unified_flow.json";
-import { ASSOCIATED_TOKEN_PROGRAM_ADDRESS, TOKEN_PROGRAM_ADDRESS } from "@solana-program/token";
+import {
+  ASSOCIATED_TOKEN_PROGRAM_ADDRESS,
+  TOKEN_PROGRAM_ADDRESS,
+} from "@solana-program/token";
 import { Buffer } from "buffer";
-import { createWalletTransactionSigner, transactionToBase64 } from "@solana/client";
+import {
+  createWalletTransactionSigner,
+  transactionToBase64,
+} from "@solana/client";
 import {
   AccountRole,
   appendTransactionMessageInstructions,
@@ -14,16 +20,23 @@ import {
   signAndSendTransactionMessageWithSigners,
   signTransactionMessageWithSigners,
 } from "@solana/kit";
-import { type Commitment, Connection, PublicKey, VersionedTransaction } from "@solana/web3.js";
-import type { WalletSession } from "@solana/client";
-import { getExplorerClusterParam, getProgramIdForEndpoint } from "@/lib/solana/network-config";
 import {
-  buildWsolWrapInstructions,
-  isWrappedSolMint,
-} from "@/lib/solana/wsol";
+  type Commitment,
+  Connection,
+  PublicKey,
+  VersionedTransaction,
+} from "@solana/web3.js";
+import type { WalletSession } from "@solana/client";
+import {
+  getExplorerClusterParam,
+  getProgramIdForEndpoint,
+} from "@/lib/solana/network-config";
+import { buildWsolWrapInstructions, isWrappedSolMint } from "@/lib/solana/wsol";
 
 const TOKEN_PROGRAM_ID = new PublicKey(TOKEN_PROGRAM_ADDRESS);
-const ASSOCIATED_TOKEN_PROGRAM_ID = new PublicKey(ASSOCIATED_TOKEN_PROGRAM_ADDRESS);
+const ASSOCIATED_TOKEN_PROGRAM_ID = new PublicKey(
+  ASSOCIATED_TOKEN_PROGRAM_ADDRESS
+);
 
 const EDIT_IDL = idl as unknown as anchor.Idl;
 
@@ -121,26 +134,85 @@ function parseTokenAmount(value: string, decimals: number, label: string) {
   const [wholePart, fractionPart = ""] = trimmed.split(".");
 
   if (fractionPart.length > decimals) {
-    throw new Error(`${label} supports at most ${decimals} decimal places for this mint.`);
+    throw new Error(
+      `${label} supports at most ${decimals} decimal places for this mint.`
+    );
   }
 
-  const normalized = `${wholePart}${fractionPart.padEnd(decimals, "0")}`.replace(/^0+(?=\d)/, "");
+  const normalized = `${wholePart}${fractionPart.padEnd(
+    decimals,
+    "0"
+  )}`.replace(/^0+(?=\d)/, "");
   return new anchor.BN(normalized || "0");
+}
+
+function formatTokenAmountFromBaseUnits(amount: anchor.BN, decimals: number) {
+  if (decimals <= 0) {
+    return amount.toString();
+  }
+
+  const negative = amount.lt(new anchor.BN(0));
+  const unsigned = negative
+    ? amount.mul(new anchor.BN(-1)).toString()
+    : amount.toString();
+  const padded = unsigned.padStart(decimals + 1, "0");
+  const whole = padded.slice(0, -decimals) || "0";
+  const fraction = padded.slice(-decimals).replace(/0+$/, "");
+  return `${negative ? "-" : ""}${whole}${fraction ? `.${fraction}` : ""}`;
+}
+
+function buildEvenMilestoneAmountsFromBaseUnits(
+  totalBaseUnits: anchor.BN,
+  count: number,
+  decimals: number
+) {
+  if (!Number.isFinite(count) || count <= 0) return [] as string[];
+  const normalizedCount = Math.floor(count);
+  if (normalizedCount <= 0) return [];
+
+  const divisor = new anchor.BN(normalizedCount);
+  if (totalBaseUnits.lt(divisor)) {
+    throw new Error(
+      "Milestone total is too small to split across the milestone count."
+    );
+  }
+
+  const baseShare = totalBaseUnits.div(divisor);
+  const remainder = totalBaseUnits.mod(divisor).toNumber();
+
+  return Array.from({ length: normalizedCount }, (_, index) =>
+    formatTokenAmountFromBaseUnits(
+      baseShare.add(new anchor.BN(index < remainder ? 1 : 0)),
+      decimals
+    )
+  );
 }
 
 function getAnchorWallet(session: WalletSession) {
   return {
     publicKey: new PublicKey(session.account.address.toString()),
-    signTransaction: async <T extends anchor.web3.Transaction | anchor.web3.VersionedTransaction>(transaction: T): Promise<T> => {
+    signTransaction: async <
+      T extends anchor.web3.Transaction | anchor.web3.VersionedTransaction
+    >(
+      transaction: T
+    ): Promise<T> => {
       if (session.signTransaction) {
-        return (await session.signTransaction(transaction as never)) as unknown as T;
+        return (await session.signTransaction(
+          transaction as never
+        )) as unknown as T;
       }
 
       return transaction;
     },
-    signAllTransactions: async <T extends anchor.web3.Transaction | anchor.web3.VersionedTransaction>(transactions: T[]): Promise<T[]> => {
+    signAllTransactions: async <
+      T extends anchor.web3.Transaction | anchor.web3.VersionedTransaction
+    >(
+      transactions: T[]
+    ): Promise<T[]> => {
       if (session.signTransaction) {
-        return (await Promise.all(transactions.map((tx) => session.signTransaction!(tx as never)))) as unknown as T[];
+        return (await Promise.all(
+          transactions.map((tx) => session.signTransaction!(tx as never))
+        )) as unknown as T[];
       }
 
       return transactions;
@@ -174,7 +246,8 @@ async function executeInstructions({
   preInstructions?: any[];
   postInstructions?: any[];
 }) {
-  const { blockhash, lastValidBlockHeight } = await connection.getLatestBlockhash(commitment);
+  const { blockhash, lastValidBlockHeight } =
+    await connection.getLatestBlockhash(commitment);
   const kitSigner = walletSigner as any;
 
   const kitInstructionPayload = [
@@ -190,7 +263,10 @@ async function executeInstructions({
   // All instructions are bundled into one transaction so they execute
   // atomically — either every instruction lands or none do (single signature).
   const transactionMessage = setTransactionMessageLifetimeUsingBlockhash(
-    { blockhash: blockhash as any, lastValidBlockHeight: BigInt(lastValidBlockHeight) },
+    {
+      blockhash: blockhash as any,
+      lastValidBlockHeight: BigInt(lastValidBlockHeight),
+    },
     appendTransactionMessageInstructions(
       kitInstructionPayload as any,
       setTransactionMessageFeePayerSigner(
@@ -206,24 +282,36 @@ async function executeInstructions({
   onStatus?.("wallet_approval");
 
   if (walletSignerMode === "send") {
-    const sentSignature = await signAndSendTransactionMessageWithSigners(transactionMessage);
+    const sentSignature = await signAndSendTransactionMessageWithSigners(
+      transactionMessage
+    );
     signature = sentSignature.toString();
   } else {
-    const signedTransaction = await signTransactionMessageWithSigners(transactionMessage);
+    const signedTransaction = await signTransactionMessageWithSigners(
+      transactionMessage
+    );
     const encodedTransaction = transactionToBase64(signedTransaction);
     const rawTransaction = Buffer.from(encodedTransaction, "base64");
-    const versionedTransaction = VersionedTransaction.deserialize(rawTransaction);
+    const versionedTransaction =
+      VersionedTransaction.deserialize(rawTransaction);
 
-    const simulation = await connection.simulateTransaction(versionedTransaction, {
-      commitment,
-      sigVerify: false,
-      replaceRecentBlockhash: false,
-    });
+    const simulation = await connection.simulateTransaction(
+      versionedTransaction,
+      {
+        commitment,
+        sigVerify: false,
+        replaceRecentBlockhash: false,
+      }
+    );
 
     simulationLogs = simulation.value.logs ?? [];
 
     if (simulation.value.err) {
-      throw new Error(simulationLogs.length > 0 ? simulationLogs.slice(-6).join("\n") : "Transaction simulation failed.");
+      throw new Error(
+        simulationLogs.length > 0
+          ? simulationLogs.slice(-6).join("\n")
+          : "Transaction simulation failed."
+      );
     }
 
     onStatus?.("sending");
@@ -237,7 +325,10 @@ async function executeInstructions({
 
   onStatus?.("confirming");
 
-  await connection.confirmTransaction({ blockhash, lastValidBlockHeight, signature }, commitment);
+  await connection.confirmTransaction(
+    { blockhash, lastValidBlockHeight, signature },
+    commitment
+  );
 
   return { signature, simulationLogs };
 }
@@ -260,35 +351,62 @@ async function executeInstruction({
   });
 }
 
-async function getStreamProgram(wallet: WalletSession, endpoint: string, commitment: Commitment) {
+async function getStreamProgram(
+  wallet: WalletSession,
+  endpoint: string,
+  commitment: Commitment
+) {
   const connection = new Connection(endpoint, commitment);
-  const provider = new anchor.AnchorProvider(connection, getAnchorWallet(wallet), { commitment });
+  const provider = new anchor.AnchorProvider(
+    connection,
+    getAnchorWallet(wallet),
+    { commitment }
+  );
   const program = new anchor.Program(EDIT_IDL, provider);
   return { connection, program, provider };
 }
 
-async function getMintDecimals(connection: Connection, mint: PublicKey, commitment: Commitment) {
+async function getMintDecimals(
+  connection: Connection,
+  mint: PublicKey,
+  commitment: Commitment
+) {
   const mintInfo = await connection.getParsedAccountInfo(mint, commitment);
-  const parsedMintData = mintInfo.value?.data as { parsed?: { info?: { decimals?: number } } } | undefined;
+  const parsedMintData = mintInfo.value?.data as
+    | { parsed?: { info?: { decimals?: number } } }
+    | undefined;
   const mintDecimals = parsedMintData?.parsed?.info?.decimals;
 
   if (typeof mintDecimals !== "number") {
-    throw new Error("Unable to read mint decimals. Make sure the mint exists and is initialized.");
+    throw new Error(
+      "Unable to read mint decimals. Make sure the mint exists and is initialized."
+    );
   }
 
   return mintDecimals;
 }
 
-async function getMilestoneAmounts(program: any, streamAddress: PublicKey, milestoneCount: number, programId: PublicKey) {
+async function getMilestoneAmounts(
+  program: any,
+  streamAddress: PublicKey,
+  milestoneCount: number,
+  programId: PublicKey
+) {
   const milestoneAmounts: anchor.BN[] = [];
 
   for (let index = 0; index < milestoneCount; index += 1) {
     const [milestoneAddress] = PublicKey.findProgramAddressSync(
-      [Buffer.from("milestone"), streamAddress.toBuffer(), Buffer.from([index])],
+      [
+        Buffer.from("milestone"),
+        streamAddress.toBuffer(),
+        Buffer.from([index]),
+      ],
       programId
     );
 
-    const milestoneState = await program.account.milestoneAccount.fetch(milestoneAddress) as MilestoneAccountView;
+    const milestoneState = (await program.account.milestoneAccount.fetch(
+      milestoneAddress
+    )) as MilestoneAccountView;
     milestoneAmounts.push(new anchor.BN(String(milestoneState.amount)));
   }
 
@@ -311,11 +429,17 @@ export async function editLinearOnChain({
   const PROGRAM_ID = getProgramIdForEndpoint(endpoint);
   const creator = new PublicKey(wallet.account.address.toString());
   const streamAddress = parsePublicKey(input.streamAddress, "stream address");
-  const { signer: walletSigner, mode: walletSignerMode } = createWalletTransactionSigner(wallet);
-  const { connection, program } = await getStreamProgram(wallet, endpoint, commitment);
+  const { signer: walletSigner, mode: walletSignerMode } =
+    createWalletTransactionSigner(wallet);
+  const { connection, program } = await getStreamProgram(
+    wallet,
+    endpoint,
+    commitment
+  );
   const programAny = program as any;
 
-  const streamState: StreamAccountView = await programAny.account.streamAccount.fetch(streamAddress);
+  const streamState: StreamAccountView =
+    await programAny.account.streamAccount.fetch(streamAddress);
 
   if (streamState.creator.toBase58() !== creator.toBase58()) {
     throw new Error("Connected wallet is not the creator for this stream.");
@@ -332,33 +456,43 @@ export async function editLinearOnChain({
     throw new Error("New end duration must be a valid integer.");
   }
 
-  const parsedNewEndTs = newEndDurationRaw !== ""
-    ? startTs.add(new anchor.BN(newEndDurationRaw))
-    : currentEndTs;
+  const parsedNewEndTs =
+    newEndDurationRaw !== ""
+      ? startTs.add(new anchor.BN(newEndDurationRaw))
+      : currentEndTs;
 
   const parsedTopupAmount = input.topupAmount?.trim()
     ? parseTokenAmount(input.topupAmount, mintDecimals, "Top-up amount")
     : new anchor.BN(0);
 
-  if (parsedNewEndTs.lte(currentEndTs) && parsedTopupAmount.lte(new anchor.BN(0))) {
-    throw new Error("Provide a later end timestamp, a positive top-up amount, or both.");
+  if (
+    parsedNewEndTs.lte(currentEndTs) &&
+    parsedTopupAmount.lte(new anchor.BN(0))
+  ) {
+    throw new Error(
+      "Provide a later end timestamp, a positive top-up amount, or both."
+    );
   }
 
   const creatorTokenAccount = PublicKey.findProgramAddressSync(
     [creator.toBuffer(), TOKEN_PROGRAM_ID.toBuffer(), mint.toBuffer()],
     ASSOCIATED_TOKEN_PROGRAM_ID
   )[0];
-  const [configPda] = PublicKey.findProgramAddressSync([Buffer.from("config")], PROGRAM_ID);
+  const [configPda] = PublicKey.findProgramAddressSync(
+    [Buffer.from("config")],
+    PROGRAM_ID
+  );
 
-  const preInstructions = isWrappedSolMint(mint) && parsedTopupAmount.gt(new anchor.BN(0))
-    ? await buildWsolWrapInstructions({
-      connection,
-      owner: creator,
-      walletSigner,
-      amountBn: parsedTopupAmount,
-      commitment,
-    })
-    : [];
+  const preInstructions =
+    isWrappedSolMint(mint) && parsedTopupAmount.gt(new anchor.BN(0))
+      ? await buildWsolWrapInstructions({
+          connection,
+          owner: creator,
+          walletSigner,
+          amountBn: parsedTopupAmount,
+          commitment,
+        })
+      : [];
 
   const anchorInstruction = await program.methods
     .editLinear(parsedNewEndTs, parsedTopupAmount)
@@ -381,7 +515,11 @@ export async function editLinearOnChain({
     preInstructions,
     anchorInstructionData: anchorInstruction.data,
     accounts: [
-      { address: creator.toBase58(), role: AccountRole.WRITABLE_SIGNER, signer: walletSigner as any },
+      {
+        address: creator.toBase58(),
+        role: AccountRole.WRITABLE_SIGNER,
+        signer: walletSigner as any,
+      },
       { address: mint.toBase58(), role: AccountRole.READONLY },
       { address: configPda.toBase58(), role: AccountRole.READONLY },
       { address: streamAddress.toBase58(), role: AccountRole.WRITABLE },
@@ -395,7 +533,9 @@ export async function editLinearOnChain({
 
   return {
     signature,
-    explorerUrl: `https://explorer.solana.com/tx/${signature}?cluster=${getExplorerClusterParam(endpoint)}`,
+    explorerUrl: `https://explorer.solana.com/tx/${signature}?cluster=${getExplorerClusterParam(
+      endpoint
+    )}`,
     simulationLogs,
   };
 }
@@ -416,11 +556,17 @@ export async function editCliffOnChain({
   const PROGRAM_ID = getProgramIdForEndpoint(endpoint);
   const creator = new PublicKey(wallet.account.address.toString());
   const streamAddress = parsePublicKey(input.streamAddress, "stream address");
-  const { signer: walletSigner, mode: walletSignerMode } = createWalletTransactionSigner(wallet);
-  const { connection, program } = await getStreamProgram(wallet, endpoint, commitment);
+  const { signer: walletSigner, mode: walletSignerMode } =
+    createWalletTransactionSigner(wallet);
+  const { connection, program } = await getStreamProgram(
+    wallet,
+    endpoint,
+    commitment
+  );
   const programAny = program as any;
 
-  const streamState: StreamAccountView = await programAny.account.streamAccount.fetch(streamAddress);
+  const streamState: StreamAccountView =
+    await programAny.account.streamAccount.fetch(streamAddress);
 
   if (streamState.creator.toBase58() !== creator.toBase58()) {
     throw new Error("Connected wallet is not the creator for this stream.");
@@ -431,7 +577,10 @@ export async function editCliffOnChain({
   const currentCliffTs = new anchor.BN(String(streamState.cliffTs || "0"));
   const withdrawn = new anchor.BN(String(streamState.withdrawn || "0"));
   const mint = streamState.mint as PublicKey;
-  const [configPda] = PublicKey.findProgramAddressSync([Buffer.from("config")], PROGRAM_ID);
+  const [configPda] = PublicKey.findProgramAddressSync(
+    [Buffer.from("config")],
+    PROGRAM_ID
+  );
 
   // ── Resolve top-up intent ───────────────────────────────────────────────
   // Top-up reuses the edit_linear instruction, which the program also accepts
@@ -461,7 +610,9 @@ export async function editCliffOnChain({
   }
 
   if (!wantsCliffEdit && !hasTopup) {
-    throw new Error("Nothing to update: change the cliff duration or enter a positive top-up amount.");
+    throw new Error(
+      "Nothing to update: change the cliff duration or enter a positive top-up amount."
+    );
   }
 
   const instructions: InstructionSpec[] = [];
@@ -469,10 +620,14 @@ export async function editCliffOnChain({
   // ── Cliff edit instruction ──────────────────────────────────────────────
   if (wantsCliffEdit) {
     if (!withdrawn.isZero()) {
-      throw new Error("Cliff can no longer be changed because tokens have already been withdrawn from this stream. You can still top up.");
+      throw new Error(
+        "Cliff can no longer be changed because tokens have already been withdrawn from this stream. You can still top up."
+      );
     }
     if (newCliffBn.lt(startTs) || newCliffBn.gt(endTs)) {
-      throw new Error(`Cliff timestamp must be between stream start time (${startTs.toString()}) and end time (${endTs.toString()}).`);
+      throw new Error(
+        `Cliff timestamp must be between stream start time (${startTs.toString()}) and end time (${endTs.toString()}).`
+      );
     }
 
     const cliffInstruction = await program.methods
@@ -487,7 +642,11 @@ export async function editCliffOnChain({
     instructions.push({
       data: cliffInstruction.data,
       accounts: [
-        { address: creator.toBase58(), role: AccountRole.WRITABLE_SIGNER, signer: walletSigner as any },
+        {
+          address: creator.toBase58(),
+          role: AccountRole.WRITABLE_SIGNER,
+          signer: walletSigner as any,
+        },
         { address: configPda.toBase58(), role: AccountRole.READONLY },
         { address: streamAddress.toBase58(), role: AccountRole.WRITABLE },
       ],
@@ -517,7 +676,11 @@ export async function editCliffOnChain({
     instructions.push({
       data: topupInstruction.data,
       accounts: [
-        { address: creator.toBase58(), role: AccountRole.WRITABLE_SIGNER, signer: walletSigner as any },
+        {
+          address: creator.toBase58(),
+          role: AccountRole.WRITABLE_SIGNER,
+          signer: walletSigner as any,
+        },
         { address: mint.toBase58(), role: AccountRole.READONLY },
         { address: configPda.toBase58(), role: AccountRole.READONLY },
         { address: streamAddress.toBase58(), role: AccountRole.WRITABLE },
@@ -531,12 +694,12 @@ export async function editCliffOnChain({
   const preInstructions =
     hasTopup && isWrappedSolMint(mint)
       ? await buildWsolWrapInstructions({
-        connection,
-        owner: creator,
-        walletSigner,
-        amountBn: topupAmountBn,
-        commitment,
-      })
+          connection,
+          owner: creator,
+          walletSigner,
+          amountBn: topupAmountBn,
+          commitment,
+        })
       : [];
 
   const { signature, simulationLogs } = await executeInstructions({
@@ -552,7 +715,9 @@ export async function editCliffOnChain({
 
   return {
     signature,
-    explorerUrl: `https://explorer.solana.com/tx/${signature}?cluster=${getExplorerClusterParam(endpoint)}`,
+    explorerUrl: `https://explorer.solana.com/tx/${signature}?cluster=${getExplorerClusterParam(
+      endpoint
+    )}`,
     simulationLogs,
   };
 }
@@ -573,11 +738,17 @@ export async function editMilestoneOnChain({
   const PROGRAM_ID = getProgramIdForEndpoint(endpoint);
   const creator = new PublicKey(wallet.account.address.toString());
   const streamAddress = parsePublicKey(input.streamAddress, "stream address");
-  const { signer: walletSigner, mode: walletSignerMode } = createWalletTransactionSigner(wallet);
-  const { connection, program } = await getStreamProgram(wallet, endpoint, commitment);
+  const { signer: walletSigner, mode: walletSignerMode } =
+    createWalletTransactionSigner(wallet);
+  const { connection, program } = await getStreamProgram(
+    wallet,
+    endpoint,
+    commitment
+  );
   const programAny = program as any;
 
-  const streamState: StreamAccountView = await programAny.account.streamAccount.fetch(streamAddress);
+  const streamState: StreamAccountView =
+    await programAny.account.streamAccount.fetch(streamAddress);
 
   if (streamState.creator.toBase58() !== creator.toBase58()) {
     throw new Error("Connected wallet is not the creator for this stream.");
@@ -587,11 +758,21 @@ export async function editMilestoneOnChain({
   const mintDecimals = await getMintDecimals(connection, mint, commitment);
   const milestoneIndex = Number(input.milestoneIndex);
 
-  if (!Number.isInteger(milestoneIndex) || milestoneIndex < 0 || milestoneIndex > 255) {
-    throw new Error("Milestone index must be a valid integer between 0 and 255.");
+  if (
+    !Number.isInteger(milestoneIndex) ||
+    milestoneIndex < 0 ||
+    milestoneIndex > 255
+  ) {
+    throw new Error(
+      "Milestone index must be a valid integer between 0 and 255."
+    );
   }
 
-  const newAmount = parseTokenAmount(input.newAmount, mintDecimals, "New milestone amount");
+  const newAmount = parseTokenAmount(
+    input.newAmount,
+    mintDecimals,
+    "New milestone amount"
+  );
   if (newAmount.lte(new anchor.BN(0))) {
     throw new Error("New milestone amount must be greater than zero.");
   }
@@ -601,12 +782,20 @@ export async function editMilestoneOnChain({
     throw new Error("Milestone stream is missing milestone definitions.");
   }
 
-  const milestoneAmounts = await getMilestoneAmounts(programAny, streamAddress, milestoneCount, PROGRAM_ID);
+  const milestoneAmounts = await getMilestoneAmounts(
+    programAny,
+    streamAddress,
+    milestoneCount,
+    PROGRAM_ID
+  );
   if (milestoneIndex >= milestoneAmounts.length) {
     throw new Error("Milestone index is out of range for this stream.");
   }
 
-  const currentTotalMilestones = milestoneAmounts.reduce((sum, amount) => sum.add(amount), new anchor.BN(0));
+  const currentTotalMilestones = milestoneAmounts.reduce(
+    (sum, amount) => sum.add(amount),
+    new anchor.BN(0)
+  );
   const streamTotalAmount = new anchor.BN(String(streamState.totalAmount));
 
   if (!currentTotalMilestones.eq(streamTotalAmount)) {
@@ -616,7 +805,11 @@ export async function editMilestoneOnChain({
   }
 
   const [milestoneAddress] = PublicKey.findProgramAddressSync(
-    [Buffer.from("milestone"), streamAddress.toBuffer(), Buffer.from([milestoneIndex])],
+    [
+      Buffer.from("milestone"),
+      streamAddress.toBuffer(),
+      Buffer.from([milestoneIndex]),
+    ],
     PROGRAM_ID
   );
 
@@ -626,22 +819,25 @@ export async function editMilestoneOnChain({
   )[0];
 
   const oldAmount = milestoneAmounts[milestoneIndex];
-  const topUpDiff = newAmount.gt(oldAmount) ? newAmount.sub(oldAmount) : new anchor.BN(0);
+  const topUpDiff = newAmount.gt(oldAmount)
+    ? newAmount.sub(oldAmount)
+    : new anchor.BN(0);
 
   const preInstructions =
     isWrappedSolMint(mint) && topUpDiff.gt(new anchor.BN(0))
       ? await buildWsolWrapInstructions({
-        connection,
-        owner: creator,
-        walletSigner,
-        amountBn: topUpDiff,
-        commitment,
-      })
+          connection,
+          owner: creator,
+          walletSigner,
+          amountBn: topUpDiff,
+          commitment,
+        })
       : [];
 
-
-
-  const [configPda] = PublicKey.findProgramAddressSync([Buffer.from("config")], PROGRAM_ID);
+  const [configPda] = PublicKey.findProgramAddressSync(
+    [Buffer.from("config")],
+    PROGRAM_ID
+  );
 
   const anchorInstruction = await program.methods
     .editMilestone(newAmount)
@@ -665,7 +861,11 @@ export async function editMilestoneOnChain({
     preInstructions,
     anchorInstructionData: anchorInstruction.data,
     accounts: [
-      { address: creator.toBase58(), role: AccountRole.WRITABLE_SIGNER, signer: walletSigner as any },
+      {
+        address: creator.toBase58(),
+        role: AccountRole.WRITABLE_SIGNER,
+        signer: walletSigner as any,
+      },
       { address: configPda.toBase58(), role: AccountRole.READONLY },
       { address: streamAddress.toBase58(), role: AccountRole.WRITABLE },
       { address: milestoneAddress.toBase58(), role: AccountRole.WRITABLE },
@@ -680,7 +880,9 @@ export async function editMilestoneOnChain({
 
   return {
     signature,
-    explorerUrl: `https://explorer.solana.com/tx/${signature}?cluster=${getExplorerClusterParam(endpoint)}`,
+    explorerUrl: `https://explorer.solana.com/tx/${signature}?cluster=${getExplorerClusterParam(
+      endpoint
+    )}`,
     simulationLogs,
   };
 }
@@ -707,7 +909,8 @@ export async function editStreamBatchOnChain({
     const streamAddress = String(item.id || "").trim();
     if (!streamAddress) continue;
     const streamPubkey = parsePublicKey(streamAddress, "stream address");
-    const streamState: StreamAccountView = await programAny.account.streamAccount.fetch(streamPubkey);
+    const streamState: StreamAccountView =
+      await programAny.account.streamAccount.fetch(streamPubkey);
     const vestingType = Number(streamState.vestingType);
     const durationRaw = String(item.duration ?? "").trim();
     const cliffRaw = String(item.cliffDuration ?? "").trim();
@@ -729,7 +932,9 @@ export async function editStreamBatchOnChain({
         : currentEndTs;
 
       if (hasDuration && !targetEndTs.gt(currentEndTs) && topupAmount === "0") {
-        throw new Error(`Linear stream ${streamAddress}: new duration must extend end time, or amount must increase total allocation.`);
+        throw new Error(
+          `Linear stream ${streamAddress}: new duration must extend end time, or amount must increase total allocation.`
+        );
       }
 
       const linearResult = await editLinearOnChain({
@@ -741,7 +946,7 @@ export async function editStreamBatchOnChain({
           streamAddress,
           newEndDuration: hasDuration ? durationRaw : undefined,
           topupAmount,
-        }
+        },
       });
       signatures.push(linearResult.signature);
       streamAddresses.push(streamAddress);
@@ -780,8 +985,13 @@ export async function editStreamBatchOnChain({
 
       // Only move the cliff when it actually changes — an unchanged value would
       // needlessly trip the on-chain withdrawn==0 guard and waste a transaction.
-      const currentCliffDuration = new anchor.BN(String(streamState.cliffTs || "0")).sub(startTs);
-      if (hasCliffDuration && !new anchor.BN(cliffRaw).eq(currentCliffDuration)) {
+      const currentCliffDuration = new anchor.BN(
+        String(streamState.cliffTs || "0")
+      ).sub(startTs);
+      if (
+        hasCliffDuration &&
+        !new anchor.BN(cliffRaw).eq(currentCliffDuration)
+      ) {
         const cliffResult = await editCliffOnChain({
           wallet,
           endpoint,
@@ -798,11 +1008,44 @@ export async function editStreamBatchOnChain({
       continue;
     }
 
-    if (vestingType === 2 && item.milestones && item.milestones.trim() !== "") {
-      const amounts = item.milestones
+    if (
+      vestingType === 2 &&
+      (hasAmount || String(item.milestones ?? "").trim() !== "")
+    ) {
+      const rawMilestoneValues = String(item.milestones ?? "")
         .split(";")
         .map((value) => value.trim())
         .filter(Boolean);
+      const milestoneCountForEdit =
+        rawMilestoneValues.length > 0
+          ? rawMilestoneValues.length
+          : Number(streamState.milestoneCount || 0);
+      const targetTotalBaseUnits = hasAmount
+        ? parseTokenAmount(amountRaw, mintDecimals, "Milestone total amount")
+        : new anchor.BN(String(streamState.totalAmount || "0"));
+      const shouldPreserveRawMilestones =
+        rawMilestoneValues.length > 0 &&
+        (!hasAmount ||
+          rawMilestoneValues
+            .reduce(
+              (sum, value, index) =>
+                sum.add(
+                  parseTokenAmount(
+                    value,
+                    mintDecimals,
+                    `Milestone #${index + 1} amount`
+                  )
+                ),
+              new anchor.BN(0)
+            )
+            .eq(targetTotalBaseUnits));
+      const amounts = shouldPreserveRawMilestones
+        ? rawMilestoneValues
+        : buildEvenMilestoneAmountsFromBaseUnits(
+            targetTotalBaseUnits,
+            milestoneCountForEdit,
+            mintDecimals
+          );
       for (let index = 0; index < amounts.length; index += 1) {
         const milestoneResult = await editMilestoneOnChain({
           wallet,

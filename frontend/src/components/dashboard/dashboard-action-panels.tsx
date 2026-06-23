@@ -4,7 +4,20 @@ import type { ChangeEvent, RefObject } from "react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import Image from "next/image";
-import { AlertTriangle, Check, ChevronDown, Shield, Download, Layers, Lock, RefreshCw, Terminal, Upload, XCircle, Settings } from "lucide-react";
+import {
+  AlertTriangle,
+  Check,
+  ChevronDown,
+  Shield,
+  Download,
+  Layers,
+  Lock,
+  RefreshCw,
+  Terminal,
+  Upload,
+  XCircle,
+  Settings,
+} from "lucide-react";
 import { CsvDiffPanel } from "@/components/dashboard/csv-diff-panel";
 import { AdminPanel } from "./dashboard-admin-panel";
 import type { MintPreset } from "@/components/dashboard/token-mints";
@@ -20,6 +33,41 @@ const QUICK_DURATIONS = [
   { label: "6M", value: 60 * 60 * 24 * 180 },
   { label: "1Y", value: 60 * 60 * 24 * 365 },
 ];
+
+function parseTokenAmountToBaseUnits(value: string, decimals: number) {
+  const trimmed = String(value ?? "")
+    .trim()
+    .replace(/,/g, ".");
+  if (trimmed === "" || !/^\d+(\.\d+)?$/.test(trimmed)) return BigInt(0);
+  const [wholePart, fractionPart = ""] = trimmed.split(".");
+  const normalizedFraction = fractionPart
+    .slice(0, decimals)
+    .padEnd(decimals, "0");
+  const raw = `${wholePart}${normalizedFraction}`.replace(/^0+(?=\d)/, "");
+  try {
+    return BigInt(raw || "0");
+  } catch {
+    return BigInt(0);
+  }
+}
+
+function buildEvenMilestoneBaseUnits(totalBaseUnits: bigint, count: number) {
+  if (!Number.isFinite(count) || count <= 0) return [] as bigint[];
+  const normalizedCount = Math.floor(count);
+  if (normalizedCount <= 0) return [];
+
+  const divisor = BigInt(normalizedCount);
+  if (totalBaseUnits < divisor)
+    return Array.from({ length: normalizedCount }, () => BigInt(0));
+
+  const baseShare = totalBaseUnits / divisor;
+  const remainder = totalBaseUnits % divisor;
+  return Array.from(
+    { length: normalizedCount },
+    (_, index) =>
+      baseShare + (BigInt(index) < remainder ? BigInt(1) : BigInt(0))
+  );
+}
 
 // ─── Cancel Confirmation Dialog ───────────────────────────────────────────
 function CancelConfirmDialog({
@@ -45,7 +93,9 @@ function CancelConfirmDialog({
   const dialog = (
     <div
       className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm animate-in fade-in duration-200"
-      onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}
+      onClick={(e) => {
+        if (e.target === e.currentTarget) onClose();
+      }}
     >
       <div className="relative w-full max-w-md bg-zinc-950 border border-zinc-800 rounded-3xl shadow-2xl shadow-black/60 overflow-hidden animate-in zoom-in-95 slide-in-from-bottom-4 duration-300">
         {/* Top accent bar */}
@@ -73,27 +123,49 @@ function CancelConfirmDialog({
 
           {/* Title & description */}
           <div className="text-center mb-5">
-            <h3 className="text-lg font-extrabold text-zinc-50 mb-1.5">Cancel Stream?</h3>
+            <h3 className="text-lg font-extrabold text-zinc-50 mb-1.5">
+              Cancel Stream?
+            </h3>
             <p className="text-xs text-zinc-400 leading-relaxed">
-              This action is <span className="text-rose-400 font-bold">permanent and irreversible</span>.
-              All remaining locked tokens will be refunded to the creator wallet.
-              The recipient will no longer be able to claim any unvested tokens.
+              This action is{" "}
+              <span className="text-rose-400 font-bold">
+                permanent and irreversible
+              </span>
+              . All remaining locked tokens will be refunded to the creator
+              wallet. The recipient will no longer be able to claim any unvested
+              tokens.
             </p>
           </div>
 
           {/* Stream ID chip */}
           <div className="bg-zinc-900/60 border border-zinc-800 rounded-xl px-3 py-2.5 mb-5 text-center">
-            <div className="text-[9px] font-black uppercase tracking-widest text-zinc-500 mb-1">Stream being cancelled</div>
-            <div className="font-mono text-[11px] text-zinc-300 break-all">{streamId || "—"}</div>
+            <div className="text-[9px] font-black uppercase tracking-widest text-zinc-500 mb-1">
+              Stream being cancelled
+            </div>
+            <div className="font-mono text-[11px] text-zinc-300 break-all">
+              {streamId || "—"}
+            </div>
           </div>
 
           {/* What happens list */}
           <ul className="space-y-2 mb-6">
             {[
-              { color: "bg-red-400", text: "Vesting schedule will be permanently terminated" },
-              { color: "bg-orange-400", text: "Recipient loses access to all remaining unvested tokens" },
-              { color: "bg-yellow-300", text: "Unlocked but unclaimed tokens remain claimable by recipient" },
-              { color: "bg-green-400", text: "Locked tokens are refunded to creator wallet immediately" },
+              {
+                color: "bg-red-400",
+                text: "Vesting schedule will be permanently terminated",
+              },
+              {
+                color: "bg-orange-400",
+                text: "Recipient loses access to all remaining unvested tokens",
+              },
+              {
+                color: "bg-yellow-300",
+                text: "Unlocked but unclaimed tokens remain claimable by recipient",
+              },
+              {
+                color: "bg-green-400",
+                text: "Locked tokens are refunded to creator wallet immediately",
+              },
             ].map(({ color, text }) => (
               <li
                 key={text}
@@ -110,14 +182,17 @@ function CancelConfirmDialog({
           {/* Typed confirmation */}
           <div className="mb-5">
             <label className="block text-[10px] font-bold uppercase tracking-widest text-zinc-500 mb-2">
-              Type <span className="text-rose-400 font-extrabold">cancel</span> to confirm
+              Type <span className="text-rose-400 font-extrabold">cancel</span>{" "}
+              to confirm
             </label>
             <input
               autoFocus
               type="text"
               value={typed}
               onChange={(e) => setTyped(e.target.value)}
-              onKeyDown={(e) => { if (e.key === "Enter" && confirmed) onConfirm(); }}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" && confirmed) onConfirm();
+              }}
               placeholder="cancel"
               className={`w-full bg-zinc-900 border rounded-xl px-4 py-2.5 text-sm font-mono focus:outline-none transition-all placeholder:text-zinc-700 ${
                 confirmed
@@ -169,29 +244,13 @@ function normalizeDecimalInput(value: string) {
   return `${parts[0]}.${parts.slice(1).join("")}`;
 }
 
-function parseTokenAmountToBaseUnits(value: string, decimals: number) {
-  const trimmed = String(value ?? "").trim().replace(/,/g, ".");
-
-  if (trimmed === "" || !/^\d+(\.\d+)?$/.test(trimmed)) {
-    return BigInt(0);
-  }
-
-  const [wholePart, fractionPart = ""] = trimmed.split(".");
-  const normalizedFraction = fractionPart.slice(0, decimals).padEnd(decimals, "0");
-  const raw = `${wholePart}${normalizedFraction}`.replace(/^0+(?=\d)/, "");
-
-  try {
-    return BigInt(raw || "0");
-  } catch {
-    return BigInt(0);
-  }
-}
-
 function formatBaseUnitsToTokenAmount(amount: bigint, decimals: number) {
   if (decimals <= 0) return amount.toString();
 
   const negative = amount < BigInt(0);
-  const unsigned = negative ? (amount * BigInt(-1)).toString() : amount.toString();
+  const unsigned = negative
+    ? (amount * BigInt(-1)).toString()
+    : amount.toString();
   const padded = unsigned.padStart(decimals + 1, "0");
   const whole = padded.slice(0, -decimals) || "0";
   const fraction = padded.slice(-decimals).replace(/0+$/, "");
@@ -307,9 +366,8 @@ function UnlockMilestonePanel({
   // ── Summary stream dari streams[] (for creator/type guard) ────────────
   const streamSummary = useMemo(
     () =>
-      streams.find(
-        (s) => String(s?.id || "") === unlockForm.streamId.trim()
-      ) ?? null,
+      streams.find((s) => String(s?.id || "") === unlockForm.streamId.trim()) ??
+      null,
     [streams, unlockForm.streamId]
   );
 
@@ -324,122 +382,126 @@ function UnlockMilestonePanel({
     stream.creator?.toLowerCase() !== connectedWalletAddress.toLowerCase();
 
   // ── Stream type / status guards ────────────────────────────────────────
-  const isNotMilestoneType =
-    !!stream && Number(stream.vestingType ?? -1) !== 2;
+  const isNotMilestoneType = !!stream && Number(stream.vestingType ?? -1) !== 2;
   const isStreamCancelled = !!stream && Number(stream.status) === 3;
   const isStreamCompleted = !!stream && Number(stream.status) === 2;
 
   // ── Milestone list dari /streams/:id ──────────────────────────────────
- const milestonePreview = useMemo(() => {
-  if (!streamDetail) return null;
+  const milestonePreview = useMemo(() => {
+    if (!streamDetail) return null;
 
-  const decimals =
-    typeof streamDetail.mintDecimals === "number"
-      ? streamDetail.mintDecimals
-      : 6;
+    const decimals =
+      typeof streamDetail.mintDecimals === "number"
+        ? streamDetail.mintDecimals
+        : 6;
 
-  const milestoneCount = Number(streamDetail.milestoneCount ?? 0);
-  if (milestoneCount === 0) return null;
+    const milestoneCount = Number(streamDetail.milestoneCount ?? 0);
+    if (milestoneCount === 0) return null;
 
-  // ── Parse amounts dari semicolon string ───────────────────────────────
-  const rawStr = String(streamDetail.milestones || "").trim();
-  const rawAmounts: bigint[] = rawStr
-    ? rawStr.split(";").map((v) => {
-        try { return BigInt(v.trim()); } catch { return BigInt(0); }
-      })
-    : [];
+    // ── Parse amounts dari semicolon string ───────────────────────────────
+    const rawStr = String(streamDetail.milestones || "").trim();
+    const rawAmounts: bigint[] = rawStr
+      ? rawStr.split(";").map((v) => {
+          try {
+            return BigInt(v.trim());
+          } catch {
+            return BigInt(0);
+          }
+        })
+      : [];
 
-  // Fallback distribusi merata
-  const totalBase = parseBaseUnits(streamDetail.totalAmount);
-  let amounts: bigint[];
-  if (rawAmounts.length === milestoneCount) {
-    amounts = rawAmounts;
-  } else {
-    const base = totalBase / BigInt(milestoneCount);
-    const remainder = totalBase % BigInt(milestoneCount);
-    amounts = Array.from({ length: milestoneCount }, (_, i) =>
-      base + (BigInt(i) < remainder ? BigInt(1) : BigInt(0))
-    );
-  }
-
-  // ── Derive nextIndex dari unlockedAmount ──────────────────────────────
-  // Hitung cumulative sum sampai cocok dengan unlockedAmount
-  // Ini akurat karena unlock selalu sequential
-  const unlockedAmountBase = parseBaseUnits(
-    streamDetail.unlockedAmount ?? streamDetail.unlocked_amount ?? 0
-  );
-
-  let derivedNextIndex = 0;
-  let cumulativeSum = BigInt(0);
-  for (let i = 0; i < milestoneCount; i++) {
-    cumulativeSum += amounts[i];
-    if (cumulativeSum <= unlockedAmountBase) {
-      derivedNextIndex = i + 1;
+    // Fallback distribusi merata
+    const totalBase = parseBaseUnits(streamDetail.totalAmount);
+    let amounts: bigint[];
+    if (rawAmounts.length === milestoneCount) {
+      amounts = rawAmounts;
     } else {
-      break;
+      const base = totalBase / BigInt(milestoneCount);
+      const remainder = totalBase % BigInt(milestoneCount);
+      amounts = Array.from(
+        { length: milestoneCount },
+        (_, i) => base + (BigInt(i) < remainder ? BigInt(1) : BigInt(0))
+      );
     }
-  }
 
-  // Fallback ke field kalau ada (untuk future-proofing)
-  const nextIndex =
-    streamDetail.nextMilestoneIndex ??
-    streamDetail.next_milestone_index ??
-    derivedNextIndex;
-
-  // ── Derive unlock timestamps dari transactions[] ───────────────────────
-  const unlockTxs = (streamDetail.transactions ?? [])
-    .filter((tx: any) => tx.type === "MILESTONE_UNLOCKED")
-    .sort((a: any, b: any) => Number(a.slot) - Number(b.slot));
-
-  const fmt = (v: bigint) =>
-    Number(formatBaseUnitsToTokenAmount(v, decimals)).toLocaleString(
-      undefined,
-      { maximumFractionDigits: decimals }
+    // ── Derive nextIndex dari unlockedAmount ──────────────────────────────
+    // Hitung cumulative sum sampai cocok dengan unlockedAmount
+    // Ini akurat karena unlock selalu sequential
+    const unlockedAmountBase = parseBaseUnits(
+      streamDetail.unlockedAmount ?? streamDetail.unlocked_amount ?? 0
     );
 
-  // ── Build items ────────────────────────────────────────────────────────
-  const items = Array.from({ length: milestoneCount }, (_, i) => {
-    const amountBase = amounts[i] ?? BigInt(0);
-    const isUnlocked = i < nextIndex;
-    const isNext = i === nextIndex;
-    const isLocked = i > nextIndex;
-    const unlockTx = isUnlocked ? (unlockTxs[i] ?? null) : null;
-    const unlockTs = unlockTx?.raw?.blockTime ?? null;
+    let derivedNextIndex = 0;
+    let cumulativeSum = BigInt(0);
+    for (let i = 0; i < milestoneCount; i++) {
+      cumulativeSum += amounts[i];
+      if (cumulativeSum <= unlockedAmountBase) {
+        derivedNextIndex = i + 1;
+      } else {
+        break;
+      }
+    }
+
+    // Fallback ke field kalau ada (untuk future-proofing)
+    const nextIndex =
+      streamDetail.nextMilestoneIndex ??
+      streamDetail.next_milestone_index ??
+      derivedNextIndex;
+
+    // ── Derive unlock timestamps dari transactions[] ───────────────────────
+    const unlockTxs = (streamDetail.transactions ?? [])
+      .filter((tx: any) => tx.type === "MILESTONE_UNLOCKED")
+      .sort((a: any, b: any) => Number(a.slot) - Number(b.slot));
+
+    const fmt = (v: bigint) =>
+      Number(formatBaseUnitsToTokenAmount(v, decimals)).toLocaleString(
+        undefined,
+        { maximumFractionDigits: decimals }
+      );
+
+    // ── Build items ────────────────────────────────────────────────────────
+    const items = Array.from({ length: milestoneCount }, (_, i) => {
+      const amountBase = amounts[i] ?? BigInt(0);
+      const isUnlocked = i < nextIndex;
+      const isNext = i === nextIndex;
+      const isLocked = i > nextIndex;
+      const unlockTx = isUnlocked ? unlockTxs[i] ?? null : null;
+      const unlockTs = unlockTx?.raw?.blockTime ?? null;
+
+      return {
+        index: i,
+        amountBase,
+        amount: fmt(amountBase),
+        isUnlocked,
+        isNext,
+        isLocked,
+        unlockTs,
+      };
+    });
+
+    // ── Totals ─────────────────────────────────────────────────────────────
+    const unlockedTotal = items
+      .filter((m) => m.isUnlocked)
+      .reduce((sum, m) => sum + m.amountBase, BigInt(0));
+    const lockedTotal = items
+      .filter((m) => m.isNext || m.isLocked)
+      .reduce((sum, m) => sum + m.amountBase, BigInt(0));
+
+    const allUnlocked = nextIndex >= milestoneCount;
+    const nextMilestone = items.find((m) => m.isNext) ?? null;
 
     return {
-      index: i,
-      amountBase,
-      amount: fmt(amountBase),
-      isUnlocked,
-      isNext,
-      isLocked,
-      unlockTs,
+      items,
+      milestoneCount,
+      nextIndex,
+      unlockedCount: nextIndex,
+      lockedCount: milestoneCount - nextIndex,
+      unlockedAmount: fmt(unlockedTotal),
+      lockedAmount: fmt(lockedTotal),
+      nextMilestone,
+      allUnlocked,
     };
-  });
-
-  // ── Totals ─────────────────────────────────────────────────────────────
-  const unlockedTotal = items
-    .filter((m) => m.isUnlocked)
-    .reduce((sum, m) => sum + m.amountBase, BigInt(0));
-  const lockedTotal = items
-    .filter((m) => m.isNext || m.isLocked)
-    .reduce((sum, m) => sum + m.amountBase, BigInt(0));
-
-  const allUnlocked = nextIndex >= milestoneCount;
-  const nextMilestone = items.find((m) => m.isNext) ?? null;
-
-  return {
-    items,
-    milestoneCount,
-    nextIndex,
-    unlockedCount: nextIndex,
-    lockedCount: milestoneCount - nextIndex,
-    unlockedAmount: fmt(unlockedTotal),
-    lockedAmount: fmt(lockedTotal),
-    nextMilestone,
-    allUnlocked,
-  };
-}, [streamDetail]);
+  }, [streamDetail]);
 
   const isSubmitting = activeTxAction === "unlock_milestone" && !!activeTxPhase;
 
@@ -537,7 +599,10 @@ function UnlockMilestonePanel({
               </span>
               , but your connected wallet is{" "}
               <span className="font-mono text-amber-300 break-all">
-                {`${connectedWalletAddress!.slice(0, 6)}…${connectedWalletAddress!.slice(-4)}`}
+                {`${connectedWalletAddress!.slice(
+                  0,
+                  6
+                )}…${connectedWalletAddress!.slice(-4)}`}
               </span>
               .
             </p>
@@ -555,8 +620,8 @@ function UnlockMilestonePanel({
             </p>
             <p className="text-[11px] text-zinc-500 leading-relaxed">
               This stream uses{" "}
-              {Number(stream?.vestingType) === 0 ? "Linear" : "Cliff"} vesting
-              — milestone unlock only applies to Milestone type streams.
+              {Number(stream?.vestingType) === 0 ? "Linear" : "Cliff"} vesting —
+              milestone unlock only applies to Milestone type streams.
             </p>
           </div>
         </div>
@@ -568,8 +633,8 @@ function UnlockMilestonePanel({
           <AlertTriangle className="w-4 h-4 text-rose-400 shrink-0 mt-0.5" />
           <p className="text-[11px] text-rose-300/80 leading-relaxed">
             This stream has been{" "}
-            <strong className="text-rose-300">cancelled</strong>. Milestones
-            can no longer be unlocked.
+            <strong className="text-rose-300">cancelled</strong>. Milestones can
+            no longer be unlocked.
           </p>
         </div>
       )}
@@ -706,9 +771,7 @@ function UnlockMilestonePanel({
                     {/* Unlock timestamp kalau ada */}
                     {m.isUnlocked && m.unlockTs && (
                       <div className="text-[9px] font-mono text-zinc-600 mt-0.5">
-                        {new Date(
-                          Number(m.unlockTs) * 1000
-                        ).toLocaleString()}
+                        {new Date(Number(m.unlockTs) * 1000).toLocaleString()}
                       </div>
                     )}
                   </div>
@@ -853,7 +916,7 @@ function WithdrawPanel({
 
   // ── Claimable preview ──────────────────────────────────────────────────
   const withdrawPreview = useMemo(() => {
-      if (!stream || Number(stream.status) === 3) return null;
+    if (!stream || Number(stream.status) === 3) return null;
 
     const decimals =
       typeof stream.mintDecimals === "number" ? stream.mintDecimals : 6;
@@ -958,7 +1021,7 @@ function WithdrawPanel({
     return "Confirming On-Chain...";
   };
 
-const canSubmit =
+  const canSubmit =
     !!withdrawForm.streamId.trim() &&
     !isSubmitting &&
     !isWrongWallet &&
@@ -1006,25 +1069,32 @@ const canSubmit =
               Only the stream recipient can withdraw. This stream pays to{" "}
               <span className="font-mono text-amber-300 break-all">
                 {stream?.recipient
-                  ? `${stream.recipient.slice(0, 6)}…${stream.recipient.slice(-4)}`
+                  ? `${stream.recipient.slice(0, 6)}…${stream.recipient.slice(
+                      -4
+                    )}`
                   : "unknown"}
               </span>
               , but your connected wallet is{" "}
               <span className="font-mono text-amber-300 break-all">
-                {`${connectedWalletAddress!.slice(0, 6)}…${connectedWalletAddress!.slice(-4)}`}
+                {`${connectedWalletAddress!.slice(
+                  0,
+                  6
+                )}…${connectedWalletAddress!.slice(-4)}`}
               </span>
               .
             </p>
           </div>
         </div>
       )}
-{/* ── Already cancelled warning ──────────────────────────────────── */}
+      {/* ── Already cancelled warning ──────────────────────────────────── */}
       {!!stream && Number(stream.status) === 3 && (
         <div className="mb-5 bg-rose-950/20 border border-rose-500/20 rounded-2xl p-4 flex items-start gap-3">
           <AlertTriangle className="w-4 h-4 text-rose-400 shrink-0 mt-0.5" />
           <p className="text-[11px] text-rose-300/80 leading-relaxed">
-            This stream has been <strong className="text-rose-300">cancelled</strong>. There are no
-            tokens left to withdraw — any unwithdrawn vested amount was settled on cancellation.
+            This stream has been{" "}
+            <strong className="text-rose-300">cancelled</strong>. There are no
+            tokens left to withdraw — any unwithdrawn vested amount was settled
+            on cancellation.
           </p>
         </div>
       )}
@@ -1251,7 +1321,9 @@ const canSubmit =
                 className="p-1 rounded-lg text-zinc-500 hover:text-zinc-300 hover:bg-zinc-800/60 transition-all disabled:opacity-40"
               >
                 <RefreshCw
-                  className={`w-3 h-3 ${feeEstimate.loading ? "animate-spin" : ""}`}
+                  className={`w-3 h-3 ${
+                    feeEstimate.loading ? "animate-spin" : ""
+                  }`}
                 />
               </button>
             </div>
@@ -1300,7 +1372,7 @@ const canSubmit =
             </div>
           </div>
         </div>
-      ) :(!stream || Number(stream.status) !== 3) ? (
+      ) : !stream || Number(stream.status) !== 3 ? (
         /* ── Stream not found — tampilkan fee card standalone ── */
         <div className="mt-5 rounded-2xl border border-amber-500/20 bg-amber-950/10 overflow-hidden mb-5">
           <div className="flex items-center justify-between gap-3 px-4 py-3 border-b border-amber-500/10">
@@ -1330,7 +1402,9 @@ const canSubmit =
               className="p-1 rounded-lg text-zinc-500 hover:text-zinc-300 hover:bg-zinc-800/60 transition-all disabled:opacity-40"
             >
               <RefreshCw
-                className={`w-3 h-3 ${feeEstimate.loading ? "animate-spin" : ""}`}
+                className={`w-3 h-3 ${
+                  feeEstimate.loading ? "animate-spin" : ""
+                }`}
               />
             </button>
           </div>
@@ -1378,7 +1452,7 @@ const canSubmit =
             </div>
           </div>
         </div>
-      ):null}
+      ) : null}
 
       {/* Stream not found hint */}
       {withdrawForm.streamId.trim() && !stream && (
@@ -1401,18 +1475,16 @@ const canSubmit =
             : "bg-indigo-600 hover:bg-indigo-700 hover:shadow-indigo-500/20"
         }`}
       >
-        {isSubmitting ? (
-          <RefreshCw className="w-4 h-4 animate-spin" />
-        ) : null}
-    {!connected
-  ? "Connect wallet to withdraw"
-  : isWrongWallet
-  ? "Wrong wallet — switch to recipient wallet"
-  : !!stream && Number(stream.status) === 3
-  ? "Stream cancelled — cannot withdraw"
-  : !withdrawPreview?.hasClaimable && withdrawPreview
-  ? "No tokens to claim yet"
-  : getTxLabel()}
+        {isSubmitting ? <RefreshCw className="w-4 h-4 animate-spin" /> : null}
+        {!connected
+          ? "Connect wallet to withdraw"
+          : isWrongWallet
+          ? "Wrong wallet — switch to recipient wallet"
+          : !!stream && Number(stream.status) === 3
+          ? "Stream cancelled — cannot withdraw"
+          : !withdrawPreview?.hasClaimable && withdrawPreview
+          ? "No tokens to claim yet"
+          : getTxLabel()}
       </button>
     </div>
   );
@@ -1441,7 +1513,9 @@ function CancelPanel({
 
   // ── Resolve stream dari streams[] ──────────────────────────────────────
   const stream = useMemo(
-    () => streams.find((s) => String(s?.id || "") === cancelForm.streamId.trim()) ?? null,
+    () =>
+      streams.find((s) => String(s?.id || "") === cancelForm.streamId.trim()) ??
+      null,
     [streams, cancelForm.streamId]
   );
 
@@ -1451,7 +1525,7 @@ function CancelPanel({
     !!stream &&
     !!connectedWalletAddress &&
     stream.creator?.toLowerCase() !== connectedWalletAddress.toLowerCase();
-const isNotConnected = !connectedWalletAddress;
+  const isNotConnected = !connectedWalletAddress;
 
   // ── Already cancelled / completed guards ───────────────────────────────
   const isAlreadyCancelled = !!stream && Number(stream.status) === 3;
@@ -1461,9 +1535,11 @@ const isNotConnected = !connectedWalletAddress;
   const cancelPreview = useMemo(() => {
     // Don't compute/show a breakdown for streams that are already
     // cancelled or completed — there's nothing left to cancel.
-    if (!stream || Number(stream.status) === 3 || Number(stream.status) === 2) return null;
+    if (!stream || Number(stream.status) === 3 || Number(stream.status) === 2)
+      return null;
 
-    const decimals = typeof stream.mintDecimals === "number" ? stream.mintDecimals : 6;
+    const decimals =
+      typeof stream.mintDecimals === "number" ? stream.mintDecimals : 6;
     const nowTs = Math.floor(Date.now() / 1000);
     const totalBase = parseBaseUnits(stream.totalAmount);
     const withdrawnBase = parseBaseUnits(stream.withdrawn ?? 0);
@@ -1477,7 +1553,9 @@ const isNotConnected = !connectedWalletAddress;
 
     if (vestingType === 2) {
       // Milestone: vested = unlocked milestone amount
-      vestedBase = parseBaseUnits(stream.unlockedAmount ?? stream.unlocked_milestone_amount ?? 0);
+      vestedBase = parseBaseUnits(
+        stream.unlockedAmount ?? stream.unlocked_milestone_amount ?? 0
+      );
     } else if (nowTs < startTs) {
       vestedBase = BigInt(0);
     } else if (vestingType === 1 && nowTs < cliffTs) {
@@ -1497,9 +1575,12 @@ const isNotConnected = !connectedWalletAddress;
       totalBase > vestedBase ? totalBase - vestedBase : BigInt(0);
 
     const fmt = (v: bigint) =>
-      Number(formatBaseUnitsToTokenAmount(v, decimals)).toLocaleString(undefined, {
-        maximumFractionDigits: decimals,
-      });
+      Number(formatBaseUnitsToTokenAmount(v, decimals)).toLocaleString(
+        undefined,
+        {
+          maximumFractionDigits: decimals,
+        }
+      );
 
     return {
       total: fmt(totalBase),
@@ -1530,8 +1611,12 @@ const isNotConnected = !connectedWalletAddress;
   return (
     <div className="animate-in fade-in-30 duration-200">
       <div className="border-b border-zinc-900 pb-4 mb-6">
-        <h2 className="text-2xl font-extrabold tracking-tight">Cancel Stream</h2>
-        <p className="text-xs text-zinc-400">Cancel vesting and refund remaining locked tokens back to creator</p>
+        <h2 className="text-2xl font-extrabold tracking-tight">
+          Cancel Stream
+        </h2>
+        <p className="text-xs text-zinc-400">
+          Cancel vesting and refund remaining locked tokens back to creator
+        </p>
       </div>
 
       {/* Stream ID */}
@@ -1542,7 +1627,9 @@ const isNotConnected = !connectedWalletAddress;
         <input
           type="text"
           value={cancelForm.streamId}
-          onChange={(e) => setCancelForm({ ...cancelForm, streamId: e.target.value })}
+          onChange={(e) =>
+            setCancelForm({ ...cancelForm, streamId: e.target.value })
+          }
           className="w-full bg-zinc-950 border border-zinc-800 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:border-zinc-600 font-mono"
           placeholder="Paste stream PDA address"
         />
@@ -1553,7 +1640,9 @@ const isNotConnected = !connectedWalletAddress;
         <div className="mb-5 bg-amber-950/30 border border-amber-500/30 rounded-2xl p-4 flex items-start gap-3">
           <AlertTriangle className="w-4 h-4 text-amber-400 shrink-0 mt-0.5" />
           <div>
-            <p className="text-[11px] font-bold text-amber-300 mb-1">Wrong wallet connected</p>
+            <p className="text-[11px] font-bold text-amber-300 mb-1">
+              Wrong wallet connected
+            </p>
             <p className="text-[11px] text-amber-300/70 leading-relaxed">
               Only the stream creator can cancel. This stream was created by{" "}
               <span className="font-mono text-amber-300 break-all">
@@ -1563,20 +1652,25 @@ const isNotConnected = !connectedWalletAddress;
               </span>
               , but your connected wallet is{" "}
               <span className="font-mono text-amber-300 break-all">
-                {`${connectedWalletAddress!.slice(0, 6)}…${connectedWalletAddress!.slice(-4)}`}
+                {`${connectedWalletAddress!.slice(
+                  0,
+                  6
+                )}…${connectedWalletAddress!.slice(-4)}`}
               </span>
               .
             </p>
           </div>
         </div>
       )}
-{/* ── Already cancelled / completed warning ──────────────────────── */}
+      {/* ── Already cancelled / completed warning ──────────────────────── */}
       {(isAlreadyCancelled || isAlreadyCompleted) && (
         <div className="mb-5 bg-zinc-900/60 border border-zinc-700 rounded-2xl p-4 flex items-start gap-3">
           <AlertTriangle className="w-4 h-4 text-zinc-400 shrink-0 mt-0.5" />
           <div>
             <p className="text-[11px] font-bold text-zinc-300 mb-1">
-              {isAlreadyCancelled ? "Stream already cancelled" : "Stream already completed"}
+              {isAlreadyCancelled
+                ? "Stream already cancelled"
+                : "Stream already completed"}
             </p>
             <p className="text-[11px] text-zinc-500 leading-relaxed">
               {isAlreadyCancelled
@@ -1611,7 +1705,9 @@ const isNotConnected = !connectedWalletAddress;
             <div className="flex items-center justify-between px-4 py-3">
               <div className="flex items-center gap-2">
                 <div className="w-2 h-2 rounded-full bg-emerald-400 shrink-0" />
-                <span className="text-xs text-zinc-400">Returned to creator</span>
+                <span className="text-xs text-zinc-400">
+                  Returned to creator
+                </span>
               </div>
               <span className="font-mono text-sm font-bold text-emerald-400">
                 {cancelPreview.returnedToCreator}
@@ -1622,7 +1718,9 @@ const isNotConnected = !connectedWalletAddress;
             <div className="flex items-center justify-between px-4 py-3">
               <div className="flex items-center gap-2">
                 <div className="w-2 h-2 rounded-full bg-amber-400 shrink-0" />
-                <span className="text-xs text-zinc-400">Claimable by recipient</span>
+                <span className="text-xs text-zinc-400">
+                  Claimable by recipient
+                </span>
               </div>
               <span className="font-mono text-sm font-bold text-amber-400">
                 {cancelPreview.claimableForRecipient}
@@ -1633,7 +1731,9 @@ const isNotConnected = !connectedWalletAddress;
             <div className="flex items-center justify-between px-4 py-3">
               <div className="flex items-center gap-2">
                 <div className="w-2 h-2 rounded-full bg-zinc-600 shrink-0" />
-                <span className="text-xs text-zinc-500">Already withdrawn (non-refundable)</span>
+                <span className="text-xs text-zinc-500">
+                  Already withdrawn (non-refundable)
+                </span>
               </div>
               <span className="font-mono text-sm font-bold text-zinc-500">
                 {cancelPreview.withdrawn}
@@ -1642,7 +1742,9 @@ const isNotConnected = !connectedWalletAddress;
 
             {/* Total */}
             <div className="flex items-center justify-between px-4 py-3 bg-zinc-950/40">
-              <span className="text-xs font-bold text-zinc-400">Total locked</span>
+              <span className="text-xs font-bold text-zinc-400">
+                Total locked
+              </span>
               <span className="font-mono text-sm font-bold text-zinc-200">
                 {cancelPreview.total}
               </span>
@@ -1654,7 +1756,9 @@ const isNotConnected = !connectedWalletAddress;
             <div className="px-4 py-3 border-t border-zinc-900 bg-amber-950/10 flex items-start gap-2">
               <AlertTriangle className="w-3.5 h-3.5 text-amber-400 shrink-0 mt-0.5" />
               <p className="text-[10px] text-amber-300/80 leading-relaxed">
-                All tokens are already vested — nothing would be returned to the creator, so this stream can no longer be cancelled. Let the recipient withdraw the remaining tokens instead.
+                All tokens are already vested — nothing would be returned to the
+                creator, so this stream can no longer be cancelled. Let the
+                recipient withdraw the remaining tokens instead.
               </p>
             </div>
           )}
@@ -1665,7 +1769,10 @@ const isNotConnected = !connectedWalletAddress;
       {cancelForm.streamId.trim() && !stream && (
         <div className="mb-5 bg-zinc-900/40 border border-zinc-800 rounded-xl px-4 py-3 flex items-center gap-2">
           <div className="w-1.5 h-1.5 rounded-full bg-zinc-600" />
-          <span className="text-[11px] text-zinc-500">Stream not found in local index — preview unavailable until the indexer syncs.</span>
+          <span className="text-[11px] text-zinc-500">
+            Stream not found in local index — preview unavailable until the
+            indexer syncs.
+          </span>
         </div>
       )}
 
@@ -1673,13 +1780,15 @@ const isNotConnected = !connectedWalletAddress;
       <div className="bg-rose-950/20 border border-rose-500/20 rounded-2xl p-4 mb-6 flex items-start gap-3">
         <AlertTriangle className="w-4 h-4 text-rose-400 shrink-0 mt-0.5" />
         <p className="text-[11px] text-rose-300/80 leading-relaxed">
-          Cancelling a stream is <strong className="text-rose-300">permanent</strong>. The recipient will lose access
-          to all unvested tokens. Locked funds will be returned to the creator wallet on-chain.
+          Cancelling a stream is{" "}
+          <strong className="text-rose-300">permanent</strong>. The recipient
+          will lose access to all unvested tokens. Locked funds will be returned
+          to the creator wallet on-chain.
         </p>
       </div>
 
       {/* Trigger button */}
-  <button
+      <button
         disabled={!canSubmit || paused}
         onClick={() => setShowDialog(true)}
         className={`w-full font-bold text-xs py-3 rounded-xl transition-all shadow-lg flex items-center justify-center gap-2 ${
@@ -1688,7 +1797,11 @@ const isNotConnected = !connectedWalletAddress;
             : "bg-rose-950/30 hover:bg-rose-600 text-rose-400 hover:text-white border border-rose-500/30 hover:border-rose-600 hover:shadow-rose-900/30"
         }`}
       >
-        {isSubmitting ? <RefreshCw className="w-4 h-4 animate-spin" /> : <XCircle className="w-4 h-4" />}
+        {isSubmitting ? (
+          <RefreshCw className="w-4 h-4 animate-spin" />
+        ) : (
+          <XCircle className="w-4 h-4" />
+        )}
         {isNotConnected
           ? "Connect wallet to cancel"
           : isWrongWallet
@@ -1745,7 +1858,10 @@ type Props = {
   downloadTemplate: (mode: "create" | "edit") => void;
   fileInputCreateRef: RefObject<HTMLInputElement | null>;
   fileInputEditRef: RefObject<HTMLInputElement | null>;
-  handleCsvUpload: (e: ChangeEvent<HTMLInputElement>, mode: "create" | "edit") => void;
+  handleCsvUpload: (
+    e: ChangeEvent<HTMLInputElement>,
+    mode: "create" | "edit"
+  ) => void;
   withdrawForm: any;
   setWithdrawForm: (value: any) => void;
   cancelForm: any;
@@ -1766,7 +1882,7 @@ type Props = {
   connected: boolean;
   endpoint: string;
   streams: any[];
-connectedWalletAddress: string | null;
+  connectedWalletAddress: string | null;
   paused?: boolean;
 };
 const BASE58_REGEX = /^[1-9A-HJ-NP-Za-km-z]{32,44}$/;
@@ -1841,56 +1957,80 @@ export function DashboardActionPanels(props: Props) {
 
   const recipientHistory = useAddressHistory("recipient");
   const mintHistory = useAddressHistory("mint");
- 
+
   const mintPickerRef = useRef<HTMLDivElement | null>(null);
   const [mintMenuOpen, setMintMenuOpen] = useState(false);
-  const [cliffInputMode, setCliffInputMode] = useState<"duration" | "date">("duration");
-  const [durationInputMode, setDurationInputMode] = useState<"duration" | "date">("duration");
+  const [cliffInputMode, setCliffInputMode] = useState<"duration" | "date">(
+    "duration"
+  );
+  const [durationInputMode, setDurationInputMode] = useState<
+    "duration" | "date"
+  >("duration");
   const feeEstimate = useFeeEstimate();
   const csvMilestoneValidation = useCsvMilestoneValidation(csvCreateText);
   const csvEditMilestoneValidation = useCsvMilestoneValidation(csvEditText);
   const csvEditIdValidation = useCsvIdValidation(csvEditText, streams, true);
-  const csvDurationValidation = useCsvDurationValidation(csvCreateText, "create", streams);
-  const csvEditDurationValidation = useCsvDurationValidation(csvEditText, "edit", streams);
+  const csvDurationValidation = useCsvDurationValidation(
+    csvCreateText,
+    "create",
+    streams
+  );
+  const csvEditDurationValidation = useCsvDurationValidation(
+    csvEditText,
+    "edit",
+    streams
+  );
   // ─── Solana pubkey validator ──────────────────────────────────────────────
 
   // ── Resolve mint dari stream yang sedang diedit ───────────────────────────
-const editLinearStream = useMemo(
-  () => streams.find((s) => String(s?.id || "") === editLinearForm.streamId) ?? null,
-  [streams, editLinearForm.streamId]
-);
-const editMilestoneStream = useMemo(
-  () => streams.find((s) => String(s?.id || "") === editMilestoneForm.streamId) ?? null,
-  [streams, editMilestoneForm.streamId]
-);
+  const editLinearStream = useMemo(
+    () =>
+      streams.find((s) => String(s?.id || "") === editLinearForm.streamId) ??
+      null,
+    [streams, editLinearForm.streamId]
+  );
+  const editMilestoneStream = useMemo(
+    () =>
+      streams.find((s) => String(s?.id || "") === editMilestoneForm.streamId) ??
+      null,
+    [streams, editMilestoneForm.streamId]
+  );
 
-const editLinearMint = editLinearStream?.mint ?? "";
-const editMilestoneMint = editMilestoneStream?.mint ?? "";
+  const editLinearMint = editLinearStream?.mint ?? "";
+  const editMilestoneMint = editMilestoneStream?.mint ?? "";
 
-const editLinearDecimals = typeof editLinearStream?.mintDecimals === "number"
-  ? editLinearStream.mintDecimals : 6;
-const editMilestoneBalanceDecimals = typeof editMilestoneStream?.mintDecimals === "number"
-  ? editMilestoneStream.mintDecimals : 6;
+  const editLinearDecimals =
+    typeof editLinearStream?.mintDecimals === "number"
+      ? editLinearStream.mintDecimals
+      : 6;
+  const editMilestoneBalanceDecimals =
+    typeof editMilestoneStream?.mintDecimals === "number"
+      ? editMilestoneStream.mintDecimals
+      : 6;
 
-const editLinearBalance = useTokenBalance(editLinearMint, endpoint, editLinearDecimals);
-const editMilestoneBalance = useTokenBalance(editMilestoneMint, endpoint, editMilestoneBalanceDecimals);
+  const editLinearBalance = useTokenBalance(
+    editLinearMint,
+    endpoint,
+    editLinearDecimals
+  );
+  const editMilestoneBalance = useTokenBalance(
+    editMilestoneMint,
+    endpoint,
+    editMilestoneBalanceDecimals
+  );
 
-
-// ── Validasi topup linear ─────────────────────────────────────────────────
-const editLinearTopupNum = parseFloat(String(editLinearForm.topupAmount ?? "")) || 0;
-const editLinearExceedsBalance =
-  editLinearBalance.balance !== null &&
-  editLinearTopupNum > 0 &&
-  editLinearTopupNum > editLinearBalance.balance;
-
-
-
-
+  // ── Validasi topup linear ─────────────────────────────────────────────────
+  const editLinearTopupNum =
+    parseFloat(String(editLinearForm.topupAmount ?? "")) || 0;
+  const editLinearExceedsBalance =
+    editLinearBalance.balance !== null &&
+    editLinearTopupNum > 0 &&
+    editLinearTopupNum > editLinearBalance.balance;
 
   const withdrawFeeUsd =
-  feeEstimate.solCost && feeEstimate.solPrice
-    ? feeEstimate.solCost * feeEstimate.solPrice
-    : null;
+    feeEstimate.solCost && feeEstimate.solPrice
+      ? feeEstimate.solCost * feeEstimate.solPrice
+      : null;
   // ─── FIX: Auto-populate startDate with a future default when type is non-milestone ───
   useEffect(() => {
     if (createForm.type === "2") return;
@@ -1898,7 +2038,9 @@ const editLinearExceedsBalance =
     const getFutureIso = () => {
       const d = new Date(Date.now() + 60_000);
       const pad = (n: number) => String(n).padStart(2, "0");
-      return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+      return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(
+        d.getDate()
+      )}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
     };
 
     if (!createForm.startDate) {
@@ -1911,7 +2053,12 @@ const editLinearExceedsBalance =
         if (!prev.startDate) return { ...prev, startDate: getFutureIso() };
         const ms = new Date(prev.startDate).getTime();
         if (Number.isFinite(ms) && ms <= Date.now()) {
-          return { ...prev, startDate: getFutureIso(), endDate: "", cliffDate: "" };
+          return {
+            ...prev,
+            startDate: getFutureIso(),
+            endDate: "",
+            cliffDate: "",
+          };
         }
         return prev;
       });
@@ -1926,10 +2073,15 @@ const editLinearExceedsBalance =
     [milestoneAmounts]
   );
   const hasInvalidMilestones = useMemo(
-    () => milestoneAmounts.some((value) => !value || Number(value) <= 0 || !Number.isFinite(Number(value))),
+    () =>
+      milestoneAmounts.some(
+        (value) =>
+          !value || Number(value) <= 0 || !Number.isFinite(Number(value))
+      ),
     [milestoneAmounts]
   );
-  const milestonesMatchTotal = Math.abs(milestoneSum - Number(createForm.amount || 0)) < 0.0000001;
+  const milestonesMatchTotal =
+    Math.abs(milestoneSum - Number(createForm.amount || 0)) < 0.0000001;
 
   const durationSeconds = Number(createForm.duration || 0);
   const cliffDurationSeconds = Number(createForm.cliffDuration || 0);
@@ -1940,7 +2092,8 @@ const editLinearExceedsBalance =
   })();
   const startDateInPast = createForm.type !== "2" && startDateMs <= Date.now();
 
-  const cliffExceedsDuration = createForm.type === "1" && cliffDurationSeconds > durationSeconds;
+  const cliffExceedsDuration =
+    createForm.type === "1" && cliffDurationSeconds > durationSeconds;
   const cliffDateInPast =
     createForm.type === "1" &&
     Boolean(createForm.cliffDuration?.trim()) &&
@@ -1954,7 +2107,9 @@ const editLinearExceedsBalance =
     if (createForm.startDate) return createForm.startDate;
     const d = new Date(Date.now() + 10_000);
     const pad = (n: number) => String(n).padStart(2, "0");
-    return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+    return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(
+      d.getDate()
+    )}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
   })();
   const cliffDateInLocalIso = (() => {
     if (createForm.cliffDate) return createForm.cliffDate;
@@ -1962,7 +2117,9 @@ const editLinearExceedsBalance =
     if (!Number.isFinite(seconds) || seconds <= 0) return "";
     const d = new Date(startDateMs + seconds * 1000);
     const pad = (n: number) => String(n).padStart(2, "0");
-    return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+    return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(
+      d.getDate()
+    )}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
   })();
   const endDateInLocalIso = (() => {
     if (createForm.endDate) return createForm.endDate;
@@ -1970,24 +2127,27 @@ const editLinearExceedsBalance =
     if (!Number.isFinite(seconds) || seconds <= 0) return "";
     const d = new Date(startDateMs + seconds * 1000);
     const pad = (n: number) => String(n).padStart(2, "0");
-    return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+    return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(
+      d.getDate()
+    )}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
   })();
 
-
-  const selectedMintPreset = mintPresets.find((preset) => preset.mint === createForm.mint) ?? null;
+  const selectedMintPreset =
+    mintPresets.find((preset) => preset.mint === createForm.mint) ?? null;
   const tokenBalance = useTokenBalance(
-  createForm.mint,
-  endpoint,
-  selectedMintPreset?.decimals
-);
-const recipientInvalid =
-  Boolean(createForm.recipient?.trim()) &&
-  !isValidSolanaAddress(createForm.recipient);
-const exceedsBalance =
-  tokenBalance.balance !== null &&
-  Boolean(createForm.amount?.trim()) &&
-  Number(createForm.amount) > tokenBalance.balance;
-  const mobileNarrowFormClass = "mx-auto w-full max-w-[22rem] sm:max-w-none sm:mx-0";
+    createForm.mint,
+    endpoint,
+    selectedMintPreset?.decimals
+  );
+  const recipientInvalid =
+    Boolean(createForm.recipient?.trim()) &&
+    !isValidSolanaAddress(createForm.recipient);
+  const exceedsBalance =
+    tokenBalance.balance !== null &&
+    Boolean(createForm.amount?.trim()) &&
+    Number(createForm.amount) > tokenBalance.balance;
+  const mobileNarrowFormClass =
+    "mx-auto w-full max-w-[22rem] sm:max-w-none sm:mx-0";
   const getTxLabel = (action: string, idleLabel: string) => {
     if (activeTxAction !== action || !activeTxPhase) return idleLabel;
     if (activeTxPhase === "wallet_approval") return "Approve In Wallet...";
@@ -2000,70 +2160,78 @@ const exceedsBalance =
     Boolean(createForm.mint?.trim()) &&
     Boolean(createForm.type?.trim()) &&
     (createForm.type === "2" || Boolean(createForm.startDate?.trim())) &&
-    (createForm.type === "2" ? Boolean(createForm.milestoneCount?.trim()) : Boolean(createForm.duration?.trim())) &&
+    (createForm.type === "2"
+      ? Boolean(createForm.milestoneCount?.trim())
+      : Boolean(createForm.duration?.trim())) &&
     (createForm.type !== "1" || Boolean(createForm.cliffDuration?.trim()));
-const createDisabled =
-  paused ||
-  !connected ||
-  !createRequiredValid ||
-  startDateInPast ||
-  cliffExceedsDuration ||
-  cliffDateInPast ||
-  endDateInPast ||
-  exceedsBalance ||
-  recipientInvalid ||   // ← tambah ini
-  (createForm.type === "2" && (hasInvalidMilestones || !milestonesMatchTotal)) ||
-  activeTxAction === "create_stream";
-const csvTotalByMint = useCsvTotalByMint(csvCreateText);
-const csvExceedsBalance =
-  !!createForm.mint &&
-  tokenBalance.balance !== null &&
-  (csvTotalByMint[createForm.mint] ?? 0) > tokenBalance.balance;
+  const createDisabled =
+    paused ||
+    !connected ||
+    !createRequiredValid ||
+    startDateInPast ||
+    cliffExceedsDuration ||
+    cliffDateInPast ||
+    endDateInPast ||
+    exceedsBalance ||
+    recipientInvalid || // ← tambah ini
+    (createForm.type === "2" &&
+      (hasInvalidMilestones || !milestonesMatchTotal)) ||
+    activeTxAction === "create_stream";
+  const csvTotalByMint = useCsvTotalByMint(csvCreateText);
+  const csvExceedsBalance =
+    !!createForm.mint &&
+    tokenBalance.balance !== null &&
+    (csvTotalByMint[createForm.mint] ?? 0) > tokenBalance.balance;
 
-// Same inputs the CsvValidationPanel uses, so the gate and the displayed
-// validation panel always agree on whether the CSV is acceptable.
-const csvWalletDecimals = tokenBalance.decimals ?? selectedMintPreset?.decimals ?? 6;
-const csvStructuralValidation = useCsvStructuralValidation(csvCreateText, "create", {
-  mintPresets,
-  selectedMint: createForm.mint,
-  fallbackDecimals: csvWalletDecimals,
-});
-const csvEditStructuralValidation = useCsvStructuralValidation(csvEditText, "edit", {
-  mintPresets,
-  knownStreams: streams,
-});
+  // Same inputs the CsvValidationPanel uses, so the gate and the displayed
+  // validation panel always agree on whether the CSV is acceptable.
+  const csvWalletDecimals =
+    tokenBalance.decimals ?? selectedMintPreset?.decimals ?? 6;
+  const csvStructuralValidation = useCsvStructuralValidation(
+    csvCreateText,
+    "create",
+    {
+      mintPresets,
+      selectedMint: createForm.mint,
+      fallbackDecimals: csvWalletDecimals,
+    }
+  );
+  const csvEditStructuralValidation = useCsvStructuralValidation(
+    csvEditText,
+    "edit",
+    {
+      mintPresets,
+      knownStreams: streams,
+    }
+  );
 
-const createCsvDisabled =
-  paused ||
-  !connected ||
-  !csvCreateText?.trim() ||
-  activeTxAction === "create_stream_csv" ||
-  csvMilestoneValidation.hasErrors ||
-  csvDurationValidation.hasErrors || // ← validasi duration/cliff per baris
-  csvStructuralValidation.hasErrors || // ← validasi struktur/konten per baris
-  csvExceedsBalance ||
-  !createDiffFresh; // ← gate wajib: diff terkini harus ditinjau dulu
-const csvEditTotalByMint = useCsvEditTotalByMint(csvEditText);
-const csvEditExceedsBalance =
-  !!createForm.mint &&
-  tokenBalance.balance !== null &&
-  (csvEditTotalByMint[createForm.mint] ?? 0) > tokenBalance.balance;
+  const createCsvDisabled =
+    paused ||
+    !connected ||
+    !csvCreateText?.trim() ||
+    activeTxAction === "create_stream_csv" ||
+    csvMilestoneValidation.hasErrors ||
+    csvDurationValidation.hasErrors || // ← validasi duration/cliff per baris
+    csvStructuralValidation.hasErrors || // ← validasi struktur/konten per baris
+    csvExceedsBalance ||
+    !createDiffFresh; // ← gate wajib: diff terkini harus ditinjau dulu
+  const csvEditTotalByMint = useCsvEditTotalByMint(csvEditText, streams);
+  const csvEditExceedsBalance =
+    !!createForm.mint &&
+    tokenBalance.balance !== null &&
+    (csvEditTotalByMint[createForm.mint] ?? 0) > tokenBalance.balance;
 
-const editCsvDisabled =
-  paused ||
-  !connected ||
-  !csvEditText?.trim() ||
-  activeTxAction === "edit_stream_csv" ||
-  csvEditMilestoneValidation.hasErrors ||
-  csvEditIdValidation.hasErrors || // ← blok apply kalau ada id ngawur
-  csvEditDurationValidation.hasErrors || // ← validasi duration/cliff per baris
-  csvEditStructuralValidation.hasErrors || // ← validasi struktur/konten per baris
-  csvEditExceedsBalance ||
-  !editDiffFresh; // ← gate wajib: diff terkini harus ditinjau dulu
-
-
-
-
+  const editCsvDisabled =
+    paused ||
+    !connected ||
+    !csvEditText?.trim() ||
+    activeTxAction === "edit_stream_csv" ||
+    csvEditMilestoneValidation.hasErrors ||
+    csvEditIdValidation.hasErrors || // ← blok apply kalau ada id ngawur
+    csvEditDurationValidation.hasErrors || // ← validasi duration/cliff per baris
+    csvEditStructuralValidation.hasErrors || // ← validasi struktur/konten per baris
+    csvEditExceedsBalance ||
+    !editDiffFresh; // ← gate wajib: diff terkini harus ditinjau dulu
 
   useEffect(() => {
     const handlePointerDown = (event: MouseEvent | PointerEvent) => {
@@ -2091,8 +2259,13 @@ const editCsvDisabled =
               <Shield className="w-5 h-5 text-indigo-400" />
             </div>
             <div>
-              <h4 className="text-xs font-bold text-zinc-200">Squads Multisig Execution</h4>
-              <p className="text-[10px] text-zinc-400">Enable this option to bundle your action as a Squads multisig proposal instead of executing directly.</p>
+              <h4 className="text-xs font-bold text-zinc-200">
+                Squads Multisig Execution
+              </h4>
+              <p className="text-[10px] text-zinc-400">
+                Enable this option to bundle your action as a Squads multisig
+                proposal instead of executing directly.
+              </p>
             </div>
           </div>
 
@@ -2104,7 +2277,10 @@ const editCsvDisabled =
               onChange={(e) => setUseMultisig(e.target.checked)}
               className="w-4 h-4 rounded border-zinc-800 text-indigo-600 bg-zinc-950 focus:ring-0 focus:ring-offset-0 cursor-pointer"
             />
-            <label htmlFor="multisig-toggle" className="text-xs font-bold text-zinc-300 cursor-pointer select-none">
+            <label
+              htmlFor="multisig-toggle"
+              className="text-xs font-bold text-zinc-300 cursor-pointer select-none"
+            >
               Use Squads Multisig
             </label>
           </div>
@@ -2114,24 +2290,40 @@ const editCsvDisabled =
       {activeTab === "create_streams" && (
         <div className="animate-in fade-in-30 duration-200 overflow-x-hidden max-w-full">
           {/* Devnet-only: faucets / test-token guidance don't apply on mainnet/testnet. */}
-          {(endpoint.includes("devnet") || endpoint.includes("localhost") || endpoint.includes("127.0.0.1")) && (
+          {(endpoint.includes("devnet") ||
+            endpoint.includes("localhost") ||
+            endpoint.includes("127.0.0.1")) && (
             <PreflightChecklist endpoint={endpoint} />
           )}
           <div className="flex flex-col gap-4 border-b border-zinc-900 pb-4 mb-6 sm:flex-row sm:items-center sm:justify-between max-w-full min-w-0">
             <div className="min-w-0 max-w-full">
-              <h2 className="text-2xl font-extrabold tracking-tight">Create Stream</h2>
-              <p className="text-xs text-zinc-400">Deploy a manual stream or deploy multiple streams via CSV</p>
+              <h2 className="text-2xl font-extrabold tracking-tight">
+                Create Stream
+              </h2>
+              <p className="text-xs text-zinc-400">
+                Deploy a manual stream or deploy multiple streams via CSV
+              </p>
             </div>
-            <div className={`flex w-full max-w-full min-w-0 flex-col gap-2 rounded-2xl border border-zinc-800 bg-zinc-950 p-1 sm:w-auto sm:flex-row ${mobileNarrowFormClass}`}>
+            <div
+              className={`flex w-full max-w-full min-w-0 flex-col gap-2 rounded-2xl border border-zinc-800 bg-zinc-950 p-1 sm:w-auto sm:flex-row ${mobileNarrowFormClass}`}
+            >
               <button
                 onClick={() => setCreateMode("manual")}
-                className={`w-full px-3 py-2 rounded-xl text-xs font-bold transition-all sm:w-auto ${createMode === "manual" ? "bg-indigo-600 text-white" : "text-zinc-400 hover:text-zinc-200"}`}
+                className={`w-full px-3 py-2 rounded-xl text-xs font-bold transition-all sm:w-auto ${
+                  createMode === "manual"
+                    ? "bg-indigo-600 text-white"
+                    : "text-zinc-400 hover:text-zinc-200"
+                }`}
               >
                 Manual Form
               </button>
               <button
                 onClick={() => setCreateMode("csv")}
-                className={`w-full px-3 py-2 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-1.5 sm:w-auto ${createMode === "csv" ? "bg-indigo-600 text-white" : "text-zinc-400 hover:text-zinc-200"}`}
+                className={`w-full px-3 py-2 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-1.5 sm:w-auto ${
+                  createMode === "csv"
+                    ? "bg-indigo-600 text-white"
+                    : "text-zinc-400 hover:text-zinc-200"
+                }`}
               >
                 CSV Bulk Create
               </button>
@@ -2139,118 +2331,141 @@ const editCsvDisabled =
           </div>
 
           {createMode === "manual" ? (
-            <div className={`grid min-w-0 gap-4 md:grid-cols-2 max-w-full ${mobileNarrowFormClass}`}>
+            <div
+              className={`grid min-w-0 gap-4 md:grid-cols-2 max-w-full ${mobileNarrowFormClass}`}
+            >
               <div className="md:col-span-2 min-w-0 max-w-full">
-  <label className="block text-[10px] sm:text-xs font-semibold text-zinc-400 uppercase tracking-wider mb-1.5">
-    Recipient
-  </label>
-  <input
-    type="text"
-    list="uf-recipient-history" autoComplete="off" 
-    value={createForm.recipient}
-    onBlur={(e) => recipientHistory.remember(e.target.value)}
-    onChange={(e) => setCreateForm({ ...createForm, recipient: e.target.value })}
-    className={`block w-full max-w-full min-w-0 bg-zinc-950 border rounded-xl px-3.5 py-2.5 sm:px-4 sm:py-3 text-sm focus:outline-none font-mono transition-colors ${
-      recipientInvalid
-        ? "border-rose-500/60 focus:border-rose-500"
-        : "border-zinc-800 focus:border-indigo-500"
-    }`}
-    placeholder="Solana wallet address (base58)"
-  />
-   <datalist id="uf-recipient-history">
+                <label className="block text-[10px] sm:text-xs font-semibold text-zinc-400 uppercase tracking-wider mb-1.5">
+                  Recipient
+                </label>
+                <input
+                  type="text"
+                  list="uf-recipient-history"
+                  autoComplete="off"
+                  value={createForm.recipient}
+                  onBlur={(e) => recipientHistory.remember(e.target.value)}
+                  onChange={(e) =>
+                    setCreateForm({ ...createForm, recipient: e.target.value })
+                  }
+                  className={`block w-full max-w-full min-w-0 bg-zinc-950 border rounded-xl px-3.5 py-2.5 sm:px-4 sm:py-3 text-sm focus:outline-none font-mono transition-colors ${
+                    recipientInvalid
+                      ? "border-rose-500/60 focus:border-rose-500"
+                      : "border-zinc-800 focus:border-indigo-500"
+                  }`}
+                  placeholder="Solana wallet address (base58)"
+                />
+                <datalist id="uf-recipient-history">
                   {recipientHistory.addresses.map((addr) => (
                     <option key={addr} value={addr} />
                   ))}
                 </datalist>
-  {recipientInvalid && (
-    <div className="mt-1.5 text-[10px] font-semibold text-rose-400">
-      Invalid Solana address — must be a valid base58 public key (32–44 characters).
-    </div>
-  )}
-  {!recipientInvalid && createForm.recipient?.trim() && (
-    <div className="mt-1.5 text-[10px] font-semibold text-emerald-500 flex items-center gap-1">
-      <Check className="w-3 h-3" /> Valid Solana address
-    </div>
-  )}
-</div>
-              
-             <div className="min-w-0 max-w-full">
-  <label className="block text-[10px] sm:text-xs font-semibold text-zinc-400 uppercase tracking-wider mb-1.5">
-    Amount
-  </label>
-  <div className="relative">
-    <input
-      type="text"
-      inputMode="decimal"
-      lang="en"
-      value={createForm.amount}
-      onChange={(e) =>
-        setCreateForm({
-          ...createForm,
-          amount: normalizeDecimalInput(e.target.value),
-        })
-      }
-      className={`block w-full max-w-full min-w-0 bg-zinc-950 border rounded-xl px-3.5 py-2.5 sm:px-4 sm:py-3 text-sm focus:outline-none font-mono transition-colors ${
-        exceedsBalance
-          ? "border-rose-500/60 focus:border-rose-500"
-          : "border-zinc-800 focus:border-indigo-500"
-      }`}
-    />
-    {/* Max button */}
-    {tokenBalance.balance !== null && tokenBalance.balance > 0 && (
-      <button
-        type="button"
-       onClick={() => {
-  if (tokenBalance.balance === null) return;
-  // Format to avoid 0.9999999... floating point artifacts
-  const dec = tokenBalance.decimals ?? selectedMintPreset?.decimals ?? 6;
-  const formatted = tokenBalance.balance.toFixed(dec).replace(/\.?0+$/, "");
-  setCreateForm({ ...createForm, amount: formatted });
-}}
-        className="absolute inset-y-0 right-3 flex items-center px-2 text-[10px] font-black uppercase tracking-wider text-indigo-400 hover:text-indigo-300 transition-colors"
-      >
-        MAX
-      </button>
-    )}
-  </div>
+                {recipientInvalid && (
+                  <div className="mt-1.5 text-[10px] font-semibold text-rose-400">
+                    Invalid Solana address — must be a valid base58 public key
+                    (32–44 characters).
+                  </div>
+                )}
+                {!recipientInvalid && createForm.recipient?.trim() && (
+                  <div className="mt-1.5 text-[10px] font-semibold text-emerald-500 flex items-center gap-1">
+                    <Check className="w-3 h-3" /> Valid Solana address
+                  </div>
+                )}
+              </div>
 
- {/* Balance row */}
-<div className="mt-1.5 flex items-center gap-2">
-  {!connected ? null
-  : tokenBalance.loading ? (
-    <span className="text-[10px] font-mono text-zinc-600 animate-pulse">
-      fetching balance…
-    </span>
-  ) : tokenBalance.error ? (
-    <span className="text-[10px] font-mono text-zinc-600">
-      balance unavailable
-    </span>
-  ) : !createForm.mint?.trim() ? null
-  : tokenBalance.balance !== null ? (
-    // ← covers both 0 (no ATA) and >0
-    <span className={`text-[10px] font-mono ${exceedsBalance ? "text-rose-400" : "text-zinc-500"}`}>
-      Balance:{" "}
-      {tokenBalance.balance.toLocaleString(undefined, {
-        maximumFractionDigits: tokenBalance.decimals ?? selectedMintPreset?.decimals ?? 6,
-      })}{" "}
-      {selectedMintPreset?.label ?? ""}
-    </span>
-  ) : null}
-</div>
-
-  {exceedsBalance && (
-    <div className="mt-1 text-[10px] font-semibold text-rose-400">
-      Amount exceeds your wallet balance of{" "}
-      {tokenBalance.balance!.toLocaleString(undefined, {
-        maximumFractionDigits: tokenBalance.decimals ?? 6,
-      })}{" "}
-      {selectedMintPreset?.label ?? "tokens"}.
-    </div>
-  )}
-</div>
               <div className="min-w-0 max-w-full">
-                <label className="block text-[10px] sm:text-xs font-semibold text-zinc-400 uppercase tracking-wider mb-1.5">Mint</label>
-                <div ref={mintPickerRef} className="relative min-w-0 max-w-full overflow-visible">
+                <label className="block text-[10px] sm:text-xs font-semibold text-zinc-400 uppercase tracking-wider mb-1.5">
+                  Amount
+                </label>
+                <div className="relative">
+                  <input
+                    type="text"
+                    inputMode="decimal"
+                    lang="en"
+                    value={createForm.amount}
+                    onChange={(e) =>
+                      setCreateForm({
+                        ...createForm,
+                        amount: normalizeDecimalInput(e.target.value),
+                      })
+                    }
+                    className={`block w-full max-w-full min-w-0 bg-zinc-950 border rounded-xl px-3.5 py-2.5 sm:px-4 sm:py-3 text-sm focus:outline-none font-mono transition-colors ${
+                      exceedsBalance
+                        ? "border-rose-500/60 focus:border-rose-500"
+                        : "border-zinc-800 focus:border-indigo-500"
+                    }`}
+                  />
+                  {/* Max button */}
+                  {tokenBalance.balance !== null &&
+                    tokenBalance.balance > 0 && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          if (tokenBalance.balance === null) return;
+                          // Format to avoid 0.9999999... floating point artifacts
+                          const dec =
+                            tokenBalance.decimals ??
+                            selectedMintPreset?.decimals ??
+                            6;
+                          const formatted = tokenBalance.balance
+                            .toFixed(dec)
+                            .replace(/\.?0+$/, "");
+                          setCreateForm({ ...createForm, amount: formatted });
+                        }}
+                        className="absolute inset-y-0 right-3 flex items-center px-2 text-[10px] font-black uppercase tracking-wider text-indigo-400 hover:text-indigo-300 transition-colors"
+                      >
+                        MAX
+                      </button>
+                    )}
+                </div>
+
+                {/* Balance row */}
+                <div className="mt-1.5 flex items-center gap-2">
+                  {!connected ? null : tokenBalance.loading ? (
+                    <span className="text-[10px] font-mono text-zinc-600 animate-pulse">
+                      fetching balance…
+                    </span>
+                  ) : tokenBalance.error ? (
+                    <span className="text-[10px] font-mono text-zinc-600">
+                      balance unavailable
+                    </span>
+                  ) : !createForm.mint?.trim() ? null : tokenBalance.balance !==
+                    null ? (
+                    // ← covers both 0 (no ATA) and >0
+                    <span
+                      className={`text-[10px] font-mono ${
+                        exceedsBalance ? "text-rose-400" : "text-zinc-500"
+                      }`}
+                    >
+                      Balance:{" "}
+                      {tokenBalance.balance.toLocaleString(undefined, {
+                        maximumFractionDigits:
+                          tokenBalance.decimals ??
+                          selectedMintPreset?.decimals ??
+                          6,
+                      })}{" "}
+                      {selectedMintPreset?.label ?? ""}
+                    </span>
+                  ) : null}
+                </div>
+
+                {exceedsBalance && (
+                  <div className="mt-1 text-[10px] font-semibold text-rose-400">
+                    Amount exceeds your wallet balance of{" "}
+                    {tokenBalance.balance!.toLocaleString(undefined, {
+                      maximumFractionDigits: tokenBalance.decimals ?? 6,
+                    })}{" "}
+                    {selectedMintPreset?.label ?? "tokens"}.
+                  </div>
+                )}
+              </div>
+              <div className="min-w-0 max-w-full">
+                <label className="block text-[10px] sm:text-xs font-semibold text-zinc-400 uppercase tracking-wider mb-1.5">
+                  Mint
+                </label>
+                <div
+                  ref={mintPickerRef}
+                  className="relative min-w-0 max-w-full overflow-visible"
+                >
                   <button
                     type="button"
                     onClick={() => setMintMenuOpen((open) => !open)}
@@ -2259,18 +2474,32 @@ const editCsvDisabled =
                     <div className="flex items-center gap-3 min-w-0">
                       <div
                         className="w-9 h-9 rounded-full overflow-hidden border border-zinc-800 bg-zinc-900 flex items-center justify-center shrink-0"
-                        style={{ boxShadow: selectedMintPreset ? `0 0 0 1px ${selectedMintPreset.accent}33` : undefined }}
+                        style={{
+                          boxShadow: selectedMintPreset
+                            ? `0 0 0 1px ${selectedMintPreset.accent}33`
+                            : undefined,
+                        }}
                       >
                         {selectedMintPreset ? (
-                          <Image src={selectedMintPreset.logoURI} alt={`${selectedMintPreset.label} logo`} width={36} height={36} className="w-full h-full object-cover" />
+                          <Image
+                            src={selectedMintPreset.logoURI}
+                            alt={`${selectedMintPreset.label} logo`}
+                            width={36}
+                            height={36}
+                            className="w-full h-full object-cover"
+                          />
                         ) : (
-                          <span className="text-[10px] font-black text-zinc-400">?</span>
+                          <span className="text-[10px] font-black text-zinc-400">
+                            ?
+                          </span>
                         )}
                       </div>
                       <div className="min-w-0 flex-1 text-left">
                         <div className="flex items-center gap-2 min-w-0">
                           <span className="font-semibold text-zinc-100 truncate">
-                            {selectedMintPreset ? selectedMintPreset.label : "Custom mint"}
+                            {selectedMintPreset
+                              ? selectedMintPreset.label
+                              : "Custom mint"}
                           </span>
                           {selectedMintPreset && (
                             <span className="rounded-full border border-zinc-800 bg-zinc-900 px-1.5 py-0.5 text-[9px] font-black uppercase tracking-wider text-zinc-400">
@@ -2279,23 +2508,36 @@ const editCsvDisabled =
                           )}
                         </div>
                         <div className="hidden sm:block font-mono text-[10px] text-zinc-500 truncate">
-                          {selectedMintPreset ? selectedMintPreset.mint : createForm.mint || "Select or paste a mint address"}
+                          {selectedMintPreset
+                            ? selectedMintPreset.mint
+                            : createForm.mint ||
+                              "Select or paste a mint address"}
                         </div>
                       </div>
                     </div>
-                    <ChevronDown className={`w-4 h-4 text-zinc-500 shrink-0 transition-transform ${mintMenuOpen ? "rotate-180" : ""}`} />
+                    <ChevronDown
+                      className={`w-4 h-4 text-zinc-500 shrink-0 transition-transform ${
+                        mintMenuOpen ? "rotate-180" : ""
+                      }`}
+                    />
                   </button>
 
                   {mintMenuOpen && (
                     <div className="absolute left-0 right-0 top-full z-20 mt-2 w-full max-w-full rounded-2xl border border-zinc-800 bg-zinc-950 shadow-2xl shadow-black/40 overflow-hidden max-h-[72vh]">
                       <div className="flex items-center justify-between gap-3 px-4 py-3 border-b border-zinc-900 bg-zinc-950/95">
                         <div>
-                          <div className="text-[10px] font-black uppercase tracking-[0.24em] text-zinc-500">Known mints for {clusterLabel}</div>
-                          <div className="text-[10px] text-zinc-600">Pick a preset or keep a custom mint below</div>
+                          <div className="text-[10px] font-black uppercase tracking-[0.24em] text-zinc-500">
+                            Known mints for {clusterLabel}
+                          </div>
+                          <div className="text-[10px] text-zinc-600">
+                            Pick a preset or keep a custom mint below
+                          </div>
                         </div>
                         <button
                           type="button"
-                          onClick={() => setCreateForm({ ...createForm, mint: "" })}
+                          onClick={() =>
+                            setCreateForm({ ...createForm, mint: "" })
+                          }
                           className="text-[10px] font-bold text-zinc-400 hover:text-zinc-200"
                         >
                           Clear
@@ -2310,39 +2552,67 @@ const editCsvDisabled =
                               key={preset.mint}
                               type="button"
                               onClick={() => {
-                                setCreateForm({ ...createForm, mint: preset.mint });
+                                setCreateForm({
+                                  ...createForm,
+                                  mint: preset.mint,
+                                });
                                 setMintMenuOpen(false);
                               }}
-                              className={`w-full max-w-full flex items-center justify-between gap-3 rounded-xl border px-3 py-2.5 text-left transition-all overflow-hidden ${active ? "border-indigo-500/70 bg-indigo-500/10" : "border-transparent hover:border-zinc-800 hover:bg-zinc-900/50"}`}
+                              className={`w-full max-w-full flex items-center justify-between gap-3 rounded-xl border px-3 py-2.5 text-left transition-all overflow-hidden ${
+                                active
+                                  ? "border-indigo-500/70 bg-indigo-500/10"
+                                  : "border-transparent hover:border-zinc-800 hover:bg-zinc-900/50"
+                              }`}
                             >
                               <div className="flex min-w-0 flex-1 items-center gap-3 overflow-hidden">
                                 <div className="w-10 h-10 rounded-full overflow-hidden border border-zinc-800 bg-zinc-900 shrink-0">
-                                  <Image src={preset.logoURI} alt={`${preset.label} logo`} width={40} height={40} className="w-full h-full object-cover" />
+                                  <Image
+                                    src={preset.logoURI}
+                                    alt={`${preset.label} logo`}
+                                    width={40}
+                                    height={40}
+                                    className="w-full h-full object-cover"
+                                  />
                                 </div>
                                 <div className="min-w-0 flex-1">
                                   <div className="flex min-w-0 items-center gap-2">
-                                    <span className="text-sm font-extrabold text-zinc-100 truncate">{preset.label}</span>
+                                    <span className="text-sm font-extrabold text-zinc-100 truncate">
+                                      {preset.label}
+                                    </span>
                                     <span className="rounded-full border border-zinc-800 bg-zinc-900 px-1.5 py-0.5 text-[9px] font-black uppercase tracking-wider text-zinc-400">
                                       {preset.decimals} dec
                                     </span>
                                   </div>
-                                  <div className="hidden sm:block font-mono text-[10px] text-zinc-500 truncate">{preset.mint}</div>
-                                  <div className="hidden sm:block text-[10px] text-zinc-600 truncate">{preset.note}</div>
+                                  <div className="hidden sm:block font-mono text-[10px] text-zinc-500 truncate">
+                                    {preset.mint}
+                                  </div>
+                                  <div className="hidden sm:block text-[10px] text-zinc-600 truncate">
+                                    {preset.note}
+                                  </div>
                                 </div>
                               </div>
-                              {active && <Check className="w-4 h-4 text-indigo-300 shrink-0" />}
+                              {active && (
+                                <Check className="w-4 h-4 text-indigo-300 shrink-0" />
+                              )}
                             </button>
                           );
                         })}
 
                         <div className="mt-2 border-t border-zinc-900 pt-2 px-1 pb-1">
-                          <div className="text-[10px] font-black uppercase tracking-[0.24em] text-zinc-500 mb-2 px-2">Custom mint</div>
+                          <div className="text-[10px] font-black uppercase tracking-[0.24em] text-zinc-500 mb-2 px-2">
+                            Custom mint
+                          </div>
                           <input
                             type="text"
                             list="uf-mint-history"
                             autoComplete="off"
                             value={createForm.mint}
-                            onChange={(e) => setCreateForm({ ...createForm, mint: e.target.value })}
+                            onChange={(e) =>
+                              setCreateForm({
+                                ...createForm,
+                                mint: e.target.value,
+                              })
+                            }
                             onBlur={(e) => mintHistory.remember(e.target.value)}
                             placeholder="Paste a mint address"
                             className="block w-full max-w-full min-w-0 bg-zinc-950 border border-zinc-800 rounded-xl px-3 py-2.5 text-xs focus:outline-none focus:border-indigo-500 font-mono"
@@ -2360,9 +2630,17 @@ const editCsvDisabled =
               </div>
               <div className="min-w-0 max-w-full">
                 <div className="flex items-center justify-between gap-2 mb-1.5 min-h-[26px]">
-                  <label className="block text-[10px] sm:text-xs font-semibold text-zinc-400 uppercase tracking-wider">Type</label>
+                  <label className="block text-[10px] sm:text-xs font-semibold text-zinc-400 uppercase tracking-wider">
+                    Type
+                  </label>
                 </div>
-                <select value={createForm.type} onChange={(e) => setCreateForm({ ...createForm, type: e.target.value })} className="block w-full max-w-full min-w-0 bg-zinc-950 border border-zinc-800 rounded-xl px-3.5 py-2.5 sm:px-4 sm:py-3 text-sm focus:outline-none focus:border-indigo-500 font-medium">
+                <select
+                  value={createForm.type}
+                  onChange={(e) =>
+                    setCreateForm({ ...createForm, type: e.target.value })
+                  }
+                  className="block w-full max-w-full min-w-0 bg-zinc-950 border border-zinc-800 rounded-xl px-3.5 py-2.5 sm:px-4 sm:py-3 text-sm focus:outline-none focus:border-indigo-500 font-medium"
+                >
                   <option value="0">Linear Vesting</option>
                   <option value="1">Cliff Vesting</option>
                   <option value="2">Milestone-Based Vesting</option>
@@ -2372,7 +2650,9 @@ const editCsvDisabled =
               {/* ─── Start Date ─────────────────────────────────────────────── */}
               {createForm.type !== "2" && (
                 <div className="min-w-0 max-w-full overflow-hidden">
-                  <label className="block text-[10px] sm:text-xs font-semibold text-zinc-400 uppercase tracking-wider mb-1.5">Start Date</label>
+                  <label className="block text-[10px] sm:text-xs font-semibold text-zinc-400 uppercase tracking-wider mb-1.5">
+                    Start Date
+                  </label>
                   <input
                     type="datetime-local"
                     value={startDateInLocalIso}
@@ -2401,19 +2681,31 @@ const editCsvDisabled =
               {createForm.type !== "2" && (
                 <div className="min-w-0 max-w-full overflow-hidden">
                   <div className="flex items-center justify-between gap-2 mb-1.5 min-h-[26px]">
-                    <label className="block text-[10px] sm:text-xs font-semibold text-zinc-400 uppercase tracking-wider">{durationInputMode === "duration" ? "Duration" : "End Date"}</label>
+                    <label className="block text-[10px] sm:text-xs font-semibold text-zinc-400 uppercase tracking-wider">
+                      {durationInputMode === "duration"
+                        ? "Duration"
+                        : "End Date"}
+                    </label>
                     <div className="inline-flex rounded-lg border border-zinc-800 bg-zinc-950 p-0.5 text-[9px] font-black uppercase tracking-wider shrink-0">
                       <button
                         type="button"
                         onClick={() => setDurationInputMode("duration")}
-                        className={`px-2 py-1 rounded-md transition-colors ${durationInputMode === "duration" ? "bg-indigo-600 text-white" : "text-zinc-400 hover:text-zinc-200"}`}
+                        className={`px-2 py-1 rounded-md transition-colors ${
+                          durationInputMode === "duration"
+                            ? "bg-indigo-600 text-white"
+                            : "text-zinc-400 hover:text-zinc-200"
+                        }`}
                       >
                         Duration
                       </button>
                       <button
                         type="button"
                         onClick={() => setDurationInputMode("date")}
-                        className={`px-2 py-1 rounded-md transition-colors ${durationInputMode === "date" ? "bg-indigo-600 text-white" : "text-zinc-400 hover:text-zinc-200"}`}
+                        className={`px-2 py-1 rounded-md transition-colors ${
+                          durationInputMode === "date"
+                            ? "bg-indigo-600 text-white"
+                            : "text-zinc-400 hover:text-zinc-200"
+                        }`}
                       >
                         Date
                       </button>
@@ -2425,11 +2717,19 @@ const editCsvDisabled =
                         type="number"
                         min="0"
                         value={createForm.duration}
-                        onChange={(e) => setCreateForm({ ...createForm, duration: e.target.value, endDate: "" })}
+                        onChange={(e) =>
+                          setCreateForm({
+                            ...createForm,
+                            duration: e.target.value,
+                            endDate: "",
+                          })
+                        }
                         placeholder="Seconds from start date"
                         className="block w-full max-w-full min-w-0 bg-zinc-950 border border-zinc-800 rounded-xl px-3.5 py-2.5 sm:px-4 sm:py-3 pr-14 text-sm focus:outline-none focus:border-indigo-500 font-mono"
                       />
-                      <span className="absolute inset-y-0 right-3 flex items-center text-[10px] font-black uppercase tracking-wider text-zinc-500">sec</span>
+                      <span className="absolute inset-y-0 right-3 flex items-center text-[10px] font-black uppercase tracking-wider text-zinc-500">
+                        sec
+                      </span>
                     </div>
                   ) : (
                     <input
@@ -2438,39 +2738,52 @@ const editCsvDisabled =
                       onChange={(e) => {
                         const value = e.target.value;
                         if (!value) {
-                          setCreateForm({ ...createForm, endDate: "", duration: "" });
+                          setCreateForm({
+                            ...createForm,
+                            endDate: "",
+                            duration: "",
+                          });
                           return;
                         }
                         const target = new Date(value).getTime();
-                        const seconds = Math.max(0, Math.floor((target - startDateMs) / 1000));
-                        setCreateForm({ ...createForm, endDate: value, duration: String(seconds) });
+                        const seconds = Math.max(
+                          0,
+                          Math.floor((target - startDateMs) / 1000)
+                        );
+                        setCreateForm({
+                          ...createForm,
+                          endDate: value,
+                          duration: String(seconds),
+                        });
                       }}
                       className={dateInputClass}
                       style={{ WebkitAppearance: "none" }}
                     />
                   )}
                   <div className="mt-2 flex flex-wrap gap-2">
-  {QUICK_DURATIONS.map((p) => (
-    <button
-      key={p.label}
-      type="button"
-      onClick={() =>
-        setCreateForm({
-          ...createForm,
-          duration: String(p.value),
-          endDate: "",
-        })
-      }
-      className="px-2.5 py-1 rounded-lg border border-zinc-800 bg-zinc-900 text-[10px] font-black uppercase text-zinc-300 hover:border-indigo-500 hover:text-white transition"
-    >
-      {p.label}
-    </button>
-  ))}
-</div>
+                    {QUICK_DURATIONS.map((p) => (
+                      <button
+                        key={p.label}
+                        type="button"
+                        onClick={() =>
+                          setCreateForm({
+                            ...createForm,
+                            duration: String(p.value),
+                            endDate: "",
+                          })
+                        }
+                        className="px-2.5 py-1 rounded-lg border border-zinc-800 bg-zinc-900 text-[10px] font-black uppercase text-zinc-300 hover:border-indigo-500 hover:text-white transition"
+                      >
+                        {p.label}
+                      </button>
+                    ))}
+                  </div>
                   {durationSeconds > 0 && (
                     <div className="mt-1.5 text-[10px] font-mono text-zinc-500">
                       {durationInputMode === "duration"
-                        ? `≈ ends ${new Date(startDateMs + durationSeconds * 1000).toLocaleString()}`
+                        ? `≈ ends ${new Date(
+                            startDateMs + durationSeconds * 1000
+                          ).toLocaleString()}`
                         : `≈ ${durationSeconds.toLocaleString()}s from start date`}
                     </div>
                   )}
@@ -2487,19 +2800,29 @@ const editCsvDisabled =
               {createForm.type === "1" && (
                 <div className="min-w-0 max-w-full overflow-hidden">
                   <div className="flex items-center justify-between gap-2 mb-1.5 min-h-[26px]">
-                    <label className="block text-[10px] sm:text-xs font-semibold text-zinc-400 uppercase tracking-wider">Cliff</label>
+                    <label className="block text-[10px] sm:text-xs font-semibold text-zinc-400 uppercase tracking-wider">
+                      Cliff
+                    </label>
                     <div className="inline-flex rounded-lg border border-zinc-800 bg-zinc-950 p-0.5 text-[9px] font-black uppercase tracking-wider shrink-0">
                       <button
                         type="button"
                         onClick={() => setCliffInputMode("duration")}
-                        className={`px-2 py-1 rounded-md transition-colors ${cliffInputMode === "duration" ? "bg-indigo-600 text-white" : "text-zinc-400 hover:text-zinc-200"}`}
+                        className={`px-2 py-1 rounded-md transition-colors ${
+                          cliffInputMode === "duration"
+                            ? "bg-indigo-600 text-white"
+                            : "text-zinc-400 hover:text-zinc-200"
+                        }`}
                       >
                         Duration
                       </button>
                       <button
                         type="button"
                         onClick={() => setCliffInputMode("date")}
-                        className={`px-2 py-1 rounded-md transition-colors ${cliffInputMode === "date" ? "bg-indigo-600 text-white" : "text-zinc-400 hover:text-zinc-200"}`}
+                        className={`px-2 py-1 rounded-md transition-colors ${
+                          cliffInputMode === "date"
+                            ? "bg-indigo-600 text-white"
+                            : "text-zinc-400 hover:text-zinc-200"
+                        }`}
                       >
                         Date
                       </button>
@@ -2511,11 +2834,19 @@ const editCsvDisabled =
                         type="number"
                         min="0"
                         value={createForm.cliffDuration}
-                        onChange={(e) => setCreateForm({ ...createForm, cliffDuration: e.target.value, cliffDate: "" })}
+                        onChange={(e) =>
+                          setCreateForm({
+                            ...createForm,
+                            cliffDuration: e.target.value,
+                            cliffDate: "",
+                          })
+                        }
                         placeholder="Seconds from start date"
                         className="block w-full max-w-full min-w-0 bg-zinc-950 border border-zinc-800 rounded-xl px-3.5 py-2.5 sm:px-4 sm:py-3 pr-14 text-sm focus:outline-none focus:border-indigo-500 font-mono"
                       />
-                      <span className="absolute inset-y-0 right-3 flex items-center text-[10px] font-black uppercase tracking-wider text-zinc-500">sec</span>
+                      <span className="absolute inset-y-0 right-3 flex items-center text-[10px] font-black uppercase tracking-wider text-zinc-500">
+                        sec
+                      </span>
                     </div>
                   ) : (
                     <input
@@ -2524,39 +2855,52 @@ const editCsvDisabled =
                       onChange={(e) => {
                         const value = e.target.value;
                         if (!value) {
-                          setCreateForm({ ...createForm, cliffDate: "", cliffDuration: "" });
+                          setCreateForm({
+                            ...createForm,
+                            cliffDate: "",
+                            cliffDuration: "",
+                          });
                           return;
                         }
                         const target = new Date(value).getTime();
-                        const seconds = Math.max(0, Math.floor((target - startDateMs) / 1000));
-                        setCreateForm({ ...createForm, cliffDate: value, cliffDuration: String(seconds) });
+                        const seconds = Math.max(
+                          0,
+                          Math.floor((target - startDateMs) / 1000)
+                        );
+                        setCreateForm({
+                          ...createForm,
+                          cliffDate: value,
+                          cliffDuration: String(seconds),
+                        });
                       }}
                       className={dateInputClass}
                       style={{ WebkitAppearance: "none" }}
                     />
                   )}
                   <div className="mt-2 flex flex-wrap gap-2">
-  {QUICK_DURATIONS.map((p) => (
-    <button
-      key={p.label}
-      type="button"
-      onClick={() =>
-        setCreateForm({
-          ...createForm,
-          cliffDuration: String(p.value),
-          cliffDate: "",
-        })
-      }
-      className="px-2.5 py-1 rounded-lg border border-zinc-800 bg-zinc-900 text-[10px] font-black uppercase text-zinc-300 hover:border-indigo-500 hover:text-white transition"
-    >
-      {p.label}
-    </button>
-  ))}
-</div>
+                    {QUICK_DURATIONS.map((p) => (
+                      <button
+                        key={p.label}
+                        type="button"
+                        onClick={() =>
+                          setCreateForm({
+                            ...createForm,
+                            cliffDuration: String(p.value),
+                            cliffDate: "",
+                          })
+                        }
+                        className="px-2.5 py-1 rounded-lg border border-zinc-800 bg-zinc-900 text-[10px] font-black uppercase text-zinc-300 hover:border-indigo-500 hover:text-white transition"
+                      >
+                        {p.label}
+                      </button>
+                    ))}
+                  </div>
                   {cliffDurationSeconds > 0 && (
                     <div className="mt-1.5 text-[10px] font-mono text-zinc-500">
                       {cliffInputMode === "duration"
-                        ? `≈ unlocks ${new Date(startDateMs + cliffDurationSeconds * 1000).toLocaleString()}`
+                        ? `≈ unlocks ${new Date(
+                            startDateMs + cliffDurationSeconds * 1000
+                          ).toLocaleString()}`
                         : `≈ ${cliffDurationSeconds.toLocaleString()}s from start date`}
                     </div>
                   )}
@@ -2567,7 +2911,8 @@ const editCsvDisabled =
                   )}
                   {cliffExceedsDuration && (
                     <div className="mt-2 text-[10px] font-semibold text-amber-400">
-                      Cliff must occur before the stream ends ({durationSeconds.toLocaleString()}s from start date).
+                      Cliff must occur before the stream ends (
+                      {durationSeconds.toLocaleString()}s from start date).
                     </div>
                   )}
                 </div>
@@ -2578,8 +2923,12 @@ const editCsvDisabled =
                 <div className="md:col-span-2 grid min-w-0 gap-4 bg-zinc-900/30 border border-zinc-900 p-4 rounded-xl max-w-full overflow-hidden">
                   <div className="min-w-0 max-w-full">
                     <div className="flex items-center gap-2 mb-1.5">
-                      <label className="block text-[10px] sm:text-xs font-semibold text-zinc-400 uppercase tracking-wider">Count</label>
-                      <span className="text-[10px] text-zinc-600 font-normal">max 17</span>
+                      <label className="block text-[10px] sm:text-xs font-semibold text-zinc-400 uppercase tracking-wider">
+                        Count
+                      </label>
+                      <span className="text-[10px] text-zinc-600 font-normal">
+                        max 17
+                      </span>
                     </div>
                     <input
                       type="number"
@@ -2588,7 +2937,9 @@ const editCsvDisabled =
                       value={createForm.milestoneCount}
                       onChange={(e) => {
                         const raw = parseInt(e.target.value, 10);
-                        const clamped = Number.isFinite(raw) ? String(Math.min(17, Math.max(1, raw))) : "";
+                        const clamped = Number.isFinite(raw)
+                          ? String(Math.min(17, Math.max(1, raw)))
+                          : "";
                         onMilestoneCountChange(clamped);
                       }}
                       className="block w-full max-w-full min-w-0 bg-zinc-950 border border-zinc-800 rounded-xl px-3.5 py-2.5 sm:px-4 sm:py-3 text-sm focus:outline-none focus:border-indigo-500 font-mono"
@@ -2600,181 +2951,195 @@ const editCsvDisabled =
                     )}
                   </div>
                   <div className="border-t border-zinc-900/60 pt-3">
-                    <label className="block text-[10px] font-bold text-zinc-500 uppercase tracking-widest mb-2">Milestones</label>
-                 <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-  {milestoneAmounts.map((amt, idx) => {
-    const val = Number(amt || 0);
-    const isEmpty = !amt || amt === "0";
-    const isInvalid = isEmpty || val <= 0 || !Number.isFinite(val);
-    const inputBorder = isInvalid
-      ? "border-rose-500/50 focus:border-rose-500"
-      : "border-emerald-500/40 focus:border-emerald-500";
-    const pctOfTotal = Number(createForm.amount) > 0
-      ? ((val / Number(createForm.amount)) * 100).toFixed(1)
-      : "0.0";
+                    <label className="block text-[10px] font-bold text-zinc-500 uppercase tracking-widest mb-2">
+                      Milestones
+                    </label>
+                    <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                      {milestoneAmounts.map((amt, idx) => {
+                        const val = Number(amt || 0);
+                        const isEmpty = !amt || amt === "0";
+                        const isInvalid =
+                          isEmpty || val <= 0 || !Number.isFinite(val);
+                        const inputBorder = isInvalid
+                          ? "border-rose-500/50 focus:border-rose-500"
+                          : "border-emerald-500/40 focus:border-emerald-500";
+                        const pctOfTotal =
+                          Number(createForm.amount) > 0
+                            ? ((val / Number(createForm.amount)) * 100).toFixed(
+                                1
+                              )
+                            : "0.0";
 
-    return (
-      <div key={idx} className="flex min-w-0 flex-col gap-1">
-        <div className="flex items-center justify-between">
-          <span className="text-[10px] text-zinc-400 font-mono font-bold">#{idx}</span>
-          <span className={`text-[9px] font-mono font-bold ${isInvalid ? "text-zinc-600" : "text-indigo-400"}`}>
-            {isInvalid ? "—" : `${pctOfTotal}%`}
-          </span>
-        </div>
-        <input
-          type="text"
-          inputMode="decimal"
-          lang="en"
-          value={amt}
-          onChange={(e) => {
-            const next = [...milestoneAmounts];
-            const normalized = normalizeDecimalInput(e.target.value);
-            next[idx] = normalized === "" ? "0" : normalized;
-            setMilestoneAmounts(next);
-          }}
-          className={`block w-full max-w-full min-w-0 bg-zinc-950 border rounded-xl px-3 py-2.5 text-xs focus:outline-none font-mono transition-colors duration-150 ${inputBorder}`}
-          placeholder="0"
-        />
-      </div>
-    );
-  })}
-</div>
+                        return (
+                          <div
+                            key={idx}
+                            className="flex min-w-0 flex-col gap-1"
+                          >
+                            <div className="flex items-center justify-between">
+                              <span className="text-[10px] text-zinc-400 font-mono font-bold">
+                                #{idx}
+                              </span>
+                              <span
+                                className={`text-[9px] font-mono font-bold ${
+                                  isInvalid
+                                    ? "text-zinc-600"
+                                    : "text-indigo-400"
+                                }`}
+                              >
+                                {isInvalid ? "—" : `${pctOfTotal}%`}
+                              </span>
+                            </div>
+                            <input
+                              type="text"
+                              inputMode="decimal"
+                              lang="en"
+                              value={amt}
+                              onChange={(e) => {
+                                const next = [...milestoneAmounts];
+                                const normalized = normalizeDecimalInput(
+                                  e.target.value
+                                );
+                                next[idx] =
+                                  normalized === "" ? "0" : normalized;
+                                setMilestoneAmounts(next);
+                              }}
+                              className={`block w-full max-w-full min-w-0 bg-zinc-950 border rounded-xl px-3 py-2.5 text-xs focus:outline-none font-mono transition-colors duration-150 ${inputBorder}`}
+                              placeholder="0"
+                            />
+                          </div>
+                        );
+                      })}
+                    </div>
 
-{/* Live Counter — ganti teks status lama */}
-<div className="mt-3">
-  <MilestoneAllocationCounter
-    amounts={milestoneAmounts}
-    total={Number(createForm.amount || 0)}
-    hasInvalid={hasInvalidMilestones}
-    isMatch={milestonesMatchTotal}
-  />
-</div>
+                    {/* Live Counter — ganti teks status lama */}
+                    <div className="mt-3">
+                      <MilestoneAllocationCounter
+                        amounts={milestoneAmounts}
+                        total={Number(createForm.amount || 0)}
+                        hasInvalid={hasInvalidMilestones}
+                        isMatch={milestonesMatchTotal}
+                      />
+                    </div>
                   </div>
                 </div>
               )}
-{/* ─── Stream Preview Card ───────────────────────────── */}
-<div className="md:col-span-2 mt-2 rounded-2xl border border-zinc-800 bg-zinc-950/80 overflow-hidden">
-  <div className="px-4 py-3 border-b border-zinc-900 flex items-center justify-between">
-    <div className="flex items-center gap-2">
-      <Terminal className="w-4 h-4 text-indigo-400" />
-      <span className="text-[11px] font-black uppercase tracking-widest text-zinc-400">
-        Stream Preview
-      </span>
-    </div>
+              {/* ─── Stream Preview Card ───────────────────────────── */}
+              <div className="md:col-span-2 mt-2 rounded-2xl border border-zinc-800 bg-zinc-950/80 overflow-hidden">
+                <div className="px-4 py-3 border-b border-zinc-900 flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <Terminal className="w-4 h-4 text-indigo-400" />
+                    <span className="text-[11px] font-black uppercase tracking-widest text-zinc-400">
+                      Stream Preview
+                    </span>
+                  </div>
 
-    <span className="text-[10px] font-mono text-zinc-500">
-      {clusterLabel}
-    </span>
-  </div>
+                  <span className="text-[10px] font-mono text-zinc-500">
+                    {clusterLabel}
+                  </span>
+                </div>
 
-  <div className="grid gap-3 px-4 py-4 sm:grid-cols-2 text-[11px]">
-    <div>
-      <div className="text-zinc-500">Recipient</div>
-      <div className="font-mono text-zinc-200 truncate">
-        {createForm.recipient || "—"}
-      </div>
-    </div>
+                <div className="grid gap-3 px-4 py-4 sm:grid-cols-2 text-[11px]">
+                  <div>
+                    <div className="text-zinc-500">Recipient</div>
+                    <div className="font-mono text-zinc-200 truncate">
+                      {createForm.recipient || "—"}
+                    </div>
+                  </div>
 
-    <div>
-      <div className="text-zinc-500">Amount</div>
-      <div className="font-semibold text-zinc-100">
-        {createForm.amount || "0"}
-      </div>
-    </div>
+                  <div>
+                    <div className="text-zinc-500">Amount</div>
+                    <div className="font-semibold text-zinc-100">
+                      {createForm.amount || "0"}
+                    </div>
+                  </div>
 
-    <div>
-      <div className="text-zinc-500">Mint</div>
-      <div className="font-mono truncate text-zinc-300">
-        {selectedMintPreset?.label || createForm.mint || "—"}
-      </div>
-    </div>
+                  <div>
+                    <div className="text-zinc-500">Mint</div>
+                    <div className="font-mono truncate text-zinc-300">
+                      {selectedMintPreset?.label || createForm.mint || "—"}
+                    </div>
+                  </div>
 
-    <div>
-      <div className="text-zinc-500">Schedule</div>
-      <div className="text-zinc-100">
-        {createForm.type === "0"
-          ? "Linear"
-          : createForm.type === "1"
-          ? "Cliff"
-          : "Milestone"}
-      </div>
-    </div>
+                  <div>
+                    <div className="text-zinc-500">Schedule</div>
+                    <div className="text-zinc-100">
+                      {createForm.type === "0"
+                        ? "Linear"
+                        : createForm.type === "1"
+                        ? "Cliff"
+                        : "Milestone"}
+                    </div>
+                  </div>
 
-    {createForm.type !== "2" && (
-      <>
-        <div>
-          <div className="text-zinc-500">Start</div>
-          <div className="font-mono text-zinc-300">
-            {new Date(startDateMs).toLocaleString()}
-          </div>
-        </div>
+                  {createForm.type !== "2" && (
+                    <>
+                      <div>
+                        <div className="text-zinc-500">Start</div>
+                        <div className="font-mono text-zinc-300">
+                          {new Date(startDateMs).toLocaleString()}
+                        </div>
+                      </div>
 
-        <div>
-          <div className="text-zinc-500">Ends</div>
-          <div className="font-mono text-zinc-300">
-            {durationSeconds > 0
-              ? new Date(
-                  startDateMs + durationSeconds * 1000
-                ).toLocaleString()
-              : "—"}
-          </div>
-        </div>
+                      <div>
+                        <div className="text-zinc-500">Ends</div>
+                        <div className="font-mono text-zinc-300">
+                          {durationSeconds > 0
+                            ? new Date(
+                                startDateMs + durationSeconds * 1000
+                              ).toLocaleString()
+                            : "—"}
+                        </div>
+                      </div>
 
-        {createForm.type === "1" && cliffDurationSeconds > 0 && (
-          <div>
-            <div className="text-zinc-500">Cliff Date</div>
-            <div className="font-mono text-amber-300">
-              {cliffDateInLocalIso
-                ? new Date(cliffDateInLocalIso).toLocaleString()
-                : "—"}
-            </div>
-          </div>
-        )}
+                      {createForm.type === "1" && cliffDurationSeconds > 0 && (
+                        <div>
+                          <div className="text-zinc-500">Cliff Date</div>
+                          <div className="font-mono text-amber-300">
+                            {cliffDateInLocalIso
+                              ? new Date(cliffDateInLocalIso).toLocaleString()
+                              : "—"}
+                          </div>
+                        </div>
+                      )}
+                    </>
+                  )}
+                  {/* Withdraw Fee Preview */}
 
+                  <div>
+                    <div className="text-zinc-500">Withdraw Fee</div>
 
-      </>
-    )}
-            {/* Withdraw Fee Preview */}
+                    {feeEstimate.loading ? (
+                      <div className="font-mono text-zinc-500 animate-pulse">
+                        fetching...
+                      </div>
+                    ) : feeEstimate.error || !feeEstimate.solCost ? (
+                      <div className="font-mono text-zinc-500">unavailable</div>
+                    ) : (
+                      <>
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <span className="font-semibold text-amber-300">
+                            ${withdrawFeeUsd?.toFixed(2)}
+                          </span>
 
-<div>
-  <div className="text-zinc-500">
-    Withdraw Fee
-  </div>
+                          <span className="text-[10px] text-zinc-500 font-mono">
+                            ◎ {feeEstimate.solCost.toFixed(6)} SOL
+                          </span>
+                        </div>
 
-  {feeEstimate.loading ? (
-    <div className="font-mono text-zinc-500 animate-pulse">
-      fetching...
-    </div>
-  ) : feeEstimate.error || !feeEstimate.solCost ? (
-    <div className="font-mono text-zinc-500">
-      unavailable
-    </div>
-  ) : (
-    <>
-      <div className="flex items-center gap-2 flex-wrap">
-        <span className="font-semibold text-amber-300">
-          ${withdrawFeeUsd?.toFixed(2)}
-        </span>
+                        {feeEstimate.solPrice && (
+                          <div className="mt-1 text-[9px] text-zinc-600 font-mono">
+                            @ ${feeEstimate.solPrice.toFixed(2)} / SOL
+                          </div>
+                        )}
 
-        <span className="text-[10px] text-zinc-500 font-mono">
-          ◎ {feeEstimate.solCost.toFixed(6)} SOL
-        </span>
-      </div>
-
-      {feeEstimate.solPrice && (
-        <div className="mt-1 text-[9px] text-zinc-600 font-mono">
-          @ ${feeEstimate.solPrice.toFixed(2)} / SOL
-        </div>
-      )}
-
-      <div className="mt-1 text-[9px] text-zinc-600">
-        charged on every withdraw call
-      </div>
-    </>
-  )}
-</div>
-  </div>
-</div>
+                        <div className="mt-1 text-[9px] text-zinc-600">
+                          charged on every withdraw call
+                        </div>
+                      </>
+                    )}
+                  </div>
+                </div>
+              </div>
               <button
                 disabled={createDisabled}
                 onClick={() => {
@@ -2782,26 +3147,64 @@ const editCsvDisabled =
                   mintHistory.remember(createForm.mint);
                   handleAction("create_stream", createForm);
                 }}
-                className={`md:col-span-2 w-full mt-4 text-white font-bold text-xs py-3 rounded-xl transition-all shadow-lg flex items-center justify-center gap-2 ${createDisabled ? "bg-zinc-800 text-zinc-500 cursor-not-allowed shadow-none" : "bg-indigo-600 hover:bg-indigo-700 hover:shadow-indigo-500/20"}`}
+                className={`md:col-span-2 w-full mt-4 text-white font-bold text-xs py-3 rounded-xl transition-all shadow-lg flex items-center justify-center gap-2 ${
+                  createDisabled
+                    ? "bg-zinc-800 text-zinc-500 cursor-not-allowed shadow-none"
+                    : "bg-indigo-600 hover:bg-indigo-700 hover:shadow-indigo-500/20"
+                }`}
               >
-                {activeTxAction === "create_stream" && activeTxPhase ? <RefreshCw className="w-4 h-4 animate-spin" /> : null}
+                {activeTxAction === "create_stream" && activeTxPhase ? (
+                  <RefreshCw className="w-4 h-4 animate-spin" />
+                ) : null}
                 {getTxLabel("create_stream", "Deploy Stream")}
               </button>
             </div>
           ) : (
-            <div className={`grid min-w-0 gap-4 max-w-full overflow-hidden ${mobileNarrowFormClass}`}>
+            <div
+              className={`grid min-w-0 gap-4 max-w-full overflow-hidden ${mobileNarrowFormClass}`}
+            >
               <div className="flex flex-col gap-3 rounded-2xl border border-zinc-900 bg-zinc-950 p-4 sm:flex-row sm:items-center sm:justify-between">
                 <div className="flex min-w-0 flex-col gap-2 sm:flex-row sm:items-center">
-                  <button onClick={() => downloadTemplate("create")} className="flex w-full items-center justify-center gap-1.5 px-3 py-2 border border-zinc-800 hover:border-zinc-700 bg-zinc-900/50 rounded-xl text-xs font-semibold text-zinc-350 transition-all sm:w-auto"><Download className="w-3.5 h-3.5 text-indigo-400" />Template</button>
-                  <button onClick={() => fileInputCreateRef.current?.click()} className="flex w-full items-center justify-center gap-1.5 px-3 py-2 border border-indigo-900/60 bg-indigo-950/20 hover:bg-indigo-950/40 text-indigo-450 rounded-xl text-xs font-semibold transition-all sm:w-auto"><Upload className="w-3.5 h-3.5" />Upload CSV</button>
-                  <input type="file" accept=".csv" ref={fileInputCreateRef} onChange={(e) => handleCsvUpload(e, "create")} className="hidden" />
+                  <button
+                    onClick={() => downloadTemplate("create")}
+                    className="flex w-full items-center justify-center gap-1.5 px-3 py-2 border border-zinc-800 hover:border-zinc-700 bg-zinc-900/50 rounded-xl text-xs font-semibold text-zinc-350 transition-all sm:w-auto"
+                  >
+                    <Download className="w-3.5 h-3.5 text-indigo-400" />
+                    Template
+                  </button>
+                  <button
+                    onClick={() => fileInputCreateRef.current?.click()}
+                    className="flex w-full items-center justify-center gap-1.5 px-3 py-2 border border-indigo-900/60 bg-indigo-950/20 hover:bg-indigo-950/40 text-indigo-450 rounded-xl text-xs font-semibold transition-all sm:w-auto"
+                  >
+                    <Upload className="w-3.5 h-3.5" />
+                    Upload CSV
+                  </button>
+                  <input
+                    type="file"
+                    accept=".csv"
+                    ref={fileInputCreateRef}
+                    onChange={(e) => handleCsvUpload(e, "create")}
+                    className="hidden"
+                  />
                 </div>
                 <div className="flex min-w-0 flex-col gap-3 sm:flex-row sm:items-center">
                   <div className="flex min-w-0 flex-wrap items-center gap-2">
-                    <span className="text-[9px] text-zinc-500 font-black uppercase tracking-wider">Baseline:</span>
-                    <select value={compareVersionSelected} onChange={(e) => setCompareVersionSelected(e.target.value)} className="min-w-0 bg-zinc-900 border border-zinc-805 rounded-xl px-2.5 py-2 text-[10px] text-zinc-300 font-extrabold focus:outline-none focus:border-indigo-500">
+                    <span className="text-[9px] text-zinc-500 font-black uppercase tracking-wider">
+                      Baseline:
+                    </span>
+                    <select
+                      value={compareVersionSelected}
+                      onChange={(e) =>
+                        setCompareVersionSelected(e.target.value)
+                      }
+                      className="min-w-0 bg-zinc-900 border border-zinc-805 rounded-xl px-2.5 py-2 text-[10px] text-zinc-300 font-extrabold focus:outline-none focus:border-indigo-500"
+                    >
                       <option value="0">Live Active DB</option>
-                      {csvVersions.map((v) => <option key={v.id} value={v.version}>Version {v.version} ({v.filename})</option>)}
+                      {csvVersions.map((v) => (
+                        <option key={v.id} value={v.version}>
+                          Version {v.version} ({v.filename})
+                        </option>
+                      ))}
                     </select>
                     {compareVersionSelected !== "0" && (
                       <button
@@ -2812,43 +3215,83 @@ const editCsvDisabled =
                       </button>
                     )}
                   </div>
-                  <button onClick={() => handleAnalyzeDiff("create")} disabled={loadingDiff} className="flex items-center justify-center gap-1.5 px-3 py-2 bg-indigo-650 hover:bg-indigo-600 border border-indigo-700 rounded-xl text-[10px] font-black text-white transition-all disabled:opacity-40 sm:w-auto">
-                    {loadingDiff ? <RefreshCw className="w-3 h-3 animate-spin text-white" /> : <Layers className="w-3 h-3" />}Analyze Diff
+                  <button
+                    onClick={() => handleAnalyzeDiff("create")}
+                    disabled={loadingDiff}
+                    className="flex items-center justify-center gap-1.5 px-3 py-2 bg-indigo-650 hover:bg-indigo-600 border border-indigo-700 rounded-xl text-[10px] font-black text-white transition-all disabled:opacity-40 sm:w-auto"
+                  >
+                    {loadingDiff ? (
+                      <RefreshCw className="w-3 h-3 animate-spin text-white" />
+                    ) : (
+                      <Layers className="w-3 h-3" />
+                    )}
+                    Analyze Diff
                   </button>
                 </div>
               </div>
 
               <div>
-                <label className="block text-xs font-semibold text-zinc-400 uppercase tracking-wider mb-1.5">CSV Payload Preview / Editor</label>
-                <textarea rows={8} value={csvCreateText} onChange={(e) => setCsvCreateText(e.target.value)} className="w-full bg-zinc-950 border border-zinc-800 rounded-xl px-4 py-3 text-xs focus:outline-none focus:border-indigo-500 font-mono" />
+                <label className="block text-xs font-semibold text-zinc-400 uppercase tracking-wider mb-1.5">
+                  CSV Payload Preview / Editor
+                </label>
+                <textarea
+                  rows={8}
+                  value={csvCreateText}
+                  onChange={(e) => setCsvCreateText(e.target.value)}
+                  className="w-full bg-zinc-950 border border-zinc-800 rounded-xl px-4 py-3 text-xs focus:outline-none focus:border-indigo-500 font-mono"
+                />
               </div>
               {/* ─── Milestone Validation ─── */}
-           <CsvValidationPanel
-  csvText={csvCreateText}
-  walletBalance={tokenBalance.balance}
-  walletMint={createForm.mint}
-  walletMintLabel={selectedMintPreset?.label}
-  walletDecimals={tokenBalance.decimals ?? selectedMintPreset?.decimals ?? 6}
-  mintPresets={mintPresets}
-/>
-              <CsvDiffPanel csvDiffResult={csvDiffResult} compareVersionSelected={compareVersionSelected} onClose={() => setCsvDiffResult(null)} />
+              <CsvValidationPanel
+                csvText={csvCreateText}
+                walletBalance={tokenBalance.balance}
+                walletMint={createForm.mint}
+                walletMintLabel={selectedMintPreset?.label}
+                walletDecimals={
+                  tokenBalance.decimals ?? selectedMintPreset?.decimals ?? 6
+                }
+                mintPresets={mintPresets}
+              />
+              <CsvDiffPanel
+                csvDiffResult={csvDiffResult}
+                compareVersionSelected={compareVersionSelected}
+                onClose={() => setCsvDiffResult(null)}
+              />
 
-              {!createDiffFresh && csvCreateText?.trim() && !csvMilestoneValidation.hasErrors && !csvDurationValidation.hasErrors && !csvStructuralValidation.hasErrors && !csvExceedsBalance && (
-                <div className="mt-4 bg-amber-950/20 border border-amber-500/25 rounded-xl px-4 py-3 flex items-center gap-2">
-                  <Layers className="w-3.5 h-3.5 text-amber-400 shrink-0" />
-                  <span className="text-[11px] text-amber-300/90 leading-relaxed">
-                    Run <strong className="font-bold">Analyze Diff</strong> to review the up-to-date change summary before applying. Editing the CSV resets this.
-                  </span>
-                </div>
-              )}
+              {!createDiffFresh &&
+                csvCreateText?.trim() &&
+                !csvMilestoneValidation.hasErrors &&
+                !csvDurationValidation.hasErrors &&
+                !csvStructuralValidation.hasErrors &&
+                !csvExceedsBalance && (
+                  <div className="mt-4 bg-amber-950/20 border border-amber-500/25 rounded-xl px-4 py-3 flex items-center gap-2">
+                    <Layers className="w-3.5 h-3.5 text-amber-400 shrink-0" />
+                    <span className="text-[11px] text-amber-300/90 leading-relaxed">
+                      Run <strong className="font-bold">Analyze Diff</strong> to
+                      review the up-to-date change summary before applying.
+                      Editing the CSV resets this.
+                    </span>
+                  </div>
+                )}
 
               <button
                 disabled={createCsvDisabled}
                 onClick={() => handleAction("create_stream_csv", null)}
-                className={`w-full mt-4 text-white font-bold text-xs py-3 rounded-xl transition-all shadow-lg flex items-center justify-center gap-2 ${createCsvDisabled ? "bg-zinc-800 text-zinc-500 cursor-not-allowed shadow-none" : "bg-indigo-600 hover:bg-indigo-700 hover:shadow-indigo-500/20"}`}
+                className={`w-full mt-4 text-white font-bold text-xs py-3 rounded-xl transition-all shadow-lg flex items-center justify-center gap-2 ${
+                  createCsvDisabled
+                    ? "bg-zinc-800 text-zinc-500 cursor-not-allowed shadow-none"
+                    : "bg-indigo-600 hover:bg-indigo-700 hover:shadow-indigo-500/20"
+                }`}
               >
-                {activeTxAction === "create_stream_csv" && activeTxPhase ? <RefreshCw className="w-4 h-4 animate-spin" /> : null}
-                {getTxLabel("create_stream_csv", `Approve & Apply CSV Revision (Creates v${csvVersions.length + 1})`)}
+                {activeTxAction === "create_stream_csv" && activeTxPhase ? (
+                  <RefreshCw className="w-4 h-4 animate-spin" />
+                ) : null}
+                {getTxLabel(
+                  "create_stream_csv",
+                  `Approve & Apply CSV Revision (Creates v${
+                    csvVersions.length + 1
+                  })`
+                )}
               </button>
             </div>
           )}
@@ -2866,7 +3309,9 @@ const editCsvDisabled =
             </p>
           </div>
 
-          <div className={`grid min-w-0 gap-4 max-w-full overflow-hidden ${mobileNarrowFormClass}`}>
+          <div
+            className={`grid min-w-0 gap-4 max-w-full overflow-hidden ${mobileNarrowFormClass}`}
+          >
             <div className="flex flex-col gap-3 rounded-2xl border border-zinc-900 bg-zinc-950 p-4 sm:flex-row sm:items-center sm:justify-between">
               {/* Left actions */}
               <div className="flex min-w-0 flex-col gap-2 sm:flex-row sm:items-center">
@@ -2953,31 +3398,41 @@ const editCsvDisabled =
               />
             </div>
             {/* ─── Milestone Validation ─── */}
-<CsvValidationPanel
-  csvText={csvEditText}
-  walletBalance={tokenBalance.balance}
-  walletMint={createForm.mint}
-  walletMintLabel={selectedMintPreset?.label}
-  walletDecimals={tokenBalance.decimals ?? selectedMintPreset?.decimals ?? 6}
-  editMode={true}              // ← flag supaya label lebih relevan
-  editTotalByMint={csvEditTotalByMint}
-  editStreams={streams}        // ← live DB untuk validasi kolom id
-  mintPresets={mintPresets}
-/>
+            <CsvValidationPanel
+              csvText={csvEditText}
+              walletBalance={tokenBalance.balance}
+              walletMint={createForm.mint}
+              walletMintLabel={selectedMintPreset?.label}
+              walletDecimals={
+                tokenBalance.decimals ?? selectedMintPreset?.decimals ?? 6
+              }
+              editMode={true} // ← flag supaya label lebih relevan
+              editTotalByMint={csvEditTotalByMint}
+              editStreams={streams} // ← live DB untuk validasi kolom id
+              mintPresets={mintPresets}
+            />
             <CsvDiffPanel
               csvDiffResult={csvDiffResult}
               compareVersionSelected={compareVersionSelected}
               onClose={() => setCsvDiffResult(null)}
             />
 
-            {!editDiffFresh && csvEditText?.trim() && !csvEditMilestoneValidation.hasErrors && !csvEditIdValidation.hasErrors && !csvEditDurationValidation.hasErrors && !csvEditStructuralValidation.hasErrors && !csvEditExceedsBalance && (
-              <div className="mt-4 bg-amber-950/20 border border-amber-500/25 rounded-xl px-4 py-3 flex items-center gap-2">
-                <Layers className="w-3.5 h-3.5 text-amber-400 shrink-0" />
-                <span className="text-[11px] text-amber-300/90 leading-relaxed">
-                  Run <strong className="font-bold">Analyze Diff</strong> to review the up-to-date change summary before applying. Editing the CSV resets this.
-                </span>
-              </div>
-            )}
+            {!editDiffFresh &&
+              csvEditText?.trim() &&
+              !csvEditMilestoneValidation.hasErrors &&
+              !csvEditIdValidation.hasErrors &&
+              !csvEditDurationValidation.hasErrors &&
+              !csvEditStructuralValidation.hasErrors &&
+              !csvEditExceedsBalance && (
+                <div className="mt-4 bg-amber-950/20 border border-amber-500/25 rounded-xl px-4 py-3 flex items-center gap-2">
+                  <Layers className="w-3.5 h-3.5 text-amber-400 shrink-0" />
+                  <span className="text-[11px] text-amber-300/90 leading-relaxed">
+                    Run <strong className="font-bold">Analyze Diff</strong> to
+                    review the up-to-date change summary before applying.
+                    Editing the CSV resets this.
+                  </span>
+                </div>
+              )}
 
             <button
               disabled={editCsvDisabled}
@@ -2988,7 +3443,9 @@ const editCsvDisabled =
                   : "bg-emerald-600 hover:bg-emerald-700 hover:shadow-emerald-500/20"
               }`}
             >
-              {activeTxAction === "edit_stream_csv" && activeTxPhase ? <RefreshCw className="w-4 h-4 animate-spin" /> : null}
+              {activeTxAction === "edit_stream_csv" && activeTxPhase ? (
+                <RefreshCw className="w-4 h-4 animate-spin" />
+              ) : null}
               {getTxLabel("edit_stream_csv", "Approve & Apply CSV Revision")}
             </button>
           </div>
@@ -2997,192 +3454,211 @@ const editCsvDisabled =
 
       {activeTab === "withdraw" && (
         <WithdrawPanel
-    paused={paused}
-    withdrawForm={withdrawForm}
-    setWithdrawForm={setWithdrawForm}
-    handleAction={handleAction}
-    streams={streams}
-    connectedWalletAddress={connectedWalletAddress}
-    activeTxAction={activeTxAction}
-    activeTxPhase={activeTxPhase}
-    connected={connected}
-  />
+          paused={paused}
+          withdrawForm={withdrawForm}
+          setWithdrawForm={setWithdrawForm}
+          handleAction={handleAction}
+          streams={streams}
+          connectedWalletAddress={connectedWalletAddress}
+          activeTxAction={activeTxAction}
+          activeTxPhase={activeTxPhase}
+          connected={connected}
+        />
       )}
 
-{activeTab === "cancel" && (
-  <CancelPanel
-    paused={paused}
-    cancelForm={cancelForm}
-    setCancelForm={setCancelForm}
-    handleAction={handleAction}
-    isSubmitting={activeTxAction === "cancel" && !!activeTxPhase}
-    submitLabel={getTxLabel("cancel", "Cancel and Refund Stream")}
-    streams={streams}                            // ← tambah
-    connectedWalletAddress={connectedWalletAddress}  // ← tambah
-  />
-)}
-
-    {activeTab === "unlock_milestone" && (
-  <UnlockMilestonePanel
-    paused={paused}
-  endpoint={endpoint}
-    unlockForm={unlockForm}
-    setUnlockForm={setUnlockForm}
-    handleAction={handleAction}
-    streams={streams}
-    connectedWalletAddress={connectedWalletAddress}
-    activeTxAction={activeTxAction}
-    activeTxPhase={activeTxPhase}
-    connected={connected}
-  />
-)}
-
-     {activeTab === "edit_milestone" && (
-  <EditMilestonePanel
-    paused={paused}
-    editMilestoneForm={editMilestoneForm}
-    setEditMilestoneForm={setEditMilestoneForm}
-    handleAction={handleAction}
-    streams={streams}
-    connectedWalletAddress={connectedWalletAddress}
-    activeTxAction={activeTxAction}
-    activeTxPhase={activeTxPhase}
-    connected={connected}
-    isStreamCsvCreated={isStreamCsvCreated}
-    isMilestoneUnlocked={isMilestoneUnlocked}
-    editMilestoneBalance={editMilestoneBalance}
-    editMilestoneBalanceDecimals={editMilestoneBalanceDecimals}
-    editMilestoneMint={editMilestoneMint}
-  />
-)}
-
-    {activeTab === "edit_linear" && (
-  <EditLinearPanel
-    paused={paused}
-    editLinearForm={editLinearForm}
-    setEditLinearForm={setEditLinearForm}
-    handleAction={handleAction}
-    streams={streams}
-    connectedWalletAddress={connectedWalletAddress}
-    activeTxAction={activeTxAction}
-    activeTxPhase={activeTxPhase}
-    connected={connected}
-    endpoint={endpoint}
-    isStreamCsvCreated={isStreamCsvCreated}
-    editLinearBalance={editLinearBalance}
-    editLinearExceedsBalance={editLinearExceedsBalance}
-    editLinearDecimals={editLinearDecimals}
-    editLinearMint={editLinearMint}
-  />
-)}
-
-     {activeTab === "edit_cliff" && (
-  <EditCliffPanel
-    paused={paused}
-    editCliffForm={editCliffForm}
-    setEditCliffForm={setEditCliffForm}
-    handleAction={handleAction}
-    streams={streams}
-    connectedWalletAddress={connectedWalletAddress}
-    activeTxAction={activeTxAction}
-    activeTxPhase={activeTxPhase}
-    connected={connected}
-    isStreamCsvCreated={isStreamCsvCreated}
-  />
-)}
-
-{activeTab === "admin" && (
-  <AdminPanel
-    connectedWalletAddress={connectedWalletAddress}
-    endpoint={endpoint}
-    handleAction={handleAction}
-    activeTxAction={activeTxAction}
-    activeTxPhase={activeTxPhase}
-    connected={connected}
-  />
-)}
-
-      <div className={`mt-12 bg-zinc-950 border border-zinc-900 rounded-2xl p-4 font-mono text-[11px] relative overflow-hidden ${mobileNarrowFormClass}`}>
-        <div className="absolute top-0 right-0 p-3 flex gap-2"><span className="w-2.5 h-2.5 rounded-full bg-red-500/60" /><span className="w-2.5 h-2.5 rounded-full bg-amber-500/60" /><span className="w-2.5 h-2.5 rounded-full bg-green-500/60" /></div>
-        <div className="flex items-center gap-2 text-indigo-400 font-bold mb-2"><Terminal className="w-4 h-4 shrink-0" /><span>Equivalent CLI / Agent Skill Call</span></div>
-     <div className="text-zinc-400 select-all overflow-hidden whitespace-normal break-words py-1 sm:overflow-x-auto sm:whitespace-nowrap sm:break-normal">
-
-  {activeTab === "create_streams" && (
-    <span>
-      {createMode === "manual"
-        ? createForm.type === "2"
-          ? `$ unifiedflow create ${createForm.recipient || "<recipient>"} ${createForm.mint || "<mint>"} ${createForm.amount || "<amount>"} 2 ${milestoneAmounts.filter(Boolean).join(",") || "<100,200,300>"}`
-          : `$ unifiedflow create ${createForm.recipient || "<recipient>"} ${createForm.mint || "<mint>"} ${createForm.amount || "<amount>"} ${createForm.type || "0"}${createForm.type === "1" ? ` ${createForm.duration || "<duration_secs>"} ${createForm.cliffDuration || "<cliff_secs>"}` : ` ${createForm.duration || "<duration_secs>"}`}`
-        : `$ unifiedflow create-batch ./streams.csv`}
-    </span>
-  )}
-
-  {activeTab === "withdraw" && (
-    <span>
-      $ unifiedflow withdraw {withdrawForm.streamId || "<stream_address>"}
-    </span>
-  )}
-
-  {activeTab === "cancel" && (
-    <span>
-      $ unifiedflow cancel {cancelForm.streamId || "<stream_address>"}
-    </span>
-  )}
-
-  {activeTab === "unlock_milestone" && (
-    <span>
-      $ unifiedflow unlock {unlockForm.streamId || "<stream_address>"}
-    </span>
-  )}
-
-  {activeTab === "edit_milestone" && (
-    <span>
-      $ unifiedflow edit-batch ./edits.csv
-      {editMilestoneForm.streamId && (
-        <>
-          {"\n"}
-          {`# or manually: $ unifiedflow edit-milestone ${editMilestoneForm.streamId} <idx> <amt>`}
-        </>
+      {activeTab === "cancel" && (
+        <CancelPanel
+          paused={paused}
+          cancelForm={cancelForm}
+          setCancelForm={setCancelForm}
+          handleAction={handleAction}
+          isSubmitting={activeTxAction === "cancel" && !!activeTxPhase}
+          submitLabel={getTxLabel("cancel", "Cancel and Refund Stream")}
+          streams={streams} // ← tambah
+          connectedWalletAddress={connectedWalletAddress} // ← tambah
+        />
       )}
-    </span>
-  )}
 
-  {activeTab === "edit_linear" && (
-    <span>
-      $ unifiedflow edit-linear{" "}
-      {editLinearForm.streamId || "<stream_address>"}{" "}
-      {editLinearForm.newEndDuration || "<new_duration_secs>"}{" "}
-      {editLinearForm.topupAmount && editLinearForm.topupAmount !== "0"
-        ? editLinearForm.topupAmount
-        : "<topup_amount>"}
-    </span>
-  )}
+      {activeTab === "unlock_milestone" && (
+        <UnlockMilestonePanel
+          paused={paused}
+          endpoint={endpoint}
+          unlockForm={unlockForm}
+          setUnlockForm={setUnlockForm}
+          handleAction={handleAction}
+          streams={streams}
+          connectedWalletAddress={connectedWalletAddress}
+          activeTxAction={activeTxAction}
+          activeTxPhase={activeTxPhase}
+          connected={connected}
+        />
+      )}
 
-  {activeTab === "edit_cliff" && (
-    <span>
-      $ unifiedflow edit-cliff{" "}
-      {editCliffForm.streamId || "<stream_address>"}{" "}
-      {editCliffForm.newCliffDuration || "<new_cliff_duration_secs>"}
-      {editCliffForm.topupAmount && editCliffForm.topupAmount !== "0"
-        ? ` --topup ${editCliffForm.topupAmount}`
-        : ""}
-    </span>
-  )}
+      {activeTab === "edit_milestone" && (
+        <EditMilestonePanel
+          paused={paused}
+          editMilestoneForm={editMilestoneForm}
+          setEditMilestoneForm={setEditMilestoneForm}
+          handleAction={handleAction}
+          streams={streams}
+          connectedWalletAddress={connectedWalletAddress}
+          activeTxAction={activeTxAction}
+          activeTxPhase={activeTxPhase}
+          connected={connected}
+          isStreamCsvCreated={isStreamCsvCreated}
+          isMilestoneUnlocked={isMilestoneUnlocked}
+          editMilestoneBalance={editMilestoneBalance}
+          editMilestoneBalanceDecimals={editMilestoneBalanceDecimals}
+          editMilestoneMint={editMilestoneMint}
+        />
+      )}
 
-  {activeTab === "edit_csv" && (
-    <span>
-      $ unifiedflow edit-batch ./edits.csv
-    </span>
-  )}
+      {activeTab === "edit_linear" && (
+        <EditLinearPanel
+          paused={paused}
+          editLinearForm={editLinearForm}
+          setEditLinearForm={setEditLinearForm}
+          handleAction={handleAction}
+          streams={streams}
+          connectedWalletAddress={connectedWalletAddress}
+          activeTxAction={activeTxAction}
+          activeTxPhase={activeTxPhase}
+          connected={connected}
+          endpoint={endpoint}
+          isStreamCsvCreated={isStreamCsvCreated}
+          editLinearBalance={editLinearBalance}
+          editLinearExceedsBalance={editLinearExceedsBalance}
+          editLinearDecimals={editLinearDecimals}
+          editLinearMint={editLinearMint}
+        />
+      )}
 
-  {activeTab === "admin" && (
-    <span>
-      $ unifiedflow admin
-    </span>
-  )}
+      {activeTab === "edit_cliff" && (
+        <EditCliffPanel
+          paused={paused}
+          editCliffForm={editCliffForm}
+          setEditCliffForm={setEditCliffForm}
+          handleAction={handleAction}
+          streams={streams}
+          connectedWalletAddress={connectedWalletAddress}
+          activeTxAction={activeTxAction}
+          activeTxPhase={activeTxPhase}
+          connected={connected}
+          isStreamCsvCreated={isStreamCsvCreated}
+        />
+      )}
 
-</div>  </div>
-      
+      {activeTab === "admin" && (
+        <AdminPanel
+          connectedWalletAddress={connectedWalletAddress}
+          endpoint={endpoint}
+          handleAction={handleAction}
+          activeTxAction={activeTxAction}
+          activeTxPhase={activeTxPhase}
+          connected={connected}
+        />
+      )}
+
+      <div
+        className={`mt-12 bg-zinc-950 border border-zinc-900 rounded-2xl p-4 font-mono text-[11px] relative overflow-hidden ${mobileNarrowFormClass}`}
+      >
+        <div className="absolute top-0 right-0 p-3 flex gap-2">
+          <span className="w-2.5 h-2.5 rounded-full bg-red-500/60" />
+          <span className="w-2.5 h-2.5 rounded-full bg-amber-500/60" />
+          <span className="w-2.5 h-2.5 rounded-full bg-green-500/60" />
+        </div>
+        <div className="flex items-center gap-2 text-indigo-400 font-bold mb-2">
+          <Terminal className="w-4 h-4 shrink-0" />
+          <span>Equivalent CLI / Agent Skill Call</span>
+        </div>
+        <div className="text-zinc-400 select-all overflow-hidden whitespace-normal break-words py-1 sm:overflow-x-auto sm:whitespace-nowrap sm:break-normal">
+          {activeTab === "create_streams" && (
+            <span>
+              {createMode === "manual"
+                ? createForm.type === "2"
+                  ? `$ unifiedflow create ${
+                      createForm.recipient || "<recipient>"
+                    } ${createForm.mint || "<mint>"} ${
+                      createForm.amount || "<amount>"
+                    } 2 ${
+                      milestoneAmounts.filter(Boolean).join(",") ||
+                      "<100,200,300>"
+                    }`
+                  : `$ unifiedflow create ${
+                      createForm.recipient || "<recipient>"
+                    } ${createForm.mint || "<mint>"} ${
+                      createForm.amount || "<amount>"
+                    } ${createForm.type || "0"}${
+                      createForm.type === "1"
+                        ? ` ${createForm.duration || "<duration_secs>"} ${
+                            createForm.cliffDuration || "<cliff_secs>"
+                          }`
+                        : ` ${createForm.duration || "<duration_secs>"}`
+                    }`
+                : `$ unifiedflow create-batch ./streams.csv`}
+            </span>
+          )}
+
+          {activeTab === "withdraw" && (
+            <span>
+              $ unifiedflow withdraw{" "}
+              {withdrawForm.streamId || "<stream_address>"}
+            </span>
+          )}
+
+          {activeTab === "cancel" && (
+            <span>
+              $ unifiedflow cancel {cancelForm.streamId || "<stream_address>"}
+            </span>
+          )}
+
+          {activeTab === "unlock_milestone" && (
+            <span>
+              $ unifiedflow unlock {unlockForm.streamId || "<stream_address>"}
+            </span>
+          )}
+
+          {activeTab === "edit_milestone" && (
+            <span>
+              $ unifiedflow edit-batch ./edits.csv
+              {editMilestoneForm.streamId && (
+                <>
+                  {"\n"}
+                  {`# or manually: $ unifiedflow edit-milestone ${editMilestoneForm.streamId} <idx> <amt>`}
+                </>
+              )}
+            </span>
+          )}
+
+          {activeTab === "edit_linear" && (
+            <span>
+              $ unifiedflow edit-linear{" "}
+              {editLinearForm.streamId || "<stream_address>"}{" "}
+              {editLinearForm.newEndDuration || "<new_duration_secs>"}{" "}
+              {editLinearForm.topupAmount && editLinearForm.topupAmount !== "0"
+                ? editLinearForm.topupAmount
+                : "<topup_amount>"}
+            </span>
+          )}
+
+          {activeTab === "edit_cliff" && (
+            <span>
+              $ unifiedflow edit-cliff{" "}
+              {editCliffForm.streamId || "<stream_address>"}{" "}
+              {editCliffForm.newCliffDuration || "<new_cliff_duration_secs>"}
+              {editCliffForm.topupAmount && editCliffForm.topupAmount !== "0"
+                ? ` --topup ${editCliffForm.topupAmount}`
+                : ""}
+            </span>
+          )}
+
+          {activeTab === "edit_csv" && (
+            <span>$ unifiedflow edit-batch ./edits.csv</span>
+          )}
+
+          {activeTab === "admin" && <span>$ unifiedflow admin</span>}
+        </div>{" "}
+      </div>
     </>
   );
 }
@@ -3221,7 +3697,10 @@ function useFeeEstimate() {
 
   return { solPrice, solCost, loading, error, refetch: fetchPrice };
 }
-function useCsvEditTotalByMint(csvText: string): Record<string, number> {
+function useCsvEditTotalByMint(
+  csvText: string,
+  knownStreams?: any[]
+): Record<string, number> {
   return useMemo(() => {
     if (!csvText?.trim()) return {};
     const lines = csvText.trim().split("\n");
@@ -3234,8 +3713,14 @@ function useCsvEditTotalByMint(csvText: string): Record<string, number> {
     const milestonesIdx = headers.indexOf("milestones");
     const actionIdx = headers.indexOf("action");
     const typeIdx = headers.indexOf("type");
+    const idIdx = headers.indexOf("id");
 
     const totals: Record<string, number> = {};
+    const knownById = new Map<string, any>();
+    (knownStreams ?? []).forEach((stream) => {
+      const streamId = String(stream?.id ?? "").trim();
+      if (streamId) knownById.set(streamId, stream);
+    });
 
     for (let i = 1; i < lines.length; i++) {
       const line = lines[i].trim();
@@ -3244,18 +3729,15 @@ function useCsvEditTotalByMint(csvText: string): Record<string, number> {
 
       // ── Resolve mint ──────────────────────────────────────────────────
       // Di dalam loop useCsvEditTotalByMint, ganti resolve mint:
-const mint = mintIdx !== -1
-  ? (values[mintIdx] ?? "unknown")
-  : "__wallet_mint__"; // sentinel kalau tidak ada kolom mint
+      const mint =
+        mintIdx !== -1 ? values[mintIdx] ?? "unknown" : "__wallet_mint__"; // sentinel kalau tidak ada kolom mint
 
       // ── Detect action/type ────────────────────────────────────────────
       // Priority: explicit "action" col → fallback ke "type" col → infer dari kolom yang ada
-      const explicitAction = actionIdx !== -1
-        ? values[actionIdx]?.toLowerCase() ?? ""
-        : "";
-      const explicitType = typeIdx !== -1
-        ? values[typeIdx]?.toLowerCase() ?? ""
-        : "";
+      const explicitAction =
+        actionIdx !== -1 ? values[actionIdx]?.toLowerCase() ?? "" : "";
+      const explicitType =
+        typeIdx !== -1 ? values[typeIdx]?.toLowerCase() ?? "" : "";
 
       const isEditCliff =
         explicitAction === "edit_cliff" ||
@@ -3284,18 +3766,87 @@ const mint = mintIdx !== -1
         // Hanya topup yang menarik token dari wallet
         const topup = parseFloat(values[topupIdx] ?? "0") || 0;
         if (topup > 0) totals[mint] = (totals[mint] ?? 0) + topup;
-
       } else if (isEditMilestone && milestonesIdx !== -1) {
-        // Sum semua milestone values di row ini
-        const raw = values.slice(milestonesIdx).join(";");
-        const milestones = raw
+        const streamId = idIdx !== -1 ? String(values[idIdx] ?? "").trim() : "";
+        const stream = streamId ? knownById.get(streamId) : null;
+        const rawTarget =
+          amountIdx !== -1 ? parseFloat(values[amountIdx] ?? "0") || 0 : 0;
+        const rawMilestones = values
+          .slice(milestonesIdx)
+          .join(";")
           .split(/[;,]/)
           .map((v) => v.trim())
-          .filter(Boolean)
-          .map((v) => parseFloat(v) || 0);
-        const total = milestones.reduce((a, b) => a + b, 0);
-        if (total > 0) totals[mint] = (totals[mint] ?? 0) + total;
+          .filter(Boolean);
 
+        if (stream) {
+          const decimals =
+            typeof stream.mintDecimals === "number" ? stream.mintDecimals : 6;
+          const currentMilestones = String(stream.milestones ?? "")
+            .split(";")
+            .map((v) => v.trim())
+            .filter(Boolean)
+            .map((v) => parseBaseUnits(v));
+
+          const desiredMilestones = (() => {
+            if (rawMilestones.length > 0) {
+              const parsedRaw = rawMilestones.map((value) =>
+                parseTokenAmountToBaseUnits(value, decimals)
+              );
+              if (rawTarget > 0) {
+                const rawTotal = parsedRaw.reduce(
+                  (sum, amount) => sum + amount,
+                  BigInt(0)
+                );
+                const targetBase = parseTokenAmountToBaseUnits(
+                  String(rawTarget),
+                  decimals
+                );
+                if (rawTotal === targetBase) {
+                  return parsedRaw;
+                }
+              } else {
+                return parsedRaw;
+              }
+            }
+
+            if (rawTarget > 0) {
+              const targetBase = parseTokenAmountToBaseUnits(
+                String(rawTarget),
+                decimals
+              );
+              const count =
+                rawMilestones.length > 0
+                  ? rawMilestones.length
+                  : Math.max(
+                      currentMilestones.length,
+                      Number(stream.milestoneCount ?? 0)
+                    );
+              return buildEvenMilestoneBaseUnits(targetBase, count);
+            }
+
+            return currentMilestones;
+          })();
+
+          const maxCount = Math.max(
+            desiredMilestones.length,
+            currentMilestones.length
+          );
+          const requiredBase = Array.from({ length: maxCount }, (_, index) => {
+            const desired = desiredMilestones[index] ?? BigInt(0);
+            const current = currentMilestones[index] ?? BigInt(0);
+            return desired > current ? desired - current : BigInt(0);
+          }).reduce((sum, diff) => sum + diff, BigInt(0));
+
+          const requiredHuman = Number(requiredBase) / Math.pow(10, decimals);
+          if (requiredHuman > 0)
+            totals[mint] = (totals[mint] ?? 0) + requiredHuman;
+        } else {
+          // Fallback konservatif kalau stream belum ketemu di daftar live.
+          const milestones = rawMilestones.map((v) => parseFloat(v) || 0);
+          const total =
+            rawTarget > 0 ? rawTarget : milestones.reduce((a, b) => a + b, 0);
+          if (total > 0) totals[mint] = (totals[mint] ?? 0) + total;
+        }
       } else if (amountIdx !== -1 && !isEditCliff) {
         // Fallback: kalau tidak bisa determine tipe tapi ada kolom amount,
         // dan bukan edit_cliff — treat sebagai token-consuming edit
@@ -3305,7 +3856,7 @@ const mint = mintIdx !== -1
     }
 
     return totals;
-  }, [csvText]);
+  }, [csvText, knownStreams]);
 }
 function useCsvMilestoneValidation(csvText: string) {
   return useMemo(() => {
@@ -3325,7 +3876,7 @@ function useCsvMilestoneValidation(csvText: string) {
     const rows: {
       rowNum: number;
       recipient: string;
-      recipientInvalid: boolean;        // ← baru
+      recipientInvalid: boolean; // ← baru
       totalAmount: number;
       milestones: number[];
       milestoneSum: number;
@@ -3333,7 +3884,7 @@ function useCsvMilestoneValidation(csvText: string) {
       remaining: number;
       isMatch: boolean;
       hasInvalid: boolean;
-      isMilestoneRow: boolean;          // ← baru, supaya non-milestone bisa skip milestone check
+      isMilestoneRow: boolean; // ← baru, supaya non-milestone bisa skip milestone check
     }[] = [];
 
     for (let i = 1; i < lines.length; i++) {
@@ -3341,8 +3892,9 @@ function useCsvMilestoneValidation(csvText: string) {
       if (!line) continue;
       const values = line.split(",").map((v) => v.trim());
 
-      const recipient = recipientIdx !== -1 ? (values[recipientIdx] ?? "") : "";
-      const recipientInvalid = Boolean(recipient.trim()) && !isValidSolanaAddress(recipient);
+      const recipient = recipientIdx !== -1 ? values[recipientIdx] ?? "" : "";
+      const recipientInvalid =
+        Boolean(recipient.trim()) && !isValidSolanaAddress(recipient);
       const isMilestoneRow = typeIdx !== -1 && values[typeIdx] === "2";
       const totalAmount = parseFloat(values[amountIdx] ?? "0") || 0;
 
@@ -3364,13 +3916,19 @@ function useCsvMilestoneValidation(csvText: string) {
         }
         milestoneSum = milestones.reduce((a, b) => a + b, 0);
         remaining = totalAmount - milestoneSum;
-        pct = totalAmount > 0 ? Math.min((milestoneSum / totalAmount) * 100, 100) : 0;
-        isMatch = totalAmount > 0 && Math.abs(remaining) < 0.0000001;
-        hasInvalid = milestones.length === 0 || milestones.some((v) => v <= 0 || !Number.isFinite(v));
+        pct =
+          totalAmount > 0
+            ? Math.min((milestoneSum / totalAmount) * 100, 100)
+            : 0;
+        isMatch = true;
+        hasInvalid =
+          milestones.length === 0 ||
+          milestones.some((v) => v <= 0 || !Number.isFinite(v));
       }
 
-      // Hanya push row yang punya error (recipient invalid ATAU milestone mismatch)
-      const hasAnyError = recipientInvalid || (isMilestoneRow && (!isMatch || hasInvalid));
+      // Hanya push row yang punya error format/recipient. Mismatch total
+      // milestone akan direbalance otomatis saat apply CSV.
+      const hasAnyError = recipientInvalid || (isMilestoneRow && hasInvalid);
       if (hasAnyError) {
         rows.push({
           rowNum: i,
@@ -3399,7 +3957,11 @@ function useCsvMilestoneValidation(csvText: string) {
 // a generic "ID not found in database" when they forgot to replace the
 // example row from the downloaded template.
 function isLikelyTemplatePlaceholder(id: string): boolean {
-  return /^StreamCSV-X+$/i.test(id) || /^<.*>$/.test(id) || /^(your[_-]?stream[_-]?id|example|placeholder)$/i.test(id);
+  return (
+    /^StreamCSV-X+$/i.test(id) ||
+    /^<.*>$/.test(id) ||
+    /^(your[_-]?stream[_-]?id|example|placeholder)$/i.test(id)
+  );
 }
 
 function useCsvIdValidation(
@@ -3495,18 +4057,29 @@ function useCsvDurationValidation(
     // Parse a duration cell into a positive whole number of seconds.
     const parseSecs = (
       raw: string
-    ): { ok: boolean; value: number; bad: "missing" | "float" | "invalid" | null } => {
+    ): {
+      ok: boolean;
+      value: number;
+      bad: "missing" | "float" | "invalid" | null;
+    } => {
       const t = (raw ?? "").trim();
       if (t === "") return { ok: false, value: 0, bad: "missing" };
       if (/^\d+$/.test(t)) return { ok: true, value: Number(t), bad: null };
-      if (/^\d+\.\d+$/.test(t)) return { ok: false, value: Number(t), bad: "float" };
+      if (/^\d+\.\d+$/.test(t))
+        return { ok: false, value: Number(t), bad: "float" };
       return { ok: false, value: NaN, bad: "invalid" };
     };
 
     // Create mode cannot proceed without a duration column at all.
     if (mode === "create" && durIdx === -1) {
       return {
-        issues: [{ rowNum: 0, field: "header", reason: "Missing required column: duration" }],
+        issues: [
+          {
+            rowNum: 0,
+            field: "header",
+            reason: "Missing required column: duration",
+          },
+        ],
         hasErrors: true,
       };
     }
@@ -3522,66 +4095,84 @@ function useCsvDurationValidation(
       if (!line) continue;
       const values = line.split(",").map((v) => v.trim());
 
-     if (mode === "create") {
-  const isMilestoneRow = typeIdx !== -1 && values[typeIdx] === "2";
+      if (mode === "create") {
+        const isMilestoneRow = typeIdx !== -1 && values[typeIdx] === "2";
 
-  // Milestone (type 2) streams don't have duration/cliff_duration on-chain —
-  // skip both checks entirely for these rows.
-  if (!isMilestoneRow) {
-    const d = parseSecs(durIdx !== -1 ? values[durIdx] ?? "" : "");
-    if (!d.ok) {
-      issues.push({
-        rowNum: i,
-        field: "duration",
-        reason:
-          d.bad === "missing"
-            ? "duration is required (whole seconds > 0)"
-            : d.bad === "float"
-            ? "duration must be a whole number of seconds"
-            : "duration is not a valid number",
-      });
-    } else if (d.value <= 0) {
-      issues.push({ rowNum: i, field: "duration", reason: "duration must be greater than 0" });
-    } else if (d.value > MAX_DURATION) {
-      issues.push({ rowNum: i, field: "duration", reason: "duration is unreasonably large (max ~100 years)" });
-    }
+        // Milestone (type 2) streams don't have duration/cliff_duration on-chain —
+        // skip both checks entirely for these rows.
+        if (!isMilestoneRow) {
+          const d = parseSecs(durIdx !== -1 ? values[durIdx] ?? "" : "");
+          if (!d.ok) {
+            issues.push({
+              rowNum: i,
+              field: "duration",
+              reason:
+                d.bad === "missing"
+                  ? "duration is required (whole seconds > 0)"
+                  : d.bad === "float"
+                  ? "duration must be a whole number of seconds"
+                  : "duration is not a valid number",
+            });
+          } else if (d.value <= 0) {
+            issues.push({
+              rowNum: i,
+              field: "duration",
+              reason: "duration must be greater than 0",
+            });
+          } else if (d.value > MAX_DURATION) {
+            issues.push({
+              rowNum: i,
+              field: "duration",
+              reason: "duration is unreasonably large (max ~100 years)",
+            });
+          }
 
-    // cliff_duration only matters for cliff (type 1) rows
-    if (typeIdx !== -1 && values[typeIdx] === "1") {
-      const c = parseSecs(cliffIdx !== -1 ? values[cliffIdx] ?? "" : "");
-      if (!c.ok) {
-        issues.push({
-          rowNum: i,
-          field: "cliff_duration",
-          reason:
-            c.bad === "missing"
-              ? "cliff_duration is required for cliff (type 1) streams"
-              : c.bad === "float"
-              ? "cliff_duration must be a whole number of seconds"
-              : "cliff_duration is not a valid number",
-        });
-      } else if (c.value <= 0) {
-        issues.push({ rowNum: i, field: "cliff_duration", reason: "cliff_duration must be greater than 0 for cliff streams" });
-      } else if (d.ok && d.value > 0 && c.value > d.value) {
-        issues.push({ rowNum: i, field: "cliff_duration", reason: "cliff_duration must be ≤ duration (cliff must fall within the stream)" });
+          // cliff_duration only matters for cliff (type 1) rows
+          if (typeIdx !== -1 && values[typeIdx] === "1") {
+            const c = parseSecs(cliffIdx !== -1 ? values[cliffIdx] ?? "" : "");
+            if (!c.ok) {
+              issues.push({
+                rowNum: i,
+                field: "cliff_duration",
+                reason:
+                  c.bad === "missing"
+                    ? "cliff_duration is required for cliff (type 1) streams"
+                    : c.bad === "float"
+                    ? "cliff_duration must be a whole number of seconds"
+                    : "cliff_duration is not a valid number",
+              });
+            } else if (c.value <= 0) {
+              issues.push({
+                rowNum: i,
+                field: "cliff_duration",
+                reason:
+                  "cliff_duration must be greater than 0 for cliff streams",
+              });
+            } else if (d.ok && d.value > 0 && c.value > d.value) {
+              issues.push({
+                rowNum: i,
+                field: "cliff_duration",
+                reason:
+                  "cliff_duration must be ≤ duration (cliff must fall within the stream)",
+              });
+            }
+          }
+        }
+        continue;
       }
-    }
-  }
-  continue;
-}
 
       // ── edit mode: validate against the live stream's actual vesting type ──
       const id = idIdx !== -1 ? (values[idIdx] ?? "").trim() : "";
-      if (!id) continue;                  // identity-match rows: type unknown here
+      if (!id) continue; // identity-match rows: type unknown here
       const stream = knownById.get(id);
-      if (!stream) continue;              // unknown id → useCsvIdValidation flags it
+      if (!stream) continue; // unknown id → useCsvIdValidation flags it
       const vestingType = Number(stream.vestingType);
       const start = Number(stream.startTs ?? 0);
       const currentEnd = Number(stream.endTs ?? 0);
 
-      const durCell = durIdx !== -1 ? (values[durIdx] ?? "") : "";
-      const cliffCell = cliffIdx !== -1 ? (values[cliffIdx] ?? "") : "";
-      const amountCell = amountIdx !== -1 ? (values[amountIdx] ?? "") : "";
+      const durCell = durIdx !== -1 ? values[durIdx] ?? "" : "";
+      const cliffCell = cliffIdx !== -1 ? values[cliffIdx] ?? "" : "";
+      const amountCell = amountIdx !== -1 ? values[amountIdx] ?? "" : "";
       const hasDuration = durCell.trim() !== "" && durCell.trim() !== "0";
       const hasCliff = cliffCell.trim() !== "" && cliffCell.trim() !== "0";
       const hasAmount = amountCell.trim() !== "" && amountCell.trim() !== "0";
@@ -3592,18 +4183,33 @@ function useCsvDurationValidation(
           issues.push({
             rowNum: i,
             field: "duration",
-            reason: d.bad === "float" ? "duration must be a whole number of seconds" : "duration is not a valid number",
+            reason:
+              d.bad === "float"
+                ? "duration must be a whole number of seconds"
+                : "duration is not a valid number",
           });
         } else if (d.value > MAX_DURATION) {
-          issues.push({ rowNum: i, field: "duration", reason: "duration is unreasonably large (max ~100 years)" });
-        } else if (start > 0 && currentEnd > 0 && start + d.value <= currentEnd) {
+          issues.push({
+            rowNum: i,
+            field: "duration",
+            reason: "duration is unreasonably large (max ~100 years)",
+          });
+        } else if (
+          start > 0 &&
+          currentEnd > 0 &&
+          start + d.value <= currentEnd
+        ) {
           // Not extending the end — only allowed if the row also tops up the
           // total (delta > 0), mirroring the on-chain edit_linear rule.
           let topupPositive = false;
           if (hasAmount) {
-            const decimals = typeof stream.mintDecimals === "number" ? stream.mintDecimals : 6;
+            const decimals =
+              typeof stream.mintDecimals === "number" ? stream.mintDecimals : 6;
             const currentTotal = Number(
-              formatBaseUnitsToTokenAmount(parseBaseUnits(stream.totalAmount), decimals)
+              formatBaseUnitsToTokenAmount(
+                parseBaseUnits(stream.totalAmount),
+                decimals
+              )
             );
             const newTotal = parseFloat(amountCell) || 0;
             topupPositive = newTotal - currentTotal > 0;
@@ -3612,7 +4218,8 @@ function useCsvDurationValidation(
             issues.push({
               rowNum: i,
               field: "duration",
-              reason: "new duration must extend the end time, or provide a higher total amount to top up",
+              reason:
+                "new duration must extend the end time, or provide a higher total amount to top up",
             });
           }
         }
@@ -3629,18 +4236,34 @@ function useCsvDurationValidation(
             issues.push({
               rowNum: i,
               field: "duration",
-              reason: d.bad === "float" ? "duration must be a whole number of seconds" : "duration is not a valid number",
+              reason:
+                d.bad === "float"
+                  ? "duration must be a whole number of seconds"
+                  : "duration is not a valid number",
             });
           } else if (d.value > MAX_DURATION) {
-            issues.push({ rowNum: i, field: "duration", reason: "duration is unreasonably large (max ~100 years)" });
-          } else if (start > 0 && currentEnd > 0 && start + d.value > currentEnd) {
-            effectiveEnd = start + d.value;            // extend allowed → new end bounds the cliff
-          } else if (start > 0 && currentEnd > 0 && start + d.value < currentEnd) {
+            issues.push({
+              rowNum: i,
+              field: "duration",
+              reason: "duration is unreasonably large (max ~100 years)",
+            });
+          } else if (
+            start > 0 &&
+            currentEnd > 0 &&
+            start + d.value > currentEnd
+          ) {
+            effectiveEnd = start + d.value; // extend allowed → new end bounds the cliff
+          } else if (
+            start > 0 &&
+            currentEnd > 0 &&
+            start + d.value < currentEnd
+          ) {
             // edit_linear can only extend a cliff stream's end, never shrink it.
             issues.push({
               rowNum: i,
               field: "duration",
-              reason: "duration for a cliff stream can only be extended (new end must be ≥ current end)",
+              reason:
+                "duration for a cliff stream can only be extended (new end must be ≥ current end)",
             });
           }
         }
@@ -3653,15 +4276,22 @@ function useCsvDurationValidation(
             issues.push({
               rowNum: i,
               field: "cliff_duration",
-              reason: c.bad === "float" ? "cliff_duration must be a whole number of seconds" : "cliff_duration is not a valid number",
+              reason:
+                c.bad === "float"
+                  ? "cliff_duration must be a whole number of seconds"
+                  : "cliff_duration is not a valid number",
             });
-          } else if (cliffChanges && parseBaseUnits(stream.withdrawn ?? 0) > BigInt(0)) {
+          } else if (
+            cliffChanges &&
+            parseBaseUnits(stream.withdrawn ?? 0) > BigInt(0)
+          ) {
             // On-chain edit_cliff requires withdrawn == 0: once any tokens have been
             // withdrawn the cliff can no longer be moved (extend / top-up still ok).
             issues.push({
               rowNum: i,
               field: "cliff_duration",
-              reason: "cliff can't be changed after tokens have been withdrawn from this stream",
+              reason:
+                "cliff can't be changed after tokens have been withdrawn from this stream",
             });
           } else if (start > 0 && effectiveEnd > 0) {
             const newCliff = start + c.value;
@@ -3669,7 +4299,8 @@ function useCsvDurationValidation(
               issues.push({
                 rowNum: i,
                 field: "cliff_duration",
-                reason: "cliff must fall within the stream (cliff_duration ≤ duration, after any extension)",
+                reason:
+                  "cliff must fall within the stream (cliff_duration ≤ duration, after any extension)",
               });
             }
           }
@@ -3709,16 +4340,30 @@ function useCsvStructuralValidation(
 
     // BOM / encoding
     if (csvText.charCodeAt(0) === 0xfeff) {
-      issues.push({ rowNum: 0, field: "encoding", reason: "File starts with a byte-order mark (BOM). Re-save as UTF-8 without BOM." });
+      issues.push({
+        rowNum: 0,
+        field: "encoding",
+        reason:
+          "File starts with a byte-order mark (BOM). Re-save as UTF-8 without BOM.",
+      });
     }
 
-    const lines = csvText.replace(/^﻿/, "").split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
+    const lines = csvText
+      .replace(/^﻿/, "")
+      .split(/\r?\n/)
+      .map((l) => l.trim())
+      .filter(Boolean);
     if (lines.length < 2) return { issues, hasErrors: issues.length > 0 };
 
     // Delimiter heuristic — bail early since the rest can't be parsed reliably.
     const headerLine = lines[0];
     if (!headerLine.includes(",") && /[;\t|]/.test(headerLine)) {
-      issues.push({ rowNum: 1, field: "delimiter", reason: "CSV must be comma-delimited (found ';', tab, or '|' in the header)." });
+      issues.push({
+        rowNum: 1,
+        field: "delimiter",
+        reason:
+          "CSV must be comma-delimited (found ';', tab, or '|' in the header).",
+      });
       return { issues, hasErrors: true };
     }
 
@@ -3741,105 +4386,196 @@ function useCsvStructuralValidation(
       missing.push("id (or recipient)");
     }
     if (missing.length) {
-      issues.push({ rowNum: 1, field: "header", reason: `Missing required column${missing.length > 1 ? "s" : ""}: ${missing.join(", ")}.` });
+      issues.push({
+        rowNum: 1,
+        field: "header",
+        reason: `Missing required column${
+          missing.length > 1 ? "s" : ""
+        }: ${missing.join(", ")}.`,
+      });
     }
 
     // Row-count limit
     const dataRows = lines.length - 1;
     if (dataRows > MAX_CSV_ROWS) {
-      issues.push({ rowNum: 0, field: "rows", reason: `Too many rows (${dataRows}). Max ${MAX_CSV_ROWS} per upload.` });
+      issues.push({
+        rowNum: 0,
+        field: "rows",
+        reason: `Too many rows (${dataRows}). Max ${MAX_CSV_ROWS} per upload.`,
+      });
     }
 
     const presetDecimals = new Map<string, number>();
-    (mintPresets ?? []).forEach((p) => { if (p?.mint) presetDecimals.set(p.mint, p.decimals); });
+    (mintPresets ?? []).forEach((p) => {
+      if (p?.mint) presetDecimals.set(p.mint, p.decimals);
+    });
     const streamById = new Map<string, any>();
-    (knownStreams ?? []).forEach((s) => { const sid = String(s?.id ?? "").trim(); if (sid) streamById.set(sid, s); });
+    (knownStreams ?? []).forEach((s) => {
+      const sid = String(s?.id ?? "").trim();
+      if (sid) streamById.set(sid, s);
+    });
 
     const createDecimalsFor = (mintVal: string): number | null => {
       const m = mintVal.trim();
       if (m && presetDecimals.has(m)) return presetDecimals.get(m)!;
-      if (!m && selectedMint && presetDecimals.has(selectedMint)) return presetDecimals.get(selectedMint)!;
+      if (!m && selectedMint && presetDecimals.has(selectedMint))
+        return presetDecimals.get(selectedMint)!;
       if (!m && typeof fallbackDecimals === "number") return fallbackDecimals;
       return null; // unknown mint → cannot check precision
     };
     const isNumeric = (raw: string) => /^\d+(\.\d+)?$/.test(raw.trim());
-    const fractionLen = (raw: string) => { const t = raw.trim(); const dot = t.indexOf("."); return dot === -1 ? 0 : t.length - dot - 1; };
+    const fractionLen = (raw: string) => {
+      const t = raw.trim();
+      const dot = t.indexOf(".");
+      return dot === -1 ? 0 : t.length - dot - 1;
+    };
 
     // milestones may legitimately add columns beyond the header, so only count
     // columns up to (not including) the milestones column for "malformed".
     const minCols = milestonesIdx !== -1 ? milestonesIdx : headers.length;
 
     const seenRowKey = new Map<string, number>(); // create: exact duplicate row
-    const seenId = new Map<string, number>();      // edit: duplicate id
+    const seenId = new Map<string, number>(); // edit: duplicate id
 
     for (let i = 1; i < lines.length; i++) {
       const rowNum = i;
       const values = lines[i].split(",").map((v) => v.trim());
 
       if (values.length < minCols) {
-        issues.push({ rowNum, field: "row", reason: `Malformed row — expected at least ${minCols} columns, found ${values.length}.` });
+        issues.push({
+          rowNum,
+          field: "row",
+          reason: `Malformed row — expected at least ${minCols} columns, found ${values.length}.`,
+        });
         continue;
       }
 
-      const typeRaw = typeIdx !== -1 ? (values[typeIdx] ?? "") : "";
+      const typeRaw = typeIdx !== -1 ? values[typeIdx] ?? "" : "";
 
       if (mode === "create") {
         if (typeIdx !== -1 && !/^[012]$/.test(typeRaw)) {
-          issues.push({ rowNum, field: "type", reason: `type must be 0 (linear), 1 (cliff) or 2 (milestone) — got "${typeRaw || "(empty)"}".` });
+          issues.push({
+            rowNum,
+            field: "type",
+            reason: `type must be 0 (linear), 1 (cliff) or 2 (milestone) — got "${
+              typeRaw || "(empty)"
+            }".`,
+          });
         }
-        const recipient = recipientIdx !== -1 ? (values[recipientIdx] ?? "") : "";
+        const recipient = recipientIdx !== -1 ? values[recipientIdx] ?? "" : "";
         if (!recipient.trim()) {
-          issues.push({ rowNum, field: "recipient", reason: "recipient is required." });
+          issues.push({
+            rowNum,
+            field: "recipient",
+            reason: "recipient is required.",
+          });
         } else if (!isValidSolanaAddress(recipient)) {
-          issues.push({ rowNum, field: "recipient", reason: "recipient is not a valid Solana address." });
+          issues.push({
+            rowNum,
+            field: "recipient",
+            reason: "recipient is not a valid Solana address.",
+          });
         }
-        const mintVal = mintIdx !== -1 ? (values[mintIdx] ?? "") : "";
+        const mintVal = mintIdx !== -1 ? values[mintIdx] ?? "" : "";
         if (mintVal.trim() && !isValidSolanaAddress(mintVal)) {
-          issues.push({ rowNum, field: "mint", reason: "mint is not a valid Solana address." });
+          issues.push({
+            rowNum,
+            field: "mint",
+            reason: "mint is not a valid Solana address.",
+          });
         }
-        const amtRaw = amountIdx !== -1 ? (values[amountIdx] ?? "") : "";
+        const amtRaw = amountIdx !== -1 ? values[amountIdx] ?? "" : "";
         if (!amtRaw.trim()) {
-          issues.push({ rowNum, field: "amount", reason: "amount is required." });
+          issues.push({
+            rowNum,
+            field: "amount",
+            reason: "amount is required.",
+          });
         } else if (!isNumeric(amtRaw)) {
-          issues.push({ rowNum, field: "amount", reason: `amount must be a positive number — got "${amtRaw}".` });
+          issues.push({
+            rowNum,
+            field: "amount",
+            reason: `amount must be a positive number — got "${amtRaw}".`,
+          });
         } else if (Number(amtRaw) <= 0) {
-          issues.push({ rowNum, field: "amount", reason: "amount must be greater than 0." });
+          issues.push({
+            rowNum,
+            field: "amount",
+            reason: "amount must be greater than 0.",
+          });
         } else {
           const dec = createDecimalsFor(mintVal);
           if (dec !== null && fractionLen(amtRaw) > dec) {
-            issues.push({ rowNum, field: "amount", reason: `amount has more than ${dec} decimal place${dec === 1 ? "" : "s"} allowed for this mint.` });
+            issues.push({
+              rowNum,
+              field: "amount",
+              reason: `amount has more than ${dec} decimal place${
+                dec === 1 ? "" : "s"
+              } allowed for this mint.`,
+            });
           }
         }
         const rowKey = values.join("|").toLowerCase();
         if (seenRowKey.has(rowKey)) {
-          issues.push({ rowNum, field: "duplicate", reason: `Identical to row #${seenRowKey.get(rowKey)} — remove the duplicate.` });
+          issues.push({
+            rowNum,
+            field: "duplicate",
+            reason: `Identical to row #${seenRowKey.get(
+              rowKey
+            )} — remove the duplicate.`,
+          });
         } else {
           seenRowKey.set(rowKey, rowNum);
         }
       } else {
         // edit
         if (typeIdx !== -1 && typeRaw.trim() && !/^[012]$/.test(typeRaw)) {
-          issues.push({ rowNum, field: "type", reason: `type must be 0, 1 or 2 — got "${typeRaw}".` });
+          issues.push({
+            rowNum,
+            field: "type",
+            reason: `type must be 0, 1 or 2 — got "${typeRaw}".`,
+          });
         }
-        const amtRaw = amountIdx !== -1 ? (values[amountIdx] ?? "") : "";
+        const amtRaw = amountIdx !== -1 ? values[amountIdx] ?? "" : "";
         if (amtRaw.trim()) {
           if (!isNumeric(amtRaw)) {
-            issues.push({ rowNum, field: "amount", reason: `amount must be a positive number — got "${amtRaw}".` });
+            issues.push({
+              rowNum,
+              field: "amount",
+              reason: `amount must be a positive number — got "${amtRaw}".`,
+            });
           } else if (Number(amtRaw) <= 0) {
-            issues.push({ rowNum, field: "amount", reason: "amount must be greater than 0." });
+            issues.push({
+              rowNum,
+              field: "amount",
+              reason: "amount must be greater than 0.",
+            });
           } else {
             const id = idIdx !== -1 ? (values[idIdx] ?? "").trim() : "";
             const stream = id ? streamById.get(id) : null;
-            const dec = stream && typeof stream.mintDecimals === "number" ? stream.mintDecimals : null;
+            const dec =
+              stream && typeof stream.mintDecimals === "number"
+                ? stream.mintDecimals
+                : null;
             if (dec !== null && fractionLen(amtRaw) > dec) {
-              issues.push({ rowNum, field: "amount", reason: `amount has more than ${dec} decimal places allowed for this stream's mint.` });
+              issues.push({
+                rowNum,
+                field: "amount",
+                reason: `amount has more than ${dec} decimal places allowed for this stream's mint.`,
+              });
             }
           }
         }
         const id = idIdx !== -1 ? (values[idIdx] ?? "").trim() : "";
         if (id) {
           if (seenId.has(id)) {
-            issues.push({ rowNum, field: "duplicate", reason: `Duplicate id — already edited in row #${seenId.get(id)}.` });
+            issues.push({
+              rowNum,
+              field: "duplicate",
+              reason: `Duplicate id — already edited in row #${seenId.get(
+                id
+              )}.`,
+            });
           } else {
             seenId.set(id, rowNum);
           }
@@ -3848,7 +4584,14 @@ function useCsvStructuralValidation(
     }
 
     return { issues, hasErrors: issues.length > 0 };
-  }, [csvText, mode, mintPresets, fallbackDecimals, selectedMint, knownStreams]);
+  }, [
+    csvText,
+    mode,
+    mintPresets,
+    fallbackDecimals,
+    selectedMint,
+    knownStreams,
+  ]);
 }
 
 function CsvValidationPanel({
@@ -3867,10 +4610,10 @@ function CsvValidationPanel({
   walletMint: string | null;
   walletMintLabel?: string;
   walletDecimals: number;
-  editMode?: boolean;           // ← baru
+  editMode?: boolean; // ← baru
   editTotalByMint?: Record<string, number>; // ← baru, override total calculation
-  editStreams?: any[];          // ← baru, daftar stream live DB untuk validasi id
-  mintPresets?: MintPreset[];   // ← baru, untuk cek presisi amount per mint
+  editStreams?: any[]; // ← baru, daftar stream live DB untuk validasi id
+  mintPresets?: MintPreset[]; // ← baru, untuk cek presisi amount per mint
 }) {
   const { rows, hasErrors } = useCsvMilestoneValidation(csvText);
   const { issues: idIssues, hasErrors: hasIdErrors } = useCsvIdValidation(
@@ -3879,7 +4622,11 @@ function CsvValidationPanel({
     !!editMode
   );
   const { issues: durationIssues, hasErrors: hasDurationErrors } =
-    useCsvDurationValidation(csvText, editMode ? "edit" : "create", editStreams);
+    useCsvDurationValidation(
+      csvText,
+      editMode ? "edit" : "create",
+      editStreams
+    );
   const { issues: structuralIssues, hasErrors: hasStructuralErrors } =
     useCsvStructuralValidation(csvText, editMode ? "edit" : "create", {
       mintPresets,
@@ -3890,55 +4637,87 @@ function CsvValidationPanel({
   const totalByMint = useCsvTotalByMint(csvText);
 
   // ── Per-mint balance check ─────────────────────────────────────────────
- // Kalau editMode, pakai editTotalByMint (hanya milestone + topup linear)
-// Kalau create mode, pakai totalByMint biasa dari CSV amount column
-const effectiveTotalByMint = editMode && editTotalByMint
-  ? editTotalByMint
-  : totalByMint;
+  // Kalau editMode, pakai editTotalByMint (hanya milestone + topup linear)
+  // Kalau create mode, pakai totalByMint biasa dari CSV amount column
+  const effectiveTotalByMint =
+    editMode && editTotalByMint ? editTotalByMint : totalByMint;
 
-// Ganti effectiveTotalByMint lookup
-const csvTotalForMint = walletMint
-  ? ((effectiveTotalByMint[walletMint] ?? 0) +
-     (effectiveTotalByMint["__wallet_mint__"] ?? 0))  // ← merge sentinel
-  : 0;
+  // Ganti effectiveTotalByMint lookup
+  const csvTotalForMint = walletMint
+    ? (effectiveTotalByMint[walletMint] ?? 0) +
+      (effectiveTotalByMint["__wallet_mint__"] ?? 0) // ← merge sentinel
+    : 0;
 
-const mintExceedsBalance =
-  walletMint &&
-  walletBalance !== null &&
-  csvTotalForMint > walletBalance;
+  const mintExceedsBalance =
+    walletMint && walletBalance !== null && csvTotalForMint > walletBalance;
 
-  const hasAnyError = hasErrors || !!mintExceedsBalance || hasIdErrors || hasDurationErrors || hasStructuralErrors;
+  const hasAnyError =
+    hasErrors ||
+    !!mintExceedsBalance ||
+    hasIdErrors ||
+    hasDurationErrors ||
+    hasStructuralErrors;
 
-  if (rows.length === 0 && !mintExceedsBalance && idIssues.length === 0 && durationIssues.length === 0 && structuralIssues.length === 0) return null;
+  if (
+    rows.length === 0 &&
+    !mintExceedsBalance &&
+    idIssues.length === 0 &&
+    durationIssues.length === 0 &&
+    structuralIssues.length === 0
+  )
+    return null;
 
   const allGood = !hasAnyError;
 
   return (
-    <div className={`rounded-2xl border overflow-hidden transition-all duration-300 ${
-      allGood ? "border-emerald-500/30" : "border-rose-500/30"
-    }`}>
+    <div
+      className={`rounded-2xl border overflow-hidden transition-all duration-300 ${
+        allGood ? "border-emerald-500/30" : "border-rose-500/30"
+      }`}
+    >
       {/* Header */}
-      <div className={`flex items-center justify-between px-4 py-3 border-b ${
-        allGood
-          ? "border-emerald-500/20 bg-emerald-950/10"
-          : "border-rose-500/20 bg-rose-950/10"
-      }`}>
+      <div
+        className={`flex items-center justify-between px-4 py-3 border-b ${
+          allGood
+            ? "border-emerald-500/20 bg-emerald-950/10"
+            : "border-rose-500/20 bg-rose-950/10"
+        }`}
+      >
         <div className="flex items-center gap-2">
-          <span className={`w-1.5 h-1.5 rounded-full ${allGood ? "bg-emerald-400" : "bg-rose-400 animate-pulse"}`} />
+          <span
+            className={`w-1.5 h-1.5 rounded-full ${
+              allGood ? "bg-emerald-400" : "bg-rose-400 animate-pulse"
+            }`}
+          />
           <span className="text-[10px] font-black uppercase tracking-widest text-zinc-400">
             CSV Validation
-            {rows.length > 0 && ` · ${rows.length} milestone row${rows.length > 1 ? "s" : ""}`}
+            {rows.length > 0 &&
+              ` · ${rows.length} milestone row${rows.length > 1 ? "s" : ""}`}
           </span>
         </div>
-        <span className={`text-[10px] font-bold ${allGood ? "text-emerald-400" : "text-rose-400"}`}>
+        <span
+          className={`text-[10px] font-bold ${
+            allGood ? "text-emerald-400" : "text-rose-400"
+          }`}
+        >
           {allGood
             ? "All checks passed"
             : [
                 mintExceedsBalance && "insufficient balance",
-                hasStructuralErrors && `${structuralIssues.length} format issue${structuralIssues.length > 1 ? "s" : ""}`,
-                hasIdErrors && `${idIssues.length} invalid id${idIssues.length > 1 ? "s" : ""}`,
-                hasDurationErrors && `${durationIssues.length} duration issue${durationIssues.length > 1 ? "s" : ""}`,
-                hasErrors && `${rows.filter((r) => !r.isMatch || r.hasInvalid).length} unbalanced`,
+                hasStructuralErrors &&
+                  `${structuralIssues.length} format issue${
+                    structuralIssues.length > 1 ? "s" : ""
+                  }`,
+                hasIdErrors &&
+                  `${idIssues.length} invalid id${
+                    idIssues.length > 1 ? "s" : ""
+                  }`,
+                hasDurationErrors &&
+                  `${durationIssues.length} duration issue${
+                    durationIssues.length > 1 ? "s" : ""
+                  }`,
+                hasErrors &&
+                  `${rows.length} CSV issue${rows.length > 1 ? "s" : ""}`,
               ]
                 .filter(Boolean)
                 .join(" · ")}
@@ -3950,30 +4729,47 @@ const mintExceedsBalance =
         <div className="px-4 py-3 bg-rose-950/20 border-b border-rose-500/20 flex items-start gap-3">
           <AlertTriangle className="w-4 h-4 text-rose-400 shrink-0 mt-0.5" />
           <div className="flex-1 min-w-0">
-         <div className="text-[11px] font-bold text-rose-300 mb-1">
-  {editMode
-    ? `Insufficient balance for ${walletMintLabel ?? "selected mint"} (milestone + topup)`
-    : `Insufficient balance for ${walletMintLabel ?? "selected mint"}`}
-</div>
+            <div className="text-[11px] font-bold text-rose-300 mb-1">
+              {editMode
+                ? `Insufficient balance for ${
+                    walletMintLabel ?? "selected mint"
+                  } (milestone + topup)`
+                : `Insufficient balance for ${
+                    walletMintLabel ?? "selected mint"
+                  }`}
+            </div>
             <div className="grid grid-cols-3 gap-3 text-[10px] font-mono">
               <div>
-                <div className="text-zinc-600 text-[9px] uppercase mb-0.5">CSV Total</div>
+                <div className="text-zinc-600 text-[9px] uppercase mb-0.5">
+                  CSV Total
+                </div>
                 <div className="text-rose-400 font-black">
-                  {csvTotalForMint.toLocaleString(undefined, { maximumFractionDigits: walletDecimals })}{walletMintLabel ? ` ${walletMintLabel}` : ""}
+                  {csvTotalForMint.toLocaleString(undefined, {
+                    maximumFractionDigits: walletDecimals,
+                  })}
+                  {walletMintLabel ? ` ${walletMintLabel}` : ""}
                 </div>
               </div>
               <div>
-                <div className="text-zinc-600 text-[9px] uppercase mb-0.5">Wallet Balance</div>
+                <div className="text-zinc-600 text-[9px] uppercase mb-0.5">
+                  Wallet Balance
+                </div>
                 <div className="text-zinc-300 font-black">
-                  {walletBalance.toLocaleString(undefined, { maximumFractionDigits: walletDecimals })}{walletMintLabel ? ` ${walletMintLabel}` : ""}
+                  {walletBalance.toLocaleString(undefined, {
+                    maximumFractionDigits: walletDecimals,
+                  })}
+                  {walletMintLabel ? ` ${walletMintLabel}` : ""}
                 </div>
               </div>
               <div>
-                <div className="text-zinc-600 text-[9px] uppercase mb-0.5">Shortfall</div>
+                <div className="text-zinc-600 text-[9px] uppercase mb-0.5">
+                  Shortfall
+                </div>
                 <div className="text-rose-400 font-black">
                   {(csvTotalForMint - walletBalance).toLocaleString(undefined, {
                     maximumFractionDigits: walletDecimals,
-                  })}{walletMintLabel ? ` ${walletMintLabel}` : ""}
+                  })}
+                  {walletMintLabel ? ` ${walletMintLabel}` : ""}
                 </div>
               </div>
             </div>
@@ -3997,7 +4793,9 @@ const mintExceedsBalance =
                 <div className="text-[10px] font-mono text-rose-400/80 break-all mb-0.5">
                   {issue.id}
                 </div>
-                <div className="text-[10px] text-rose-300/70">{issue.reason}</div>
+                <div className="text-[10px] text-rose-300/70">
+                  {issue.reason}
+                </div>
               </div>
             </div>
           ))}
@@ -4015,11 +4813,16 @@ const mintExceedsBalance =
               <AlertTriangle className="w-4 h-4 text-rose-400 shrink-0 mt-0.5" />
               <div className="flex-1 min-w-0">
                 <div className="text-[11px] font-bold text-rose-300 mb-0.5">
-                  {issue.field === "header" || issue.field === "delimiter" || issue.field === "encoding" || issue.field === "rows"
+                  {issue.field === "header" ||
+                  issue.field === "delimiter" ||
+                  issue.field === "encoding" ||
+                  issue.field === "rows"
                     ? "CSV format"
                     : `Row #${issue.rowNum} · ${issue.field}`}
                 </div>
-                <div className="text-[10px] text-rose-300/70">{issue.reason}</div>
+                <div className="text-[10px] text-rose-300/70">
+                  {issue.reason}
+                </div>
               </div>
             </div>
           ))}
@@ -4041,7 +4844,9 @@ const mintExceedsBalance =
                     ? "CSV header"
                     : `Row #${issue.rowNum} · ${issue.field}`}
                 </div>
-                <div className="text-[10px] text-rose-300/70">{issue.reason}</div>
+                <div className="text-[10px] text-rose-300/70">
+                  {issue.reason}
+                </div>
               </div>
             </div>
           ))}
@@ -4049,124 +4854,152 @@ const mintExceedsBalance =
       )}
 
       {/* ── Error rows ──────────────────────────────────────────────────── */}
-{rows.length > 0 && (
-  <div className="divide-y divide-zinc-900/60">
-    {rows.map((row) => {
-      const shortRecipient = row.recipient
-        ? `${row.recipient.slice(0, 6)}…${row.recipient.slice(-4)}`
-        : `Row #${row.rowNum}`;
+      {rows.length > 0 && (
+        <div className="divide-y divide-zinc-900/60">
+          {rows.map((row) => {
+            const shortRecipient = row.recipient
+              ? `${row.recipient.slice(0, 6)}…${row.recipient.slice(-4)}`
+              : `Row #${row.rowNum}`;
 
-      return (
-        <div key={row.rowNum} className="px-4 py-3 bg-zinc-950/40 space-y-2">
-          {/* Row header */}
-          <div className="flex items-center justify-between">
-            <span className="font-mono text-[10px] text-zinc-500">
-              Row #{row.rowNum}
-            </span>
-            <span className="text-[10px] font-black text-rose-400">
-              {[
-                row.recipientInvalid && "invalid recipient",
-                row.isMilestoneRow && row.hasInvalid && "missing milestone",
-                row.isMilestoneRow && !row.hasInvalid && !row.isMatch && "milestone mismatch",
-              ]
-                .filter(Boolean)
-                .join(" · ")}
-            </span>
-          </div>
-
-          {/* Recipient error */}
-          {row.recipientInvalid && (
-            <div className="flex items-start gap-2 rounded-xl border border-rose-500/20 bg-rose-950/20 px-3 py-2">
-              <AlertTriangle className="w-3 h-3 text-rose-400 shrink-0 mt-0.5" />
-              <div className="min-w-0">
-                <div className="text-[10px] font-bold text-rose-300 mb-0.5">
-                  Invalid Solana address
-                </div>
-                <div className="font-mono text-[10px] text-rose-400/80 break-all">
-                  {row.recipient || "(empty)"}
-                </div>
-              </div>
-            </div>
-          )}
-
-          {/* Milestone error — hanya kalau isMilestoneRow */}
-          {row.isMilestoneRow && (
-            <>
-              <div className="relative h-1.5 w-full rounded-full bg-zinc-900 overflow-hidden">
-                <div
-                  className={`absolute left-0 top-0 h-full rounded-full transition-all duration-500 ${
-                    row.hasInvalid ? "bg-rose-500" :
-                    row.isMatch ? "bg-emerald-500" :
-                    row.pct > 100 ? "bg-rose-500" : "bg-amber-400"
-                  }`}
-                  style={{ width: `${Math.min(row.pct, 100)}%` }}
-                />
-              </div>
-              <div className="grid grid-cols-3 gap-2 text-[10px] font-mono">
-                <div>
-                  <div className="text-zinc-600 text-[9px] uppercase">Allocated</div>
-                  <div className={row.isMatch ? "text-emerald-400" : "text-rose-400"}>
-                    {row.milestoneSum.toLocaleString()}
-                  </div>
-                </div>
-                <div>
-                  <div className="text-zinc-600 text-[9px] uppercase">Total</div>
-                  <div className="text-zinc-300">{row.totalAmount.toLocaleString()}</div>
-                </div>
-                <div>
-                  <div className="text-zinc-600 text-[9px] uppercase">
-                    {row.remaining < 0 ? "Excess" : "Remaining"}
-                  </div>
-                  <div className={row.remaining < 0 ? "text-rose-400" : "text-amber-400"}>
-                    {Math.abs(row.remaining).toLocaleString()}
-                  </div>
-                </div>
-              </div>
-              <div className="flex flex-wrap gap-1">
-                {row.milestones.map((m, idx) => (
-                  <span
-                    key={idx}
-                    className={`px-1.5 py-0.5 rounded-md text-[9px] font-mono font-bold border ${
-                      m <= 0
-                        ? "border-rose-500/40 bg-rose-950/20 text-rose-400"
-                        : "border-zinc-800 bg-zinc-900/50 text-zinc-400"
-                    }`}
-                  >
-                    #{idx}: {m}
+            return (
+              <div
+                key={row.rowNum}
+                className="px-4 py-3 bg-zinc-950/40 space-y-2"
+              >
+                {/* Row header */}
+                <div className="flex items-center justify-between">
+                  <span className="font-mono text-[10px] text-zinc-500">
+                    Row #{row.rowNum}
                   </span>
-                ))}
-              </div>
-            </>
-          )}
-        </div>
-      );
-    })}
-  </div>
-)}
+                  <span className="text-[10px] font-black text-rose-400">
+                    {[
+                      row.recipientInvalid && "invalid recipient",
+                      row.isMilestoneRow &&
+                        row.hasInvalid &&
+                        "missing milestone",
+                      row.isMilestoneRow &&
+                        !row.hasInvalid &&
+                        !row.isMatch &&
+                        "milestone mismatch",
+                    ]
+                      .filter(Boolean)
+                      .join(" · ")}
+                  </span>
+                </div>
 
-     {/* Footer */}
-{hasAnyError && (
-  <div className="px-4 py-3 border-t border-rose-500/20 bg-rose-950/10 flex items-start gap-2">
-    <span className="text-rose-400 text-[10px]">⚠</span>
-    <p className="text-[10px] text-rose-300/80 leading-relaxed">
-      {hasStructuralErrors
-        ? "Fix the highlighted format issues before applying. Every row needs valid columns, a real recipient/mint address, a positive numeric amount, and type 0/1/2 — comma-delimited, UTF-8, no duplicates."
-        : hasIdErrors
-        ? "Fix the invalid id column before applying. Each edit row must reference an existing CSV-created stream id, or leave id blank to match by recipient."
-        : hasDurationErrors
-        ? "Fix the highlighted duration / cliff_duration values before applying. Durations must be whole positive seconds, and edits must extend the end (linear) or keep the cliff within the stream."
-        : mintExceedsBalance && hasErrors
-        ? editMode
-          ? "Fix balance shortfall (milestone + topup amounts) and milestone allocations before applying."
-          : "Fix balance shortfall and milestone allocations before deploying."
-        : mintExceedsBalance
-        ? editMode
-          ? "Top up your wallet or reduce topup/milestone amounts. edit_cliff rows are excluded from this check."
-          : "Top up your wallet or reduce total CSV amounts before deploying."
-        : "Fix milestone allocations before deploying. Each milestone row requires allocations that sum exactly to total amount."}
-    </p>
-  </div>
-)}
+                {/* Recipient error */}
+                {row.recipientInvalid && (
+                  <div className="flex items-start gap-2 rounded-xl border border-rose-500/20 bg-rose-950/20 px-3 py-2">
+                    <AlertTriangle className="w-3 h-3 text-rose-400 shrink-0 mt-0.5" />
+                    <div className="min-w-0">
+                      <div className="text-[10px] font-bold text-rose-300 mb-0.5">
+                        Invalid Solana address
+                      </div>
+                      <div className="font-mono text-[10px] text-rose-400/80 break-all">
+                        {row.recipient || "(empty)"}
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {/* Milestone error — hanya kalau isMilestoneRow */}
+                {row.isMilestoneRow && (
+                  <>
+                    <div className="relative h-1.5 w-full rounded-full bg-zinc-900 overflow-hidden">
+                      <div
+                        className={`absolute left-0 top-0 h-full rounded-full transition-all duration-500 ${
+                          row.hasInvalid
+                            ? "bg-rose-500"
+                            : row.isMatch
+                            ? "bg-emerald-500"
+                            : row.pct > 100
+                            ? "bg-rose-500"
+                            : "bg-amber-400"
+                        }`}
+                        style={{ width: `${Math.min(row.pct, 100)}%` }}
+                      />
+                    </div>
+                    <div className="grid grid-cols-3 gap-2 text-[10px] font-mono">
+                      <div>
+                        <div className="text-zinc-600 text-[9px] uppercase">
+                          Allocated
+                        </div>
+                        <div
+                          className={
+                            row.isMatch ? "text-emerald-400" : "text-rose-400"
+                          }
+                        >
+                          {row.milestoneSum.toLocaleString()}
+                        </div>
+                      </div>
+                      <div>
+                        <div className="text-zinc-600 text-[9px] uppercase">
+                          Total
+                        </div>
+                        <div className="text-zinc-300">
+                          {row.totalAmount.toLocaleString()}
+                        </div>
+                      </div>
+                      <div>
+                        <div className="text-zinc-600 text-[9px] uppercase">
+                          {row.remaining < 0 ? "Excess" : "Remaining"}
+                        </div>
+                        <div
+                          className={
+                            row.remaining < 0
+                              ? "text-rose-400"
+                              : "text-amber-400"
+                          }
+                        >
+                          {Math.abs(row.remaining).toLocaleString()}
+                        </div>
+                      </div>
+                    </div>
+                    <div className="flex flex-wrap gap-1">
+                      {row.milestones.map((m, idx) => (
+                        <span
+                          key={idx}
+                          className={`px-1.5 py-0.5 rounded-md text-[9px] font-mono font-bold border ${
+                            m <= 0
+                              ? "border-rose-500/40 bg-rose-950/20 text-rose-400"
+                              : "border-zinc-800 bg-zinc-900/50 text-zinc-400"
+                          }`}
+                        >
+                          #{idx}: {m}
+                        </span>
+                      ))}
+                    </div>
+                  </>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      )}
+
+      {/* Footer */}
+      {hasAnyError && (
+        <div className="px-4 py-3 border-t border-rose-500/20 bg-rose-950/10 flex items-start gap-2">
+          <span className="text-rose-400 text-[10px]">⚠</span>
+          <p className="text-[10px] text-rose-300/80 leading-relaxed">
+            {hasStructuralErrors
+              ? "Fix the highlighted format issues before applying. Every row needs valid columns, a real recipient/mint address, a positive numeric amount, and type 0/1/2 — comma-delimited, UTF-8, no duplicates."
+              : hasIdErrors
+              ? "Fix the invalid id column before applying. Each edit row must reference an existing CSV-created stream id, or leave id blank to match by recipient."
+              : hasDurationErrors
+              ? "Fix the highlighted duration / cliff_duration values before applying. Durations must be whole positive seconds, and edits must extend the end (linear) or keep the cliff within the stream."
+              : mintExceedsBalance && hasErrors
+              ? editMode
+                ? "Fix balance shortfall (milestone + topup amounts) and milestone allocations before applying."
+                : "Fix balance shortfall and milestone allocations before deploying."
+              : mintExceedsBalance
+              ? editMode
+                ? "Top up your wallet or reduce topup/milestone amounts. edit_cliff rows are excluded from this check."
+                : "Top up your wallet or reduce total CSV amounts before deploying."
+              : "Fix milestone allocations before deploying. Each milestone row requires allocations that sum exactly to total amount."}
+          </p>
+        </div>
+      )}
     </div>
   );
 }
@@ -4187,7 +5020,7 @@ function useCsvTotalByMint(csvText: string): Record<string, number> {
       if (!line) continue;
       const values = line.split(",").map((v) => v.trim());
       const amount = parseFloat(values[amountIdx] ?? "0") || 0;
-      const mint = mintIdx !== -1 ? (values[mintIdx] ?? "unknown") : "unknown";
+      const mint = mintIdx !== -1 ? values[mintIdx] ?? "unknown" : "unknown";
       totals[mint] = (totals[mint] ?? 0) + amount;
     }
     return totals;
@@ -4282,7 +5115,9 @@ function EditMilestonePanel({
           const parsed = rawStr.split(";").map((v: string) => {
             try {
               return formatBaseUnitsToTokenAmount(BigInt(v.trim()), decimals);
-            } catch { return "0"; }
+            } catch {
+              return "0";
+            }
           });
           while (parsed.length < count) parsed.push("0");
           const trimmed = parsed.slice(0, count);
@@ -4331,38 +5166,48 @@ function EditMilestonePanel({
 
   // ── Current state preview ──────────────────────────────────────────────
   const currentPreview = useMemo(() => {
-  if (!stream) return null;
+    if (!stream) return null;
 
-  const streamDecimals = typeof stream.mintDecimals === "number" ? stream.mintDecimals : 6;
-  const milestoneCount = Number(stream.milestoneCount ?? 0);
-  const rawStr = String(stream.milestones || "").trim();
-  const rawAmounts = rawStr ? rawStr.split(";").map((v: string) => {
-    try { return BigInt(v.trim()); } catch { return BigInt(0); }
-  }) : [];
-  
-  const totalBase = parseBaseUnits(stream.totalAmount);
-  let currentAmounts: bigint[];
-  if (rawAmounts.length === milestoneCount) {
-    currentAmounts = rawAmounts;
-  } else {
-    const base = totalBase / BigInt(milestoneCount || 1);
-    const remainder = totalBase % BigInt(milestoneCount || 1);
-    currentAmounts = Array.from({ length: milestoneCount }, (_, i) =>
-      base + (BigInt(i) < remainder ? BigInt(1) : BigInt(0))
-    );
-  }
+    const streamDecimals =
+      typeof stream.mintDecimals === "number" ? stream.mintDecimals : 6;
+    const milestoneCount = Number(stream.milestoneCount ?? 0);
+    const rawStr = String(stream.milestones || "").trim();
+    const rawAmounts = rawStr
+      ? rawStr.split(";").map((v: string) => {
+          try {
+            return BigInt(v.trim());
+          } catch {
+            return BigInt(0);
+          }
+        })
+      : [];
 
-  return {
-    totalAmount: formatBaseUnitsToTokenAmount(totalBase, streamDecimals),
-    milestoneCount,
-    amounts: currentAmounts.map((a: bigint) => formatBaseUnitsToTokenAmount(a, streamDecimals)),
-    recipient: String(stream.recipient ?? ""),
-  };
-}, [stream]);
+    const totalBase = parseBaseUnits(stream.totalAmount);
+    let currentAmounts: bigint[];
+    if (rawAmounts.length === milestoneCount) {
+      currentAmounts = rawAmounts;
+    } else {
+      const base = totalBase / BigInt(milestoneCount || 1);
+      const remainder = totalBase % BigInt(milestoneCount || 1);
+      currentAmounts = Array.from(
+        { length: milestoneCount },
+        (_, i) => base + (BigInt(i) < remainder ? BigInt(1) : BigInt(0))
+      );
+    }
+
+    return {
+      totalAmount: formatBaseUnitsToTokenAmount(totalBase, streamDecimals),
+      milestoneCount,
+      amounts: currentAmounts.map((a: bigint) =>
+        formatBaseUnitsToTokenAmount(a, streamDecimals)
+      ),
+      recipient: String(stream.recipient ?? ""),
+    };
+  }, [stream]);
   // ── Decimals ───────────────────────────────────────────────────────────
   const decimals = Math.max(
     typeof editMilestoneForm.mintDecimals === "number" &&
-    editMilestoneForm.mintDecimals !== null
+      editMilestoneForm.mintDecimals !== null
       ? editMilestoneForm.mintDecimals
       : typeof streamDetail?.mintDecimals === "number"
       ? streamDetail.mintDecimals
@@ -4373,8 +5218,13 @@ function EditMilestonePanel({
   // ── totalAmount sebagai bigint ─────────────────────────────────────────
   const totalAmountBase = useMemo(() => {
     const raw = editMilestoneForm?.totalAmount;
-    if (!raw || raw === "" || raw === "null" || raw === "undefined") return BigInt(0);
-    try { return BigInt(String(raw).trim()); } catch { return BigInt(0); }
+    if (!raw || raw === "" || raw === "null" || raw === "undefined")
+      return BigInt(0);
+    try {
+      return BigInt(String(raw).trim());
+    } catch {
+      return BigInt(0);
+    }
   }, [editMilestoneForm?.totalAmount]);
 
   // ── Display value untuk total input ───────────────────────────────────
@@ -4401,7 +5251,10 @@ function EditMilestonePanel({
         ? streamDetail.mintDecimals
         : editMilestoneBalanceDecimals;
 
-    const newTotalBase = parseTokenAmountToBaseUnits(newTotalHuman, safeDecimals);
+    const newTotalBase = parseTokenAmountToBaseUnits(
+      newTotalHuman,
+      safeDecimals
+    );
     if (newTotalBase <= BigInt(0)) return;
 
     const currentSum = amounts.reduce(
@@ -4422,7 +5275,10 @@ function EditMilestonePanel({
       );
     } else {
       const scaled = amounts.map((v) => {
-        const base = parseTokenAmountToBaseUnits(String(v || "0"), safeDecimals);
+        const base = parseTokenAmountToBaseUnits(
+          String(v || "0"),
+          safeDecimals
+        );
         return (base * newTotalBase) / currentSum;
       });
       const scaledSum = scaled.reduce((a, b) => a + b, BigInt(0));
@@ -4450,7 +5306,9 @@ function EditMilestonePanel({
       amounts.map((v) => {
         try {
           return parseTokenAmountToBaseUnits(String(v || "0"), decimals);
-        } catch { return BigInt(0); }
+        } catch {
+          return BigInt(0);
+        }
       }),
     [amounts, decimals]
   );
@@ -4475,16 +5333,28 @@ function EditMilestonePanel({
   const insufficientBalance = useMemo(() => {
     if (!stream) return false;
     const oldTotalAmountBase = parseBaseUnits(stream.totalAmount);
-    const addedAmountBase = totalAmountBase > oldTotalAmountBase ? totalAmountBase - oldTotalAmountBase : BigInt(0);
-    const requiredTopUpTokenAmount = addedAmountBase > BigInt(0) ? Number(formatBaseUnitsToTokenAmount(addedAmountBase, decimals)) : 0;
-    
+    const addedAmountBase =
+      totalAmountBase > oldTotalAmountBase
+        ? totalAmountBase - oldTotalAmountBase
+        : BigInt(0);
+    const requiredTopUpTokenAmount =
+      addedAmountBase > BigInt(0)
+        ? Number(formatBaseUnitsToTokenAmount(addedAmountBase, decimals))
+        : 0;
+
     return (
       !!editMilestoneMint &&
       requiredTopUpTokenAmount > 0 &&
       editMilestoneBalance.balance !== null &&
       editMilestoneBalance.balance < requiredTopUpTokenAmount
     );
-  }, [stream, totalAmountBase, decimals, editMilestoneMint, editMilestoneBalance.balance]);
+  }, [
+    stream,
+    totalAmountBase,
+    decimals,
+    editMilestoneMint,
+    editMilestoneBalance.balance,
+  ]);
 
   const isSubmitting = activeTxAction === "edit_milestone" && !!activeTxPhase;
 
@@ -4541,7 +5411,6 @@ function EditMilestonePanel({
 
       {!isCsvCreated && (
         <div className="grid gap-4 sm:grid-cols-2">
-
           {/* Stream ID — full width */}
           <div className="sm:col-span-2">
             <label className="block text-xs font-semibold text-zinc-400 uppercase tracking-wider mb-1.5">
@@ -4598,12 +5467,17 @@ function EditMilestonePanel({
                   Only the stream creator can edit milestones. Creator is{" "}
                   <span className="font-mono text-amber-300 break-all">
                     {stream?.creator
-                      ? `${stream.creator.slice(0, 6)}…${stream.creator.slice(-4)}`
+                      ? `${stream.creator.slice(0, 6)}…${stream.creator.slice(
+                          -4
+                        )}`
                       : "unknown"}
                   </span>
                   , connected wallet is{" "}
                   <span className="font-mono text-amber-300 break-all">
-                    {`${connectedWalletAddress!.slice(0, 6)}…${connectedWalletAddress!.slice(-4)}`}
+                    {`${connectedWalletAddress!.slice(
+                      0,
+                      6
+                    )}…${connectedWalletAddress!.slice(-4)}`}
                   </span>
                   .
                 </p>
@@ -4621,8 +5495,7 @@ function EditMilestonePanel({
                 <p className="text-[11px] text-zinc-500 leading-relaxed">
                   edit_milestone only applies to Milestone type (type 2)
                   streams. This stream is{" "}
-                  {Number(stream?.vestingType) === 0 ? "Linear" : "Cliff"}{" "}
-                  type.
+                  {Number(stream?.vestingType) === 0 ? "Linear" : "Cliff"} type.
                 </p>
               </div>
             </div>
@@ -4656,41 +5529,52 @@ function EditMilestonePanel({
             </div>
           )}
 
-      {/* ── Current state preview ─────────────────────────────────── */}
-{currentPreview && !isWrongType && (
-  <div className="sm:col-span-2 rounded-2xl border border-zinc-800 overflow-hidden mb-2">
-    <div className="flex items-center gap-2 px-4 py-3 border-b border-zinc-900 bg-zinc-950/60">
-      <Lock className="w-3.5 h-3.5 text-violet-400" />
-      <span className="text-[10px] font-black uppercase tracking-widest text-zinc-400">
-        Current Milestone State
-      </span>
-    </div>
-    <div className="p-4 bg-zinc-950/30">
-      {currentPreview.recipient && (
-        <div className="flex items-center justify-between mb-2 gap-3">
-          <span className="text-xs text-zinc-500 shrink-0">Recipient</span>
-          <span className="font-mono text-xs font-bold text-zinc-300 truncate select-all">
-            {currentPreview.recipient}
-          </span>
-        </div>
-      )}
-      <div className="flex items-center justify-between mb-2">
-        <span className="text-xs text-zinc-500">Total Allocation</span>
-        <span className="font-mono text-sm font-bold text-zinc-200">
-          {currentPreview.totalAmount}
-        </span>
-      </div>
-      <div className="space-y-1">
-        {currentPreview.amounts.map((amt, idx) => (
-          <div key={idx} className="flex justify-between items-center py-1 border-t border-zinc-900/50">
-            <span className="text-xs text-zinc-500">Milestone #{idx}</span>
-            <span className="font-mono text-xs text-zinc-400">{amt}</span>
-          </div>
-        ))}
-      </div>
-    </div>
-  </div>
-)}
+          {/* ── Current state preview ─────────────────────────────────── */}
+          {currentPreview && !isWrongType && (
+            <div className="sm:col-span-2 rounded-2xl border border-zinc-800 overflow-hidden mb-2">
+              <div className="flex items-center gap-2 px-4 py-3 border-b border-zinc-900 bg-zinc-950/60">
+                <Lock className="w-3.5 h-3.5 text-violet-400" />
+                <span className="text-[10px] font-black uppercase tracking-widest text-zinc-400">
+                  Current Milestone State
+                </span>
+              </div>
+              <div className="p-4 bg-zinc-950/30">
+                {currentPreview.recipient && (
+                  <div className="flex items-center justify-between mb-2 gap-3">
+                    <span className="text-xs text-zinc-500 shrink-0">
+                      Recipient
+                    </span>
+                    <span className="font-mono text-xs font-bold text-zinc-300 truncate select-all">
+                      {currentPreview.recipient}
+                    </span>
+                  </div>
+                )}
+                <div className="flex items-center justify-between mb-2">
+                  <span className="text-xs text-zinc-500">
+                    Total Allocation
+                  </span>
+                  <span className="font-mono text-sm font-bold text-zinc-200">
+                    {currentPreview.totalAmount}
+                  </span>
+                </div>
+                <div className="space-y-1">
+                  {currentPreview.amounts.map((amt, idx) => (
+                    <div
+                      key={idx}
+                      className="flex justify-between items-center py-1 border-t border-zinc-900/50"
+                    >
+                      <span className="text-xs text-zinc-500">
+                        Milestone #{idx}
+                      </span>
+                      <span className="font-mono text-xs text-zinc-400">
+                        {amt}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+          )}
 
           {/* ── Total amount input — full width ───────────────────────── */}
           {amounts.length > 0 && !isWrongType && (
@@ -4725,8 +5609,7 @@ function EditMilestonePanel({
           {amounts.map((amount: string, index: number) => {
             const val = Number(amount || 0);
             const isEmpty = !amount || amount === "0";
-            const isInvalid =
-              isEmpty || val <= 0 || !Number.isFinite(val);
+            const isInvalid = isEmpty || val <= 0 || !Number.isFinite(val);
             const pctOfTotal =
               totalAmountBase > BigInt(0)
                 ? (
@@ -4790,8 +5673,7 @@ function EditMilestonePanel({
               <span className="text-[10px] font-mono text-zinc-600">
                 balance unavailable
               </span>
-            ) : editMilestoneMint &&
-              editMilestoneBalance.balance !== null ? (
+            ) : editMilestoneMint && editMilestoneBalance.balance !== null ? (
               <div className="flex items-center gap-2 px-1 mb-2">
                 <span className="text-[10px] font-mono text-zinc-500">
                   Wallet Balance:{" "}
@@ -4808,10 +5690,7 @@ function EditMilestonePanel({
             <MilestoneAllocationCounter
               amounts={amounts.map((v: string) =>
                 formatBaseUnitsToTokenAmount(
-                  parseTokenAmountToBaseUnits(
-                    String(v || "0"),
-                    decimals
-                  ),
+                  parseTokenAmountToBaseUnits(String(v || "0"), decimals),
                   decimals
                 )
               )}
@@ -4840,40 +5719,52 @@ function EditMilestonePanel({
       )}
 
       {/* ── Changes preview ───────────────────────────────────────── */}
-      {!isCsvCreated && currentPreview && amounts.length > 0 && !isWrongType && (
-        <div className="mt-6 rounded-2xl border border-indigo-900/30 overflow-hidden">
-          <div className="flex items-center gap-2 px-4 py-3 border-b border-indigo-900/30 bg-indigo-950/20">
-            <Layers className="w-3.5 h-3.5 text-indigo-400" />
-            <span className="text-[10px] font-black uppercase tracking-widest text-indigo-400">
-              Changes Preview
-            </span>
-          </div>
-          <div className="p-4 bg-indigo-950/10">
-            <div className="space-y-1">
-              {amounts.map((amt: string, idx: number) => {
-                const oldAmt = currentPreview.amounts[idx] || "0";
-                const isChanged = amt !== oldAmt;
-                return (
-                  <div key={idx} className="flex justify-between items-center py-1 border-t border-indigo-900/20">
-                    <span className="text-xs text-zinc-400">Milestone #{idx}</span>
-                    <div className="flex items-center gap-2 font-mono text-xs">
-                      {isChanged ? (
-                        <>
-                          <span className="text-zinc-500 line-through">{oldAmt}</span>
-                          <span className="text-zinc-600">→</span>
-                          <span className="text-indigo-400 font-bold">{amt}</span>
-                        </>
-                      ) : (
-                        <span className="text-zinc-500">{amt}</span>
-                      )}
+      {!isCsvCreated &&
+        currentPreview &&
+        amounts.length > 0 &&
+        !isWrongType && (
+          <div className="mt-6 rounded-2xl border border-indigo-900/30 overflow-hidden">
+            <div className="flex items-center gap-2 px-4 py-3 border-b border-indigo-900/30 bg-indigo-950/20">
+              <Layers className="w-3.5 h-3.5 text-indigo-400" />
+              <span className="text-[10px] font-black uppercase tracking-widest text-indigo-400">
+                Changes Preview
+              </span>
+            </div>
+            <div className="p-4 bg-indigo-950/10">
+              <div className="space-y-1">
+                {amounts.map((amt: string, idx: number) => {
+                  const oldAmt = currentPreview.amounts[idx] || "0";
+                  const isChanged = amt !== oldAmt;
+                  return (
+                    <div
+                      key={idx}
+                      className="flex justify-between items-center py-1 border-t border-indigo-900/20"
+                    >
+                      <span className="text-xs text-zinc-400">
+                        Milestone #{idx}
+                      </span>
+                      <div className="flex items-center gap-2 font-mono text-xs">
+                        {isChanged ? (
+                          <>
+                            <span className="text-zinc-500 line-through">
+                              {oldAmt}
+                            </span>
+                            <span className="text-zinc-600">→</span>
+                            <span className="text-indigo-400 font-bold">
+                              {amt}
+                            </span>
+                          </>
+                        ) : (
+                          <span className="text-zinc-500">{amt}</span>
+                        )}
+                      </div>
                     </div>
-                  </div>
-                );
-              })}
+                  );
+                })}
+              </div>
             </div>
           </div>
-        </div>
-      )}
+        )}
 
       {/* Submit button */}
       <button
@@ -4957,11 +5848,9 @@ function EditCliffPanel({
     !!connectedWalletAddress &&
     stream.creator?.toLowerCase() !== connectedWalletAddress.toLowerCase();
 
-  const isWrongType =
-    !!stream && Number(stream.vestingType) !== 1;
+  const isWrongType = !!stream && Number(stream.vestingType) !== 1;
 
-  const isNotActive =
-    !!stream && Number(stream.status) !== 1;
+  const isNotActive = !!stream && Number(stream.status) !== 1;
 
   const isCliffExpired =
     !!stream &&
@@ -4969,9 +5858,7 @@ function EditCliffPanel({
     nowTs >= Number(stream.cliffTs);
 
   const isStreamExpired =
-    !!stream &&
-    Number(stream.endTs ?? 0) > 0 &&
-    nowTs >= Number(stream.endTs);
+    !!stream && Number(stream.endTs ?? 0) > 0 && nowTs >= Number(stream.endTs);
 
   const hasWithdrawn =
     !!stream && parseBaseUnits(stream.withdrawn ?? 0) > BigInt(0);
@@ -4999,10 +5886,12 @@ function EditCliffPanel({
       cliffDurationStr: formatDuration(currentCliffDuration),
       cliffDateStr:
         cliffTs > 0 ? new Date(cliffTs * 1000).toLocaleString() : "—",
-      endDateStr:
-        endTs > 0 ? new Date(endTs * 1000).toLocaleString() : "—",
+      endDateStr: endTs > 0 ? new Date(endTs * 1000).toLocaleString() : "—",
       totalAmount: Number(
-        formatBaseUnitsToTokenAmount(parseBaseUnits(stream.totalAmount), decimals)
+        formatBaseUnitsToTokenAmount(
+          parseBaseUnits(stream.totalAmount),
+          decimals
+        )
       ).toLocaleString(undefined, { maximumFractionDigits: decimals }),
     };
   }, [stream]);
@@ -5121,12 +6010,17 @@ function EditCliffPanel({
                   Only the stream creator can edit the cliff. Creator is{" "}
                   <span className="font-mono text-amber-300 break-all">
                     {stream?.creator
-                      ? `${stream.creator.slice(0, 6)}…${stream.creator.slice(-4)}`
+                      ? `${stream.creator.slice(0, 6)}…${stream.creator.slice(
+                          -4
+                        )}`
                       : "unknown"}
                   </span>
                   , connected wallet is{" "}
                   <span className="font-mono text-amber-300 break-all">
-                    {`${connectedWalletAddress!.slice(0, 6)}…${connectedWalletAddress!.slice(-4)}`}
+                    {`${connectedWalletAddress!.slice(
+                      0,
+                      6
+                    )}…${connectedWalletAddress!.slice(-4)}`}
                   </span>
                   .
                 </p>
@@ -5145,9 +6039,7 @@ function EditCliffPanel({
                 <p className="text-[11px] text-zinc-500 leading-relaxed">
                   edit_cliff only applies to Cliff type (type 1) streams. This
                   stream is{" "}
-                  {Number(stream?.vestingType) === 0
-                    ? "Linear"
-                    : "Milestone"}{" "}
+                  {Number(stream?.vestingType) === 0 ? "Linear" : "Milestone"}{" "}
                   type.
                 </p>
               </div>
@@ -5220,7 +6112,9 @@ function EditCliffPanel({
               <div className="divide-y divide-zinc-900/60">
                 {currentPreview.recipient && (
                   <div className="flex items-center justify-between px-4 py-3 gap-3">
-                    <span className="text-xs text-zinc-500 shrink-0">Recipient</span>
+                    <span className="text-xs text-zinc-500 shrink-0">
+                      Recipient
+                    </span>
                     <span className="font-mono text-xs font-bold text-zinc-300 truncate select-all">
                       {currentPreview.recipient}
                     </span>
@@ -5237,7 +6131,8 @@ function EditCliffPanel({
                 <div className="flex items-center justify-between px-4 py-3">
                   <span className="text-xs text-zinc-500">Start → End</span>
                   <span className="font-mono text-xs font-bold text-zinc-300 text-right">
-                    {currentPreview.startDateStr} → {currentPreview.endDateLabel}
+                    {currentPreview.startDateStr} →{" "}
+                    {currentPreview.endDateLabel}
                     <span className="block text-[10px] font-semibold text-zinc-500">
                       duration {currentPreview.streamDurationStr}
                     </span>
@@ -5445,7 +6340,11 @@ function EditLinearPanel({
   editLinearDecimals,
   editLinearMint,
 }: {
-  editLinearForm: { streamId: string; newEndDuration: string; topupAmount: string };
+  editLinearForm: {
+    streamId: string;
+    newEndDuration: string;
+    topupAmount: string;
+  };
   setEditLinearForm: (value: any) => void;
   handleAction: (actionName: string, data: any) => Promise<void> | void;
   paused?: boolean;
@@ -5456,7 +6355,12 @@ function EditLinearPanel({
   connected: boolean;
   endpoint: string;
   isStreamCsvCreated: (id: string) => boolean;
-editLinearBalance: { balance: number | null; loading: boolean; error: string | null; decimals?: number | null };
+  editLinearBalance: {
+    balance: number | null;
+    loading: boolean;
+    error: string | null;
+    decimals?: number | null;
+  };
   editLinearExceedsBalance: boolean;
   editLinearDecimals: number;
   editLinearMint: string;
@@ -5486,13 +6390,10 @@ editLinearBalance: { balance: number | null; loading: boolean; error: string | n
     Number(stream.vestingType) !== 0 &&
     Number(stream.vestingType) !== 1;
 
-  const isNotActive =
-    !!stream && Number(stream.status) !== 1;
+  const isNotActive = !!stream && Number(stream.status) !== 1;
 
   const isExpired =
-    !!stream &&
-    Number(stream.endTs ?? 0) > 0 &&
-    nowTs >= Number(stream.endTs);
+    !!stream && Number(stream.endTs ?? 0) > 0 && nowTs >= Number(stream.endTs);
 
   // ── Current stream state preview ───────────────────────────────────────
   const currentPreview = useMemo(() => {
@@ -5543,8 +6444,7 @@ editLinearBalance: { balance: number | null; loading: boolean; error: string | n
   }, [currentPreview, editLinearForm.newEndDuration]);
 
   // ── Duration must be longer than current ──────────────────────────────
-  const durationNotExtended =
-    !!newEndPreview && !newEndPreview.isExtension;
+  const durationNotExtended = !!newEndPreview && !newEndPreview.isExtension;
 
   // ── At least one of duration/topup must be provided ───────────────────
   const neitherProvided =
@@ -5632,12 +6532,17 @@ editLinearBalance: { balance: number | null; loading: boolean; error: string | n
                   Only the stream creator can edit. Creator is{" "}
                   <span className="font-mono text-amber-300 break-all">
                     {stream?.creator
-                      ? `${stream.creator.slice(0, 6)}…${stream.creator.slice(-4)}`
+                      ? `${stream.creator.slice(0, 6)}…${stream.creator.slice(
+                          -4
+                        )}`
                       : "unknown"}
                   </span>
                   , connected wallet is{" "}
                   <span className="font-mono text-amber-300 break-all">
-                    {`${connectedWalletAddress!.slice(0, 6)}…${connectedWalletAddress!.slice(-4)}`}
+                    {`${connectedWalletAddress!.slice(
+                      0,
+                      6
+                    )}…${connectedWalletAddress!.slice(-4)}`}
                   </span>
                   .
                 </p>
@@ -5654,8 +6559,8 @@ editLinearBalance: { balance: number | null; loading: boolean; error: string | n
                   Not a linear or cliff stream
                 </p>
                 <p className="text-[11px] text-zinc-500 leading-relaxed">
-                  edit_linear only applies to Linear (type 0) and Cliff (type
-                  1) streams. This stream is Milestone type.
+                  edit_linear only applies to Linear (type 0) and Cliff (type 1)
+                  streams. This stream is Milestone type.
                 </p>
               </div>
             </div>
@@ -5701,20 +6606,26 @@ editLinearBalance: { balance: number | null; loading: boolean; error: string | n
               <div className="divide-y divide-zinc-900/60">
                 {currentPreview.recipient && (
                   <div className="flex items-center justify-between px-4 py-3 gap-3">
-                    <span className="text-xs text-zinc-500 shrink-0">Recipient</span>
+                    <span className="text-xs text-zinc-500 shrink-0">
+                      Recipient
+                    </span>
                     <span className="font-mono text-xs font-bold text-zinc-300 truncate select-all">
                       {currentPreview.recipient}
                     </span>
                   </div>
                 )}
                 <div className="flex items-center justify-between px-4 py-3">
-                  <span className="text-xs text-zinc-500">Total allocation</span>
+                  <span className="text-xs text-zinc-500">
+                    Total allocation
+                  </span>
                   <span className="font-mono text-sm font-bold text-zinc-200">
                     {currentPreview.totalAmount}
                   </span>
                 </div>
                 <div className="flex items-center justify-between px-4 py-3">
-                  <span className="text-xs text-zinc-500">Already withdrawn</span>
+                  <span className="text-xs text-zinc-500">
+                    Already withdrawn
+                  </span>
                   <span className="font-mono text-sm font-bold text-zinc-500">
                     {currentPreview.withdrawn}
                   </span>
@@ -5722,7 +6633,8 @@ editLinearBalance: { balance: number | null; loading: boolean; error: string | n
                 <div className="flex items-center justify-between px-4 py-3">
                   <span className="text-xs text-zinc-500">Start → End</span>
                   <span className="font-mono text-xs font-bold text-zinc-300 text-right">
-                    {currentPreview.startDateStr} → {currentPreview.endDateLabel}
+                    {currentPreview.startDateStr} →{" "}
+                    {currentPreview.endDateLabel}
                     <span className="block text-[10px] font-semibold text-zinc-500">
                       duration {currentPreview.durationStr}
                     </span>
@@ -5865,9 +6777,7 @@ editLinearBalance: { balance: number | null; loading: boolean; error: string | n
                 null ? (
                 <span
                   className={`text-[10px] font-mono ${
-                    editLinearExceedsBalance
-                      ? "text-rose-400"
-                      : "text-zinc-500"
+                    editLinearExceedsBalance ? "text-rose-400" : "text-zinc-500"
                   }`}
                 >
                   Balance:{" "}
@@ -5917,9 +6827,7 @@ editLinearBalance: { balance: number | null; loading: boolean; error: string | n
                 <div className="divide-y divide-indigo-500/10">
                   {newEndPreview?.isExtension && (
                     <div className="flex items-center justify-between px-4 py-3">
-                      <span className="text-xs text-zinc-400">
-                        End date
-                      </span>
+                      <span className="text-xs text-zinc-400">End date</span>
                       <div className="text-right">
                         <div className="text-[10px] font-mono text-zinc-600 line-through">
                           {currentPreview.endDateStr}
@@ -6026,13 +6934,17 @@ function MilestoneAllocationCounter({
     : "text-amber-400";
 
   return (
-    <div className={`rounded-2xl border ${borderColor} bg-zinc-950/80 overflow-hidden transition-all duration-300`}>
+    <div
+      className={`rounded-2xl border ${borderColor} bg-zinc-950/80 overflow-hidden transition-all duration-300`}
+    >
       {/* Header row */}
       <div className="flex items-center justify-between px-4 py-3 border-b border-zinc-900/60">
         <span className="text-[10px] font-black uppercase tracking-widest text-zinc-500">
           Milestone Allocation
         </span>
-        <span className={`text-[11px] font-black font-mono ${textColor} transition-colors duration-200`}>
+        <span
+          className={`text-[11px] font-black font-mono ${textColor} transition-colors duration-200`}
+        >
           {pct.toFixed(1)}%
         </span>
       </div>
@@ -6054,13 +6966,19 @@ function MilestoneAllocationCounter({
       {/* Stats row */}
       <div className="grid grid-cols-3 divide-x divide-zinc-900 px-0 pb-3 pt-2">
         <div className="flex flex-col items-center px-3 py-1">
-          <span className="text-[9px] font-bold uppercase tracking-wider text-zinc-600 mb-0.5">Allocated</span>
-          <span className={`text-[13px] font-black font-mono ${textColor} transition-colors`}>
+          <span className="text-[9px] font-bold uppercase tracking-wider text-zinc-600 mb-0.5">
+            Allocated
+          </span>
+          <span
+            className={`text-[13px] font-black font-mono ${textColor} transition-colors`}
+          >
             {filled.toLocaleString()}
           </span>
         </div>
         <div className="flex flex-col items-center px-3 py-1">
-          <span className="text-[9px] font-bold uppercase tracking-wider text-zinc-600 mb-0.5">Total</span>
+          <span className="text-[9px] font-bold uppercase tracking-wider text-zinc-600 mb-0.5">
+            Total
+          </span>
           <span className="text-[13px] font-black font-mono text-zinc-300">
             {total.toLocaleString()}
           </span>
@@ -6069,22 +6987,44 @@ function MilestoneAllocationCounter({
           <span className="text-[9px] font-bold uppercase tracking-wider text-zinc-600 mb-0.5">
             {remaining < 0 ? "Excess" : "Remaining"}
           </span>
-          <span className={`text-[13px] font-black font-mono ${remaining < 0 ? "text-rose-400" : remaining === 0 ? "text-emerald-400" : "text-zinc-400"} transition-colors`}>
+          <span
+            className={`text-[13px] font-black font-mono ${
+              remaining < 0
+                ? "text-rose-400"
+                : remaining === 0
+                ? "text-emerald-400"
+                : "text-zinc-400"
+            } transition-colors`}
+          >
             {Math.abs(remaining).toLocaleString()}
           </span>
         </div>
       </div>
 
       {/* Status message */}
-      <div className={`px-4 py-2 border-t border-zinc-900/60 text-[10px] font-semibold flex items-center gap-1.5 ${textColor}`}>
+      <div
+        className={`px-4 py-2 border-t border-zinc-900/60 text-[10px] font-semibold flex items-center gap-1.5 ${textColor}`}
+      >
         {hasInvalid ? (
-          <><span className="text-rose-400">●</span> All milestone fields must be filled and greater than zero</>
+          <>
+            <span className="text-rose-400">●</span> All milestone fields must
+            be filled and greater than zero
+          </>
         ) : isMatch ? (
-          <><span className="text-emerald-400">●</span> Allocations balanced — ready to deploy</>
+          <>
+            <span className="text-emerald-400">●</span> Allocations balanced —
+            ready to deploy
+          </>
         ) : pct > 100 ? (
-          <><span className="text-rose-400">●</span> Over-allocated by {Math.abs(remaining).toLocaleString()} tokens</>
+          <>
+            <span className="text-rose-400">●</span> Over-allocated by{" "}
+            {Math.abs(remaining).toLocaleString()} tokens
+          </>
         ) : (
-          <><span className="text-amber-400">●</span> {remaining.toLocaleString()} tokens unallocated</>
+          <>
+            <span className="text-amber-400">●</span>{" "}
+            {remaining.toLocaleString()} tokens unallocated
+          </>
         )}
       </div>
     </div>
