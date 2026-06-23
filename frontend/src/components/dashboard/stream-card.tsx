@@ -25,7 +25,8 @@ export const StreamCard = memo(function StreamCard({
   const total = Number(stream.totalAmount);
   const withdrawn = Number(stream.withdrawn);
   const unlocked = Number(stream.unlockedAmount || 0);
-  const mintDecimals = typeof stream.mintDecimals === "number" ? stream.mintDecimals : null;
+  const mintDecimals =
+    typeof stream.mintDecimals === "number" ? stream.mintDecimals : null;
   const amountLabel = getAmountUnitLabel(stream.mint);
   const isCancelled = Number(stream.status) === 3 || Boolean(stream.cancelled);
 
@@ -34,7 +35,7 @@ export const StreamCard = memo(function StreamCard({
 
   if (stream.vestingType === 2) {
     vested = unlocked;
-    progress = Math.min((unlocked / total) * 100, 100);
+    progress = total > 0 ? Math.min((unlocked / total) * 100, 100) : 0;
   } else if (stream.vestingType === 1) {
     if (now < cliff) {
       vested = 0;
@@ -57,9 +58,10 @@ export const StreamCard = memo(function StreamCard({
   }
 
   const claimable = isCancelled ? 0 : Math.max(vested - withdrawn, 0);
-  const isMilestoneCompleted = stream.vestingType === 2 && (Number(stream.completedAt || 0) > 0 || unlocked >= total);
-  const remainingTarget =
-  isCancelled
+  const isMilestoneCompleted =
+    stream.vestingType === 2 &&
+    (Number(stream.completedAt || 0) > 0 || unlocked >= total);
+  const remainingTarget = isCancelled
     ? null
     : stream.vestingType === 2
     ? null
@@ -67,16 +69,25 @@ export const StreamCard = memo(function StreamCard({
     ? start
     : end;
 
-const remainingText =
-  remainingTarget !== null
-    ? formatRemainingTime(remainingTarget, now)
-    : null;
-  const isCompleted = !isCancelled && (stream.vestingType === 2 ? isMilestoneCompleted : withdrawn >= total);
+  const remainingText =
+    remainingTarget !== null ? formatRemainingTime(remainingTarget, now) : null;
+  const isCompleted =
+    !isCancelled &&
+    (stream.vestingType === 2 ? isMilestoneCompleted : withdrawn >= total);
   const isNotStarted = now < start;
-  const isEnded = !isCancelled && (stream.vestingType === 2 ? isMilestoneCompleted : now >= end);
+  const isEnded =
+    !isCancelled &&
+    (stream.vestingType === 2 ? isMilestoneCompleted : now >= end);
   const isCliffLocked = stream.vestingType === 1 && now < cliff;
   const isMilestone = stream.vestingType === 2;
-  const unlockedCount = isMilestone ? Math.round((Number(stream.unlockedAmount || 0) / Number(stream.totalAmount)) * stream.milestoneCount) : 0;
+  const unlockedRatio =
+    isMilestone && total > 0 ? Math.min(Math.max(unlocked / total, 0), 1) : 0;
+  const unlockedCount = isMilestone
+    ? Math.min(
+        Math.floor(unlockedRatio * stream.milestoneCount),
+        stream.milestoneCount
+      )
+    : 0;
 
   return (
     <div
@@ -88,12 +99,16 @@ const remainingText =
 
       <div className="flex items-center justify-between mb-4">
         <div className="flex items-center gap-2">
-          <span className="text-[10px] font-bold text-zinc-500 uppercase tracking-wider font-mono">Stream PDA</span>
+          <span className="text-[10px] font-bold text-zinc-500 uppercase tracking-wider font-mono">
+            Stream PDA
+          </span>
           <div className="flex items-center gap-1 bg-zinc-900 px-2 py-0.5 rounded font-mono text-[10px] border border-zinc-850">
             <span>{shorten(stream.id)}</span>
           </div>
           {stream.isCsvCreated && (
-            <span className="text-[8px] bg-emerald-500/10 text-emerald-400 border border-emerald-500/30 px-1.5 py-0.2 rounded font-bold uppercase tracking-wider">CSV Created</span>
+            <span className="text-[8px] bg-emerald-500/10 text-emerald-400 border border-emerald-500/30 px-1.5 py-0.2 rounded font-bold uppercase tracking-wider">
+              CSV Created
+            </span>
           )}
         </div>
 
@@ -101,7 +116,7 @@ const remainingText =
           className={`text-[10px] px-2.5 py-0.5 rounded-full font-bold uppercase tracking-widest ${
             isCancelled
               ? "bg-rose-500/10 text-rose-400 border border-rose-500/25"
-            : isCompleted
+              : isCompleted
               ? "bg-emerald-500/10 text-emerald-400 border border-emerald-500/25"
               : isEnded
               ? "bg-zinc-500/10 text-zinc-400 border border-zinc-500/25"
@@ -114,51 +129,82 @@ const remainingText =
               : "bg-blue-500/10 text-blue-400 border border-blue-500/25"
           }`}
         >
-          {isCancelled ? "Cancelled" : isCompleted ? "Completed" : isEnded ? "Ended" : isNotStarted ? "Scheduled" : isCliffLocked ? "Cliff Lock" : isMilestone ? `Milestone Index ${unlockedCount}` : "Streaming"}
+          {isCancelled
+            ? "Cancelled"
+            : isCompleted
+            ? "Completed"
+            : isEnded
+            ? "Ended"
+            : isNotStarted
+            ? "Scheduled"
+            : isCliffLocked
+            ? "Cliff Lock"
+            : isMilestone
+            ? `Milestone Index ${unlockedCount}`
+            : "Streaming"}
         </span>
       </div>
 
       <div className="mb-4">
         <div className="flex justify-between items-center text-xs mb-1.5">
-          <span className="font-semibold text-zinc-400">Vesting Completion</span>
-          <span className="font-mono text-zinc-200 font-bold">{progress.toFixed(2)}%</span>
+          <span className="font-semibold text-zinc-400">
+            Vesting Completion
+          </span>
+          <span className="font-mono text-zinc-200 font-bold">
+            {progress.toFixed(2)}%
+          </span>
         </div>
         <div className="h-2 w-full bg-zinc-950 rounded-full overflow-hidden border border-zinc-850">
-          <div className="h-full bg-gradient-to-r from-indigo-500 to-purple-500 rounded-full transition-all duration-500" style={{ width: `${progress}%` }} />
+          <div
+            className="h-full bg-gradient-to-r from-indigo-500 to-purple-500 rounded-full transition-all duration-500"
+            style={{ width: `${progress}%` }}
+          />
         </div>
       </div>
 
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 bg-zinc-950/20 border border-zinc-900/60 rounded-xl p-3.5 text-xs">
         <div>
           <div className="text-zinc-500 font-medium">Total Amount</div>
-          <div className="font-bold text-zinc-200">{formatTokenAmount(stream.totalAmount, mintDecimals)} {amountLabel}</div>
+          <div className="font-bold text-zinc-200">
+            {formatTokenAmount(stream.totalAmount, mintDecimals)} {amountLabel}
+          </div>
         </div>
         <div>
           <div className="text-zinc-500 font-medium">Claimable</div>
-          <div className="font-bold text-indigo-400">{formatTokenAmount(claimable, mintDecimals)} {amountLabel}</div>
+          <div className="font-bold text-indigo-400">
+            {formatTokenAmount(claimable, mintDecimals)} {amountLabel}
+          </div>
         </div>
         <div>
           <div className="text-zinc-500 font-medium">Withdrawn</div>
-          <div className="font-bold text-zinc-200">{formatTokenAmount(withdrawn, mintDecimals)} {amountLabel}</div>
+          <div className="font-bold text-zinc-200">
+            {formatTokenAmount(withdrawn, mintDecimals)} {amountLabel}
+          </div>
         </div>
         <div>
           <div className="text-zinc-500 font-medium">Type</div>
-          <div className="font-semibold text-zinc-300 uppercase tracking-wider text-[10px]">{stream.vestingType === 0 ? "Linear" : stream.vestingType === 1 ? "Cliff" : "Milestone"}</div>
+          <div className="font-semibold text-zinc-300 uppercase tracking-wider text-[10px]">
+            {stream.vestingType === 0
+              ? "Linear"
+              : stream.vestingType === 1
+              ? "Cliff"
+              : "Milestone"}
+          </div>
         </div>
       </div>
 
       <div className="mt-4 flex flex-col gap-1 border-t border-zinc-900/50 pt-2 text-[10px] text-zinc-500 font-mono">
         <div className="flex justify-between items-center gap-2">
-         <div className="flex flex-col gap-1">
-      <span>Start: {formatDate(stream.startTs)}</span>
+          <div className="flex flex-col gap-1">
+            <span>Start: {formatDate(stream.startTs)}</span>
 
-      {remainingText && (
-        <span className="text-indigo-400 font-bold">
-          ⏳ {isNotStarted ? "Starts in" : "Time remaining"}:{" "}
-          {remainingText}
-        </span>
-      )}
-    </div>
+            {remainingText && (
+              <span className="text-indigo-400 font-bold">
+                ⏳ {isNotStarted ? "Starts in" : "Time remaining"}:{" "}
+                {remainingText}
+              </span>
+            )}
+          </div>
           <button
             type="button"
             onClick={(e) => {
@@ -173,7 +219,9 @@ const remainingText =
         {stream.vestingType === 1 && (
           <div className="flex justify-between items-center gap-2 text-amber-500 font-bold mt-0.5">
             <span>Cliff Unlock: {formatDate(stream.cliffTs)}</span>
-            <span>({Number(stream.cliffTs) - Number(stream.startTs)}s duration)</span>
+            <span>
+              ({Number(stream.cliffTs) - Number(stream.startTs)}s duration)
+            </span>
           </div>
         )}
       </div>
