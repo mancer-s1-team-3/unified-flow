@@ -49,9 +49,6 @@ model Stream {
 
 model Transaction {
   id        String @id
-  // NOT @unique: one on-chain tx (signature) can touch many streams in a single
-  // transaction (CSV batch create / batch edit). We store one row per
-  // (signature, stream) pair; uniqueness is enforced by the composite `id`.
   signature String
   slot      BigInt
 
