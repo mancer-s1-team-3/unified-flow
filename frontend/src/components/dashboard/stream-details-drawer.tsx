@@ -2,7 +2,7 @@
 
 import { memo, useEffect } from "react";
 import { createPortal } from "react-dom";
-import { ArrowDownRight, ArrowUpRight, Calendar, Check, Copy, FileText, History, Settings, Unlock, XCircle,Lock } from "lucide-react";
+import { ArrowDownRight, ArrowUpRight, Calendar, Check, Copy, FileText, History, Settings, Unlock, XCircle, Lock } from "lucide-react";
 import { formatDate, formatTokenAmount, getAmountUnitLabel, getMilestoneAllocations, shorten } from "./utils";
 import { getExplorerClusterParam } from "@/lib/solana/network-config";
 
@@ -67,11 +67,11 @@ export const StreamDetailsDrawer = memo(function StreamDetailsDrawer({
   const isFullyClaimed = total > 0 && withdrawn >= total;
   const isEnded = !isCancelled && (selectedStream.vestingType === 2 ? isMilestoneCompleted : currentTimeTs >= end);
   const cancelDisabled = isCancelled || isEnded || isFullyClaimed || paused;
-const hasClaimable = selectedStream.vestingType === 2
-  ? unlocked > withdrawn && unlocked > 0          // milestone: harus ada yg di-unlock dulu
-  : !isEnded
-    ? true                                        // linear/cliff belum ended → aktif
-    : total > withdrawn;                          // linear/cliff ended → cek sisa                       // linear/cliff ended: pakai total - withdrawn
+  const hasClaimable = selectedStream.vestingType === 2
+    ? unlocked > withdrawn && unlocked > 0
+    : !isEnded
+      ? true
+      : total > withdrawn;
 
   const drawer = (
     <div className="fixed inset-0 z-50 bg-zinc-950/95 sm:bg-black/60 backdrop-blur-md flex justify-end overflow-x-hidden animate-in fade-in duration-200">
@@ -102,22 +102,22 @@ const hasClaimable = selectedStream.vestingType === 2
                   {isCancelled ? "Cancelled Stream" : selectedStream.vestingType === 2 ? "Milestone Unlock Progress" : "Claim Completeness Index"}
                 </div>
                 <div className="flex justify-between items-end mb-2">
-                    <span className="text-xl font-black font-mono bg-gradient-to-r from-indigo-400 to-purple-400 bg-clip-text text-transparent">
-                      {(() => {
-                        const total = Number(selectedStream.totalAmount);
-                        const withdrawn = Number(selectedStream.withdrawn);
-                        const unlocked = Number(selectedStream.unlockedAmount || 0);
-                        const value = isCancelled ? withdrawn : selectedStream.vestingType === 2 ? unlocked : withdrawn;
+                  <span className="text-xl font-black font-mono bg-gradient-to-r from-indigo-400 to-purple-400 bg-clip-text text-transparent">
+                    {(() => {
+                      const total = Number(selectedStream.totalAmount);
+                      const withdrawn = Number(selectedStream.withdrawn);
+                      const unlocked = Number(selectedStream.unlockedAmount || 0);
+                      const value = isCancelled ? withdrawn : selectedStream.vestingType === 2 ? unlocked : withdrawn;
                       return ((value / total) * 100).toFixed(1);
                     })()}%
                   </span>
-                    <span className="text-[10px] text-zinc-400 font-mono">
+                  <span className="text-[10px] text-zinc-400 font-mono">
                     {isCancelled
                       ? `${formatTokenAmount(selectedStream.withdrawn, mintDecimals)} / ${formatTokenAmount(selectedStream.totalAmount, mintDecimals)} ${amountLabel} Cancelled`
                       : selectedStream.vestingType === 2
                       ? `${formatTokenAmount(selectedStream.unlockedAmount || 0, mintDecimals)} / ${formatTokenAmount(selectedStream.totalAmount, mintDecimals)} ${amountLabel} Unlocked`
                       : `${formatTokenAmount(selectedStream.withdrawn, mintDecimals)} / ${formatTokenAmount(selectedStream.totalAmount, mintDecimals)} ${amountLabel} Claimed`}
-                    </span>
+                  </span>
                 </div>
                 <div className="h-2 w-full bg-zinc-950 rounded-full overflow-hidden border border-zinc-850">
                   <div
@@ -166,12 +166,6 @@ const hasClaimable = selectedStream.vestingType === 2
                 </div>
 
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 border-t border-zinc-900/60 pt-3 min-w-0">
-                  {/* Hardcoded in smart contract — hidden until configurable
-                  <div>
-                    <span className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest block mb-0.5">Cancelable</span>
-                    <span className="font-semibold text-zinc-300">{selectedStream.cancelable ? "Yes (Permitted)" : "No (Immutable)"}</span>
-                  </div>
-                  */}
                   <div>
                     <span className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest block mb-0.5">Milestones Defined</span>
                     <span className="font-semibold text-zinc-300 font-mono">{selectedStream.milestoneCount} milestones</span>
@@ -210,12 +204,42 @@ const hasClaimable = selectedStream.vestingType === 2
                             milestones: selectedStream.milestones,
                           });
 
-                          let cumulativeSum = 0;
-                          const unlocked = Number(selectedStream.unlockedAmount || 0);
+                          // ── FIX: Gunakan nextMilestoneIndex dari on-chain state
+                          // sebagai sumber kebenaran tunggal untuk milestone mana
+                          // yang sudah di-unlock. Logic lama pakai cumulative sum
+                          // dalam human-readable units dibanding unlockedAmount
+                          // dalam base units → selalu over-count unlocked milestones.
+                          //
+                          // nextMilestoneIndex = jumlah milestone yang sudah di-unlock
+                          // (0-indexed pointer ke milestone BERIKUTNYA yang akan di-unlock).
+                          // Semua idx < nextMilestoneIndex sudah unlocked.
+                          const nextIndex: number =
+                            selectedStream.nextMilestoneIndex ??
+                            selectedStream.next_milestone_index ??
+                            // Fallback: derive dari unlockedAmount dalam base units
+                            // dengan menghitung cumulative sum dalam base units.
+                            (() => {
+                              const unlockedBase = Number(selectedStream.unlockedAmount || 0);
+                              const dec = typeof selectedStream.mintDecimals === "number"
+                                ? selectedStream.mintDecimals : 6;
+                              const factor = Math.pow(10, dec);
+                              let cumulative = 0;
+                              let derived = 0;
+                              for (let i = 0; i < list.length; i++) {
+                                // list[i] adalah human-readable → convert ke base units
+                                cumulative += Math.round(list[i] * factor);
+                                if (cumulative <= unlockedBase) {
+                                  derived = i + 1;
+                                } else {
+                                  break;
+                                }
+                              }
+                              return derived;
+                            })();
 
                           return list.map((amt: number, idx: number) => {
-                            cumulativeSum += amt;
-                            const isUnlocked = cumulativeSum <= unlocked;
+                            // idx < nextIndex → sudah di-unlock
+                            const isUnlocked = idx < nextIndex;
 
                             return (
                               <div key={idx} className="flex items-center justify-between gap-3 font-mono bg-zinc-950 border border-zinc-900/70 rounded-xl px-3 py-2 text-zinc-300 text-[11px] min-w-0 overflow-hidden">
@@ -303,7 +327,7 @@ const hasClaimable = selectedStream.vestingType === 2
         {!loadingDetails && (
           <div className="border-t border-zinc-900 pt-4 flex flex-col gap-2 min-w-0">
             <div className="text-[10px] text-zinc-500 font-bold uppercase tracking-widest">Instant Action Shortcuts</div>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs font-semibold min-w-0">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs font-semibold min-w-0">
               {isRecipientWallet && (
                 paused || isCancelled || isFullyClaimed || (selectedStream.vestingType === 2 && unlocked === 0) || !hasClaimable ? (
                   <div className="flex items-center justify-center gap-1.5 bg-zinc-900 text-zinc-500 border border-zinc-800 py-2.5 rounded-xl text-center">
@@ -332,125 +356,125 @@ const hasClaimable = selectedStream.vestingType === 2
               )}
 
               {isCreatorWallet && selectedStream.isCsvCreated ? (
-                   <>
-                {selectedStream.vestingType === 2 && (
-      isCancelled || isEnded || paused ? (
-        <div className="sm:col-span-2 flex items-center justify-center gap-1.5 bg-zinc-900 text-zinc-500 border border-zinc-800 py-2.5 rounded-xl text-center">
-          <Unlock className="w-3.5 h-3.5" />
-          Unlock Disabled
-        </div>
-      ) : (
-        <button onClick={() => prefillAction("unlock_milestone", selectedStream.id)} className="sm:col-span-2 flex items-center justify-center gap-1.5 bg-zinc-900 hover:bg-zinc-800 text-indigo-400 hover:text-indigo-300 border border-zinc-800 hover:border-zinc-700 py-2.5 rounded-xl transition-all">
-          <Unlock className="w-3.5 h-3.5" />
-          Unlock Milestone Target
-        </button>
-      )
-    )}
-     {isCancelled || isEnded || paused ? (
-      <div className="sm:col-span-2 flex items-center justify-center gap-1.5 bg-zinc-900 text-zinc-500 border border-zinc-800 py-2.5 rounded-xl text-center">
-        <FileText className="w-3.5 h-3.5" />
-        Edit Disabled
-      </div>
-    ) : (
-                <button
-                  onClick={() => {
-                    const decimals =
-                    typeof selectedStream.mintDecimals === "number"
-                      ? selectedStream.mintDecimals
-                      : 0;
+                <>
+                  {selectedStream.vestingType === 2 && (
+                    isCancelled || isEnded || paused ? (
+                      <div className="sm:col-span-2 flex items-center justify-center gap-1.5 bg-zinc-900 text-zinc-500 border border-zinc-800 py-2.5 rounded-xl text-center">
+                        <Unlock className="w-3.5 h-3.5" />
+                        Unlock Disabled
+                      </div>
+                    ) : (
+                      <button onClick={() => prefillAction("unlock_milestone", selectedStream.id)} className="sm:col-span-2 flex items-center justify-center gap-1.5 bg-zinc-900 hover:bg-zinc-800 text-indigo-400 hover:text-indigo-300 border border-zinc-800 hover:border-zinc-700 py-2.5 rounded-xl transition-all">
+                        <Unlock className="w-3.5 h-3.5" />
+                        Unlock Milestone Target
+                      </button>
+                    )
+                  )}
+                  {isCancelled || isEnded || paused ? (
+                    <div className="sm:col-span-2 flex items-center justify-center gap-1.5 bg-zinc-900 text-zinc-500 border border-zinc-800 py-2.5 rounded-xl text-center">
+                      <FileText className="w-3.5 h-3.5" />
+                      Edit Disabled
+                    </div>
+                  ) : (
+                    <button
+                      onClick={() => {
+                        const decimals =
+                          typeof selectedStream.mintDecimals === "number"
+                            ? selectedStream.mintDecimals
+                            : 0;
 
-                    const humanAmount =
-                      Number(selectedStream.totalAmount || 0) /
-                      Math.pow(10, decimals);
+                        const humanAmount =
+                          Number(selectedStream.totalAmount || 0) /
+                          Math.pow(10, decimals);
 
-                    const vestingType = Number(selectedStream.vestingType || 0);
-                    const duration = Math.max(Number(selectedStream.endTs || 0) - Number(selectedStream.startTs || 0), 0);
-                    const cliffDuration = Math.max(Number(selectedStream.cliffTs || 0) - Number(selectedStream.startTs || 0), 0);
-                    const milestones =
-                    String(selectedStream.milestones || "")
-                      .split(";")
-                      .map(v => Number(v) / Math.pow(10, decimals))
-                      .join(";");
-                    const header = "id,type,amount,duration,cliff_duration,milestones";
-                    let row = `${selectedStream.id},${vestingType},${selectedStream.totalAmount},,,`;
+                        const vestingType = Number(selectedStream.vestingType || 0);
+                        const duration = Math.max(Number(selectedStream.endTs || 0) - Number(selectedStream.startTs || 0), 0);
+                        const cliffDuration = Math.max(Number(selectedStream.cliffTs || 0) - Number(selectedStream.startTs || 0), 0);
+                        const milestones =
+                          String(selectedStream.milestones || "")
+                            .split(";")
+                            .map((v: string) => Number(v) / Math.pow(10, decimals))
+                            .join(";");
+                        const header = "id,type,amount,duration,cliff_duration,milestones";
+                        let row = `${selectedStream.id},${vestingType},${selectedStream.totalAmount},,,`;
 
-                    if (vestingType === 0) {
-                      row = `${selectedStream.id},0,${humanAmount},${duration},,`;
-                   } else if (vestingType === 1) {
-  row = `${selectedStream.id},1,${humanAmount},${duration},${cliffDuration},`;
-} else if (vestingType === 2) {
-                      row = `${selectedStream.id},2,${humanAmount},,,${milestones}`;
-                    }
+                        if (vestingType === 0) {
+                          row = `${selectedStream.id},0,${humanAmount},${duration},,`;
+                        } else if (vestingType === 1) {
+                          row = `${selectedStream.id},1,${humanAmount},${duration},${cliffDuration},`;
+                        } else if (vestingType === 2) {
+                          row = `${selectedStream.id},2,${humanAmount},,,${milestones}`;
+                        }
 
-                    setActiveTab("edit_csv");
-                    setCsvEditText(`${header}\n${row}`);
-                    setSelectedStream(null);
-                  }}
-                  className="sm:col-span-2 flex items-center justify-center gap-1.5 bg-emerald-600 hover:bg-emerald-700 text-white py-2.5 rounded-xl transition-all"
-                >
-                  <FileText className="w-3.5 h-3.5" />
-                  Edit via CSV Console
-                </button>
-    )}
-               </>
-             ) : isCreatorWallet ? (
-  <>
-    {selectedStream.vestingType === 2 && (
-      isCancelled || isEnded || paused ? (
-        <div className="sm:col-span-2 flex items-center justify-center gap-1.5 bg-zinc-900 text-zinc-500 border border-zinc-800 py-2.5 rounded-xl text-center">
-          <Unlock className="w-3.5 h-3.5" />
-          Unlock Disabled
-        </div>
-      ) : (
-        <button onClick={() => prefillAction("unlock_milestone", selectedStream.id)} className="sm:col-span-2 flex items-center justify-center gap-1.5 bg-zinc-900 hover:bg-zinc-800 text-indigo-400 hover:text-indigo-300 border border-zinc-800 hover:border-zinc-700 py-2.5 rounded-xl transition-all">
-          <Unlock className="w-3.5 h-3.5" />
-          Unlock Milestone Target
-        </button>
-      )
-    )}
+                        setActiveTab("edit_csv");
+                        setCsvEditText(`${header}\n${row}`);
+                        setSelectedStream(null);
+                      }}
+                      className="sm:col-span-2 flex items-center justify-center gap-1.5 bg-emerald-600 hover:bg-emerald-700 text-white py-2.5 rounded-xl transition-all"
+                    >
+                      <FileText className="w-3.5 h-3.5" />
+                      Edit via CSV Console
+                    </button>
+                  )}
+                </>
+              ) : isCreatorWallet ? (
+                <>
+                  {selectedStream.vestingType === 2 && (
+                    isCancelled || isEnded || paused ? (
+                      <div className="sm:col-span-2 flex items-center justify-center gap-1.5 bg-zinc-900 text-zinc-500 border border-zinc-800 py-2.5 rounded-xl text-center">
+                        <Unlock className="w-3.5 h-3.5" />
+                        Unlock Disabled
+                      </div>
+                    ) : (
+                      <button onClick={() => prefillAction("unlock_milestone", selectedStream.id)} className="sm:col-span-2 flex items-center justify-center gap-1.5 bg-zinc-900 hover:bg-zinc-800 text-indigo-400 hover:text-indigo-300 border border-zinc-800 hover:border-zinc-700 py-2.5 rounded-xl transition-all">
+                        <Unlock className="w-3.5 h-3.5" />
+                        Unlock Milestone Target
+                      </button>
+                    )
+                  )}
 
-   {isCancelled || isEnded || paused ? (
-  <div className="sm:col-span-2 flex items-center justify-center gap-1.5 bg-zinc-900 text-zinc-500 border border-zinc-800 py-2.5 rounded-xl text-center">
-    <Settings className="w-3.5 h-3.5" />
-    Modify Disabled
-  </div>
-) : selectedStream.vestingType === 1 ? (
-  <>
-    <button
-      onClick={() => prefillAction("edit_linear", selectedStream.id)}
-      className="flex items-center justify-center gap-1.5 bg-zinc-900 hover:bg-zinc-800 text-zinc-400 hover:text-zinc-200 border border-zinc-800 hover:border-zinc-700 py-2.5 rounded-xl transition-all"
-    >
-      <Settings className="w-3.5 h-3.5" />
-      Edit Duration
-    </button>
-    <button
-      onClick={() => prefillAction("edit_cliff", selectedStream.id)}
-      className="flex items-center justify-center gap-1.5 bg-zinc-900 hover:bg-zinc-800 text-violet-400 hover:text-violet-300 border border-zinc-800 hover:border-zinc-700 py-2.5 rounded-xl transition-all"
-    >
-      <Lock className="w-3.5 h-3.5" />
-      Edit Cliff
-    </button>
-  </>
-) : selectedStream.vestingType === 0 ? (
-  <button
-    onClick={() => prefillAction("edit_linear", selectedStream.id)}
-    className="sm:col-span-2 flex items-center justify-center gap-1.5 bg-zinc-900 hover:bg-zinc-800 text-zinc-400 hover:text-zinc-200 border border-zinc-800 hover:border-zinc-700 py-2.5 rounded-xl transition-all"
-  >
-    <Settings className="w-3.5 h-3.5" />
-    Modify Vesting Structure
-  </button>
-) : (
-  <button
-    onClick={() => prefillAction("edit_milestone", selectedStream)}
-    disabled={unlocked > 0}
-    className="sm:col-span-2 flex items-center justify-center gap-1.5 bg-zinc-900 hover:bg-zinc-800 text-zinc-400 hover:text-zinc-200 border border-zinc-800 hover:border-zinc-700 py-2.5 rounded-xl transition-all disabled:opacity-50 disabled:cursor-not-allowed disabled:pointer-events-none disabled:hover:bg-zinc-900 disabled:hover:text-zinc-400 disabled:hover:border-zinc-800"
-  >
-    <Settings className="w-3.5 h-3.5" />
-    Modify Vesting Structure
-  </button>
-)}
-  </>
-) : null}
+                  {isCancelled || isEnded || paused ? (
+                    <div className="sm:col-span-2 flex items-center justify-center gap-1.5 bg-zinc-900 text-zinc-500 border border-zinc-800 py-2.5 rounded-xl text-center">
+                      <Settings className="w-3.5 h-3.5" />
+                      Modify Disabled
+                    </div>
+                  ) : selectedStream.vestingType === 1 ? (
+                    <>
+                      <button
+                        onClick={() => prefillAction("edit_linear", selectedStream.id)}
+                        className="flex items-center justify-center gap-1.5 bg-zinc-900 hover:bg-zinc-800 text-zinc-400 hover:text-zinc-200 border border-zinc-800 hover:border-zinc-700 py-2.5 rounded-xl transition-all"
+                      >
+                        <Settings className="w-3.5 h-3.5" />
+                        Edit Duration
+                      </button>
+                      <button
+                        onClick={() => prefillAction("edit_cliff", selectedStream.id)}
+                        className="flex items-center justify-center gap-1.5 bg-zinc-900 hover:bg-zinc-800 text-violet-400 hover:text-violet-300 border border-zinc-800 hover:border-zinc-700 py-2.5 rounded-xl transition-all"
+                      >
+                        <Lock className="w-3.5 h-3.5" />
+                        Edit Cliff
+                      </button>
+                    </>
+                  ) : selectedStream.vestingType === 0 ? (
+                    <button
+                      onClick={() => prefillAction("edit_linear", selectedStream.id)}
+                      className="sm:col-span-2 flex items-center justify-center gap-1.5 bg-zinc-900 hover:bg-zinc-800 text-zinc-400 hover:text-zinc-200 border border-zinc-800 hover:border-zinc-700 py-2.5 rounded-xl transition-all"
+                    >
+                      <Settings className="w-3.5 h-3.5" />
+                      Modify Vesting Structure
+                    </button>
+                  ) : (
+                    <button
+                      onClick={() => prefillAction("edit_milestone", selectedStream)}
+                      disabled={unlocked > 0}
+                      className="sm:col-span-2 flex items-center justify-center gap-1.5 bg-zinc-900 hover:bg-zinc-800 text-zinc-400 hover:text-zinc-200 border border-zinc-800 hover:border-zinc-700 py-2.5 rounded-xl transition-all disabled:opacity-50 disabled:cursor-not-allowed disabled:pointer-events-none disabled:hover:bg-zinc-900 disabled:hover:text-zinc-400 disabled:hover:border-zinc-800"
+                    >
+                      <Settings className="w-3.5 h-3.5" />
+                      Modify Vesting Structure
+                    </button>
+                  )}
+                </>
+              ) : null}
             </div>
           </div>
         )}
