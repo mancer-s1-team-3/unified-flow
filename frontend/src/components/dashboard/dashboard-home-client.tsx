@@ -7,7 +7,6 @@ import { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import { CheckCircle2, Copy, Check, X, ExternalLink } from "lucide-react";
 import { api } from "@/lib/api";
-import { SolflareWalletAdapter } from "@solana/wallet-adapter-solflare";
 import { useClusterState, useWalletConnection } from "@solana/react-hooks";
 import { DashboardSidebar } from "@/components/dashboard/dashboard-sidebar";
 import { DashboardStreamsPanel } from "@/components/dashboard/dashboard-streams-panel";
@@ -1755,19 +1754,10 @@ export default function Home({ initialStreams = [] }: Props) {
     setSelectedStream(null);
   };
 
-  const network = useMemo(() => {
-    const c = getNetworkByEndpoint(endpoint)?.cluster;
-    return c === "mainnet"
-      ? WalletAdapterNetwork.Mainnet
-      : c === "testnet"
-      ? WalletAdapterNetwork.Testnet
-      : WalletAdapterNetwork.Devnet;
-  }, [endpoint]);
-  const wallets = useMemo(() => [new SolflareWalletAdapter()], [network]);
+
 
   // ── Render ────────────────────────────────────────────────────────────────
   return (
-    <WalletProvider wallets={wallets}>
       <main className="min-h-screen bg-zinc-950 text-zinc-50 font-sans relative overflow-hidden flex flex-col justify-between selection:bg-indigo-500/30 selection:text-indigo-200">
         <div className="hidden md:block absolute top-0 left-1/4 w-[500px] h-[500px] bg-indigo-950/20 rounded-full blur-[140px] pointer-events-none" />
         <div className="hidden md:block absolute bottom-0 right-1/4 w-[600px] h-[600px] bg-purple-950/15 rounded-full blur-[160px] pointer-events-none" />
@@ -1961,6 +1951,5 @@ export default function Home({ initialStreams = [] }: Props) {
 
         <EnhancedChatbot />
       </main>
-    </WalletProvider>
   );
 }
