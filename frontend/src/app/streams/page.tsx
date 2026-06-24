@@ -10,10 +10,6 @@ import { StreamDetailsDrawer } from "@/components/dashboard/stream-details-drawe
 import { MobileBottomNav } from "@/components/dashboard/dashboard-sidebar";
 import type { TabId } from "@/components/dashboard/types";
 import { fetchAdminConfig } from "@/lib/solana/admin";
-import { WalletProvider } from "@solana/wallet-adapter-react";
-import { getNetworkByEndpoint } from "@/lib/solana/network-config";
-import { WalletAdapterNetwork } from "@solana/wallet-adapter-base";
-import { SolflareWalletAdapter } from "@solana/wallet-adapter-solflare";
 type TxPhase = "wallet_approval" | "sending" | "confirming";
 
 export default function StreamsPage() {
@@ -154,20 +150,11 @@ useEffect(() => {
   connected &&
   !!adminConfig &&
   !isUnauthorized;
- const network = useMemo(() => {
-    const c = getNetworkByEndpoint(endpoint)?.cluster;
-    return c === "mainnet"
-      ? WalletAdapterNetwork.Mainnet
-      : c === "testnet"
-      ? WalletAdapterNetwork.Testnet
-      : WalletAdapterNetwork.Devnet;
-  }, [endpoint]);
-  const wallets = useMemo(() => [new SolflareWalletAdapter()], [network]);
+
   return (
     
     <div className="min-h-screen bg-zinc-950 text-zinc-50">
       <DashboardHeader />
- <WalletProvider wallets={wallets}>
       <main className="min-h-screen bg-zinc-950 text-zinc-50 font-sans relative overflow-hidden flex flex-col justify-between selection:bg-indigo-500/30 selection:text-indigo-200">
 
         {/* Glow backgrounds */}
@@ -215,7 +202,6 @@ useEffect(() => {
         />
 
       </main>
-       </WalletProvider>
     </div>
    
   );
