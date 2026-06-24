@@ -1,6 +1,12 @@
 use anchor_lang::prelude::*;
 use crate::ErrorCode;
 
+// oracle.rs
+#[cfg(feature = "mainnet")]
+pub(crate) const SOL_USD_FEED: Pubkey =
+    pubkey!("CH31Xns5z3M1cTAbKW34jcxPPciazARpijcHj9rxtemt");
+
+#[cfg(not(feature = "mainnet"))]
 pub(crate) const SOL_USD_FEED: Pubkey =
     pubkey!("99B2bTijsU6f1GCT73HmdR7HCFFjGMBcPZY6jZ96ynrR");
 pub(crate) const CHAINLINK_PROGRAM_ID: Pubkey =
