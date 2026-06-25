@@ -23,7 +23,7 @@ async function fetchSkillDoc(): Promise<SkillPayload> {
     return {
       content:
         "Unable to load backend skill documentation. Set NEXT_PUBLIC_API to your backend base URL and ensure GET /skills is available.",
-      source: "backend/skill.md",
+      source: "backend/SKILL.md",
     };
   }
 }
@@ -72,12 +72,12 @@ export default async function SkillsPage() {
 
               <div className="hidden sm:flex items-center gap-2 rounded-2xl border border-zinc-800 bg-zinc-950/60 px-4 py-3 text-xs text-zinc-400">
                 <FileText className="w-4 h-4 text-indigo-400" />
-                <span className="font-mono">{source || "backend/skill.md"}</span>
+                <span className="font-mono">{source || "backend/SKILL.md"}</span>
               </div>
             </div>
 
             <div className="px-6 py-5 border-b border-zinc-800/70 text-xs text-zinc-500 flex flex-wrap gap-x-6 gap-y-2">
-              <span>Source: <span className="font-mono text-zinc-300">{source || "backend/skill.md"}</span></span>
+              <span>Source: <span className="font-mono text-zinc-300">{source || "backend/SKILL.md"}</span></span>
               <span>Format: Markdown</span>
               <span>{isFallback ? "Fallback content shown" : "Loaded from backend API"}</span>
             </div>
