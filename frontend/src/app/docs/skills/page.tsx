@@ -75,7 +75,15 @@ export default async function SkillsPage() {
                 <span className="font-mono">{source || "backend/SKILL.md"}</span>
               </div>
             </div>
+<div className="rounded-2xl border border-indigo-500/20 bg-indigo-500/10 px-4 py-3 mb-6">
+  <p className="text-sm text-indigo-200">
+    Install this skill:
+  </p>
 
+  <code className="block mt-2 font-mono text-xs text-white">
+    npx skills add https://github.com/mancer-s1-team-3/unified-flow/tree/main/backend
+  </code>
+</div>
             <div className="px-6 py-5 border-b border-zinc-800/70 text-xs text-zinc-500 flex flex-wrap gap-x-6 gap-y-2">
               <span>Source: <span className="font-mono text-zinc-300">{source || "backend/SKILL.md"}</span></span>
               <span>Format: Markdown</span>
