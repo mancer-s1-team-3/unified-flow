@@ -10,9 +10,9 @@ let cachedAt = 0;
 const CACHE_TTL_MS = 60_000; // re-read at most once a minute; skill.md changes rarely
 
 export async function readSkillMarkdown(): Promise<{ content: string; source: string }> {
-    const skillPath = path.resolve(__dirname, "../../SKILL.md");
+    const skillPath = path.resolve(__dirname, "../../skills/unified-flow/SKILL.md");
     const content = await fs.readFile(skillPath, "utf8");
-    return { content, source: "backend/SKILL.md" };
+    return { content, source: "backend/skills/unified-flow/SKILL.md" };
 }
 
 /**
