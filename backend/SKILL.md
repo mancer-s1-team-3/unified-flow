@@ -1,4 +1,5 @@
 ---
+name: "unified-flow"
 title: "Solana Token Distribution AI Agent Skills & Capabilities"
 description: "Comprehensive skill and tool specification for AI agents interacting with Unified Flow on Solana"
 category: "AI Agents"
