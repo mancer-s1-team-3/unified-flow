@@ -58,7 +58,7 @@ export default function RootLayout({
         <Providers>
           <WalletUserSync />
           <NotificationToastStack className="top-20" />
-          <OnboardingProvider>{children}</OnboardingProvider>
+        {children}
         </Providers>
       </body>
     </html>
