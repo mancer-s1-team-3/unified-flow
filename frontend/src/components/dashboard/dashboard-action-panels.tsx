@@ -48,11 +48,13 @@ export type ManualBatchRow = {
   // collapse state
   collapsed: boolean;
 };
- 
+
 function createEmptyRow(defaultMint = "", defaultType = "0"): ManualBatchRow {
   const d = new Date(Date.now() + 60_000);
   const pad = (n: number) => String(n).padStart(2, "0");
-  const defaultStart = `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+  const defaultStart = `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(
+    d.getDate(),
+  )}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
   return {
     id: `row-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
     recipient: "",
@@ -67,23 +69,24 @@ function createEmptyRow(defaultMint = "", defaultType = "0"): ManualBatchRow {
     collapsed: false,
   };
 }
- 
+
 function rowSummaryLabel(row: ManualBatchRow): string {
-  const typeLabel = row.type === "0" ? "Linear" : row.type === "1" ? "Cliff" : "Milestone";
+  const typeLabel =
+    row.type === "0" ? "Linear" : row.type === "1" ? "Cliff" : "Milestone";
   const recipientShort = row.recipient
     ? `${row.recipient.slice(0, 6)}…${row.recipient.slice(-4)}`
     : "No recipient";
   const amountStr = row.amount ? row.amount : "—";
   return `${recipientShort} · ${amountStr} · ${typeLabel}`;
 }
- 
+
 function validateRow(
   row: ManualBatchRow,
   tokenBalance: number | null,
-  connectedWalletAddress?: string | null
+  connectedWalletAddress?: string | null,
 ): { valid: boolean; errors: string[] } {
   const errors: string[] = [];
- 
+
   if (!row.recipient.trim()) {
     errors.push("Recipient required");
   } else if (!isValidSolanaAddress(row.recipient)) {
@@ -96,14 +99,17 @@ function validateRow(
     errors.push("Recipient cannot be your connected wallet");
   }
 
-  if (!row.amount.trim() || Number(row.amount) <= 0) errors.push("Amount required (> 0)");
- 
+  if (!row.amount.trim() || Number(row.amount) <= 0)
+    errors.push("Amount required (> 0)");
+
   if (!row.mint.trim()) errors.push("Mint required");
- 
+
   if (row.type !== "2") {
     const startMs = row.startDate ? new Date(row.startDate).getTime() : 0;
-    if (!row.startDate || startMs <= Date.now()) errors.push("Start date must be in the future");
-    if (!row.duration || Number(row.duration) <= 0) errors.push("Duration required (> 0)");
+    if (!row.startDate || startMs <= Date.now())
+      errors.push("Start date must be in the future");
+    if (!row.duration || Number(row.duration) <= 0)
+      errors.push("Duration required (> 0)");
     if (row.type === "1") {
       if (!row.cliffDuration || Number(row.cliffDuration) <= 0)
         errors.push("Cliff duration required (> 0)");
@@ -111,7 +117,8 @@ function validateRow(
         errors.push("Cliff must be ≤ duration");
     }
   } else {
-    if (Number(row.milestoneCount) <= 0) errors.push("Milestone count required");
+    if (Number(row.milestoneCount) <= 0)
+      errors.push("Milestone count required");
     const ms = row.milestoneAmounts.slice(0, Number(row.milestoneCount));
     const hasInvalid = ms.some((v) => !v || Number(v) <= 0);
     if (hasInvalid) errors.push("All milestone amounts must be > 0");
@@ -119,10 +126,10 @@ function validateRow(
     if (Math.abs(sum - Number(row.amount || 0)) > 0.0000001)
       errors.push("Milestone amounts must sum to total");
   }
- 
+
   if (tokenBalance !== null && Number(row.amount) > tokenBalance)
     errors.push("Exceeds wallet balance");
- 
+
   return { valid: errors.length === 0, errors };
 }
 // ── Single row editor (expanded) ─────────────────────────────────────────
@@ -141,48 +148,72 @@ function BatchRowEditor({
   endpoint: string;
   clusterLabel: string;
   onChange: (updated: Partial<ManualBatchRow>) => void;
-  connectedWalletAddress: string |null;
+  connectedWalletAddress: string | null;
 }) {
   const selectedPreset = mintPresets.find((p) => p.mint === row.mint) ?? null;
-  const tokenBalance = useTokenBalance(row.mint, endpoint, selectedPreset?.decimals);
+  const tokenBalance = useTokenBalance(
+    row.mint,
+    endpoint,
+    selectedPreset?.decimals,
+  );
   const [mintMenuOpen, setMintMenuOpen] = useState(false);
   const mintPickerRef = useRef<HTMLDivElement | null>(null);
- 
+
   useEffect(() => {
     const handler = (e: MouseEvent | PointerEvent) => {
-      if (mintPickerRef.current && !mintPickerRef.current.contains(e.target as Node))
+      if (
+        mintPickerRef.current &&
+        !mintPickerRef.current.contains(e.target as Node)
+      )
         setMintMenuOpen(false);
     };
     document.addEventListener("pointerdown", handler);
     return () => document.removeEventListener("pointerdown", handler);
   }, []);
- 
-  const startMs = row.startDate ? new Date(row.startDate).getTime() : Date.now() + 10_000;
+
+  const startMs = row.startDate
+    ? new Date(row.startDate).getTime()
+    : Date.now() + 10_000;
   const durationSecs = Number(row.duration || 0);
   const cliffSecs = Number(row.cliffDuration || 0);
- 
-  const recipientInvalid = !!row.recipient.trim() && !isValidSolanaAddress(row.recipient);
+
+  const recipientInvalid =
+    !!row.recipient.trim() && !isValidSolanaAddress(row.recipient);
   const exceedsBalance =
-    tokenBalance.balance !== null && !!row.amount && Number(row.amount) > tokenBalance.balance;
-  const startInPast = row.type !== "2" && !!row.startDate && new Date(row.startDate).getTime() <= Date.now();
-  const cliffExceedsDuration = row.type === "1" && cliffSecs > durationSecs && durationSecs > 0;
- 
+    tokenBalance.balance !== null &&
+    !!row.amount &&
+    Number(row.amount) > tokenBalance.balance;
+  const startInPast =
+    row.type !== "2" &&
+    !!row.startDate &&
+    new Date(row.startDate).getTime() <= Date.now();
+  const cliffExceedsDuration =
+    row.type === "1" && cliffSecs > durationSecs && durationSecs > 0;
+
   // Milestone sums
-  const milestoneCount = Math.max(1, Math.min(17, Number(row.milestoneCount || 3)));
+  const milestoneCount = Math.max(
+    1,
+    Math.min(17, Number(row.milestoneCount || 3)),
+  );
   const milestoneAmounts = row.milestoneAmounts.slice(0, milestoneCount);
   const milestoneSum = milestoneAmounts.reduce((a, b) => a + Number(b || 0), 0);
-  const milestonesMatchTotal = Math.abs(milestoneSum - Number(row.amount || 0)) < 0.0000001;
-  const hasInvalidMilestones = milestoneAmounts.some((v) => !v || Number(v) <= 0);
- 
+  const milestonesMatchTotal =
+    Math.abs(milestoneSum - Number(row.amount || 0)) < 0.0000001;
+  const hasInvalidMilestones = milestoneAmounts.some(
+    (v) => !v || Number(v) <= 0,
+  );
+
   const getFutureIso = () => {
     const d2 = new Date(Date.now() + 60_000);
     const pad = (n: number) => String(n).padStart(2, "0");
-    return `${d2.getFullYear()}-${pad(d2.getMonth() + 1)}-${pad(d2.getDate())}T${pad(d2.getHours())}:${pad(d2.getMinutes())}`;
+    return `${d2.getFullYear()}-${pad(d2.getMonth() + 1)}-${pad(
+      d2.getDate(),
+    )}T${pad(d2.getHours())}:${pad(d2.getMinutes())}`;
   };
- 
+
   const dateInputClass =
     "block w-full bg-zinc-950 border border-zinc-800 rounded-xl px-3 py-2 text-[11px] focus:outline-none focus:border-indigo-500 font-mono [color-scheme:dark]";
- 
+
   return (
     <div className="grid gap-3 p-4">
       {/* Recipient */}
@@ -196,20 +227,23 @@ function BatchRowEditor({
           onChange={(e) => onChange({ recipient: e.target.value })}
           placeholder="Solana wallet address (base58)"
           className={`w-full bg-zinc-950 border rounded-xl px-3 py-2 text-sm font-mono focus:outline-none transition-colors ${
-            recipientInvalid ? "border-rose-500/60 focus:border-rose-500" : "border-zinc-800 focus:border-indigo-500"
+            recipientInvalid
+              ? "border-rose-500/60 focus:border-rose-500"
+              : "border-zinc-800 focus:border-indigo-500"
           }`}
         />
-        {
-  row.recipient &&
-  connectedWalletAddress &&
-  row.recipient.toLowerCase() === connectedWalletAddress.toLowerCase() && (
-    <p className="mt-1 text-[10px] font-semibold text-rose-400">
-      Recipient cannot be your connected wallet
-    </p>
-  )
-}
+        {row.recipient &&
+          connectedWalletAddress &&
+          row.recipient.toLowerCase() ===
+            connectedWalletAddress.toLowerCase() && (
+            <p className="mt-1 text-[10px] font-semibold text-rose-400">
+              Recipient cannot be your connected wallet
+            </p>
+          )}
         {recipientInvalid && (
-          <p className="mt-1 text-[10px] font-semibold text-rose-400">Invalid Solana address</p>
+          <p className="mt-1 text-[10px] font-semibold text-rose-400">
+            Invalid Solana address
+          </p>
         )}
         {!recipientInvalid && row.recipient.trim() && (
           <p className="mt-1 text-[10px] text-emerald-500 flex items-center gap-1">
@@ -217,7 +251,7 @@ function BatchRowEditor({
           </p>
         )}
       </div>
- 
+
       {/* Amount + Mint row */}
       <div className="grid grid-cols-2 gap-3">
         {/* Amount */}
@@ -230,9 +264,13 @@ function BatchRowEditor({
               type="text"
               inputMode="decimal"
               value={row.amount}
-              onChange={(e) => onChange({ amount: normalizeDecimalInput(e.target.value) })}
+              onChange={(e) =>
+                onChange({ amount: normalizeDecimalInput(e.target.value) })
+              }
               className={`w-full bg-zinc-950 border rounded-xl px-3 py-2 text-sm font-mono focus:outline-none transition-colors pr-14 ${
-                exceedsBalance ? "border-rose-500/60 focus:border-rose-500" : "border-zinc-800 focus:border-indigo-500"
+                exceedsBalance
+                  ? "border-rose-500/60 focus:border-rose-500"
+                  : "border-zinc-800 focus:border-indigo-500"
               }`}
               placeholder="0"
             />
@@ -240,8 +278,13 @@ function BatchRowEditor({
               <button
                 type="button"
                 onClick={() => {
-                  const dec = tokenBalance.decimals ?? selectedPreset?.decimals ?? 6;
-                  onChange({ amount: tokenBalance.balance!.toFixed(dec).replace(/\.?0+$/, "") });
+                  const dec =
+                    tokenBalance.decimals ?? selectedPreset?.decimals ?? 6;
+                  onChange({
+                    amount: tokenBalance
+                      .balance!.toFixed(dec)
+                      .replace(/\.?0+$/, ""),
+                  });
                 }}
                 className="absolute inset-y-0 right-2 flex items-center px-1.5 text-[9px] font-black uppercase text-indigo-400 hover:text-indigo-300"
               >
@@ -249,13 +292,22 @@ function BatchRowEditor({
               </button>
             )}
           </div>
-          {!tokenBalance.loading && tokenBalance.balance !== null && row.mint && (
-            <p className={`mt-1 text-[10px] font-mono ${exceedsBalance ? "text-rose-400" : "text-zinc-500"}`}>
-              Bal: {tokenBalance.balance.toLocaleString(undefined, { maximumFractionDigits: selectedPreset?.decimals ?? 6 })}
-            </p>
-          )}
+          {!tokenBalance.loading &&
+            tokenBalance.balance !== null &&
+            row.mint && (
+              <p
+                className={`mt-1 text-[10px] font-mono ${
+                  exceedsBalance ? "text-rose-400" : "text-zinc-500"
+                }`}
+              >
+                Bal:{" "}
+                {tokenBalance.balance.toLocaleString(undefined, {
+                  maximumFractionDigits: selectedPreset?.decimals ?? 6,
+                })}
+              </p>
+            )}
         </div>
- 
+
         {/* Mint */}
         <div>
           <label className="block text-[10px] font-semibold text-zinc-400 uppercase tracking-wider mb-1">
@@ -269,31 +321,60 @@ function BatchRowEditor({
             >
               <div className="flex items-center gap-2 min-w-0">
                 {selectedPreset ? (
-                  <Image src={selectedPreset.logoURI} alt="" width={20} height={20} className="w-5 h-5 rounded-full" />
+                  <Image
+                    src={selectedPreset.logoURI}
+                    alt=""
+                    width={20}
+                    height={20}
+                    className="w-5 h-5 rounded-full"
+                  />
                 ) : (
-                  <div className="w-5 h-5 rounded-full bg-zinc-800 flex items-center justify-center text-[9px] text-zinc-500">?</div>
+                  <div className="w-5 h-5 rounded-full bg-zinc-800 flex items-center justify-center text-[9px] text-zinc-500">
+                    ?
+                  </div>
                 )}
                 <span className="text-xs font-semibold truncate text-zinc-200">
-                  {selectedPreset ? selectedPreset.label : row.mint ? `${row.mint.slice(0, 6)}…` : "Select"}
+                  {selectedPreset
+                    ? selectedPreset.label
+                    : row.mint
+                    ? `${row.mint.slice(0, 6)}…`
+                    : "Select"}
                 </span>
               </div>
-              <ChevronDown className={`w-3.5 h-3.5 text-zinc-500 shrink-0 transition-transform ${mintMenuOpen ? "rotate-180" : ""}`} />
+              <ChevronDown
+                className={`w-3.5 h-3.5 text-zinc-500 shrink-0 transition-transform ${
+                  mintMenuOpen ? "rotate-180" : ""
+                }`}
+              />
             </button>
- 
+
             {mintMenuOpen && (
               <div className="absolute left-0 right-0 top-full z-30 mt-1 rounded-2xl border border-zinc-800 bg-zinc-950 shadow-2xl shadow-black/40 overflow-hidden max-h-64 overflow-y-auto">
                 {mintPresets.map((preset) => (
                   <button
                     key={preset.mint}
                     type="button"
-                    onClick={() => { onChange({ mint: preset.mint }); setMintMenuOpen(false); }}
+                    onClick={() => {
+                      onChange({ mint: preset.mint });
+                      setMintMenuOpen(false);
+                    }}
                     className={`w-full flex items-center gap-2 px-3 py-2 text-left transition-colors hover:bg-zinc-900 ${
                       row.mint === preset.mint ? "bg-indigo-950/30" : ""
                     }`}
                   >
-                    <Image src={preset.logoURI} alt="" width={20} height={20} className="w-5 h-5 rounded-full shrink-0" />
-                    <span className="text-xs font-semibold text-zinc-200 truncate">{preset.label}</span>
-                    {row.mint === preset.mint && <Check className="w-3 h-3 text-indigo-400 shrink-0 ml-auto" />}
+                    <Image
+                      src={preset.logoURI}
+                      alt=""
+                      width={20}
+                      height={20}
+                      className="w-5 h-5 rounded-full shrink-0"
+                    />
+                    <span className="text-xs font-semibold text-zinc-200 truncate">
+                      {preset.label}
+                    </span>
+                    {row.mint === preset.mint && (
+                      <Check className="w-3 h-3 text-indigo-400 shrink-0 ml-auto" />
+                    )}
                   </button>
                 ))}
                 <div className="px-3 py-2 border-t border-zinc-900">
@@ -310,7 +391,7 @@ function BatchRowEditor({
           </div>
         </div>
       </div>
- 
+
       {/* Type */}
       <div>
         <label className="block text-[10px] font-semibold text-zinc-400 uppercase tracking-wider mb-1">
@@ -326,7 +407,7 @@ function BatchRowEditor({
           <option value="2">Milestone-Based Vesting</option>
         </select>
       </div>
- 
+
       {/* Start date (non-milestone) */}
       {row.type !== "2" && (
         <div>
@@ -336,21 +417,32 @@ function BatchRowEditor({
           <input
             type="datetime-local"
             value={row.startDate || getFutureIso()}
-            onChange={(e) => onChange({ startDate: e.target.value, duration: "", cliffDuration: "" })}
+            onChange={(e) =>
+              onChange({
+                startDate: e.target.value,
+                duration: "",
+                cliffDuration: "",
+              })
+            }
             className={dateInputClass}
             style={{ WebkitAppearance: "none" }}
           />
           {startInPast && (
-            <p className="mt-1 text-[10px] text-rose-400 font-semibold">Start date must be in the future</p>
+            <p className="mt-1 text-[10px] text-rose-400 font-semibold">
+              Start date must be in the future
+            </p>
           )}
         </div>
       )}
- 
+
       {/* Duration (non-milestone) */}
       {row.type !== "2" && (
         <div>
           <label className="block text-[10px] font-semibold text-zinc-400 uppercase tracking-wider mb-1">
-            Duration <span className="text-zinc-600 normal-case font-normal">(seconds)</span>
+            Duration{" "}
+            <span className="text-zinc-600 normal-case font-normal">
+              (seconds)
+            </span>
           </label>
           <div className="relative">
             <input
@@ -361,7 +453,9 @@ function BatchRowEditor({
               placeholder="e.g. 31536000"
               className="w-full bg-zinc-950 border border-zinc-800 rounded-xl px-3 py-2 pr-10 text-sm font-mono focus:outline-none focus:border-indigo-500"
             />
-            <span className="absolute inset-y-0 right-3 flex items-center text-[10px] font-black text-zinc-500">sec</span>
+            <span className="absolute inset-y-0 right-3 flex items-center text-[10px] font-black text-zinc-500">
+              sec
+            </span>
           </div>
           <div className="mt-1.5 flex flex-wrap gap-1.5">
             {QUICK_DURATIONS.map((p) => (
@@ -382,12 +476,15 @@ function BatchRowEditor({
           )}
         </div>
       )}
- 
+
       {/* Cliff (type 1 only) */}
       {row.type === "1" && (
         <div>
           <label className="block text-[10px] font-semibold text-zinc-400 uppercase tracking-wider mb-1">
-            Cliff Duration <span className="text-zinc-600 normal-case font-normal">(seconds)</span>
+            Cliff Duration{" "}
+            <span className="text-zinc-600 normal-case font-normal">
+              (seconds)
+            </span>
           </label>
           <div className="relative">
             <input
@@ -397,10 +494,14 @@ function BatchRowEditor({
               onChange={(e) => onChange({ cliffDuration: e.target.value })}
               placeholder="e.g. 7776000"
               className={`w-full bg-zinc-950 border rounded-xl px-3 py-2 pr-10 text-sm font-mono focus:outline-none transition-colors ${
-                cliffExceedsDuration ? "border-amber-500/60" : "border-zinc-800 focus:border-indigo-500"
+                cliffExceedsDuration
+                  ? "border-amber-500/60"
+                  : "border-zinc-800 focus:border-indigo-500"
               }`}
             />
-            <span className="absolute inset-y-0 right-3 flex items-center text-[10px] font-black text-zinc-500">sec</span>
+            <span className="absolute inset-y-0 right-3 flex items-center text-[10px] font-black text-zinc-500">
+              sec
+            </span>
           </div>
           <div className="mt-1.5 flex flex-wrap gap-1.5">
             {QUICK_DURATIONS.map((p) => (
@@ -416,7 +517,8 @@ function BatchRowEditor({
           </div>
           {cliffExceedsDuration && (
             <p className="mt-1 text-[10px] text-amber-400 font-semibold">
-              Cliff ({cliffSecs.toLocaleString()}s) exceeds duration ({durationSecs.toLocaleString()}s)
+              Cliff ({cliffSecs.toLocaleString()}s) exceeds duration (
+              {durationSecs.toLocaleString()}s)
             </p>
           )}
           {cliffSecs > 0 && !startInPast && !cliffExceedsDuration && (
@@ -426,7 +528,7 @@ function BatchRowEditor({
           )}
         </div>
       )}
- 
+
       {/* Milestones (type 2) */}
       {row.type === "2" && (
         <div className="bg-zinc-900/30 border border-zinc-900 rounded-xl p-3 space-y-3">
@@ -440,14 +542,23 @@ function BatchRowEditor({
               max="17"
               value={row.milestoneCount}
               onChange={(e) => {
-                const n = Math.min(17, Math.max(1, parseInt(e.target.value) || 1));
-                const newAmts = Array.from({ length: n }, (_, i) => row.milestoneAmounts[i] ?? "0");
-                onChange({ milestoneCount: String(n), milestoneAmounts: newAmts });
+                const n = Math.min(
+                  17,
+                  Math.max(1, parseInt(e.target.value) || 1),
+                );
+                const newAmts = Array.from(
+                  { length: n },
+                  (_, i) => row.milestoneAmounts[i] ?? "0",
+                );
+                onChange({
+                  milestoneCount: String(n),
+                  milestoneAmounts: newAmts,
+                });
               }}
               className="w-full bg-zinc-950 border border-zinc-800 rounded-xl px-3 py-2 text-sm font-mono focus:outline-none focus:border-indigo-500"
             />
           </div>
- 
+
           <div className="grid grid-cols-2 gap-2">
             {milestoneAmounts.map((amt, idx) => {
               const val = Number(amt || 0);
@@ -455,8 +566,14 @@ function BatchRowEditor({
               return (
                 <div key={idx}>
                   <div className="flex items-center justify-between mb-0.5">
-                    <span className="text-[10px] font-mono text-zinc-400">#{idx}</span>
-                    <span className={`text-[9px] font-mono ${isInvalid ? "text-zinc-600" : "text-indigo-400"}`}>
+                    <span className="text-[10px] font-mono text-zinc-400">
+                      #{idx}
+                    </span>
+                    <span
+                      className={`text-[9px] font-mono ${
+                        isInvalid ? "text-zinc-600" : "text-indigo-400"
+                      }`}
+                    >
                       {!isInvalid && Number(row.amount) > 0
                         ? `${((val / Number(row.amount)) * 100).toFixed(1)}%`
                         : "—"}
@@ -472,7 +589,9 @@ function BatchRowEditor({
                       onChange({ milestoneAmounts: next });
                     }}
                     className={`w-full bg-zinc-950 border rounded-xl px-2.5 py-1.5 text-xs font-mono focus:outline-none transition-colors ${
-                      isInvalid ? "border-rose-500/50" : "border-zinc-800 focus:border-indigo-500"
+                      isInvalid
+                        ? "border-rose-500/50"
+                        : "border-zinc-800 focus:border-indigo-500"
                     }`}
                     placeholder="0"
                   />
@@ -480,15 +599,27 @@ function BatchRowEditor({
               );
             })}
           </div>
- 
+
           {/* Mini counter */}
-          <div className={`flex items-center justify-between text-[10px] font-mono px-1 ${
-            milestonesMatchTotal ? "text-emerald-400" : hasInvalidMilestones ? "text-rose-400" : "text-amber-400"
-          }`}>
+          <div
+            className={`flex items-center justify-between text-[10px] font-mono px-1 ${
+              milestonesMatchTotal
+                ? "text-emerald-400"
+                : hasInvalidMilestones
+                ? "text-rose-400"
+                : "text-amber-400"
+            }`}
+          >
             <span>Sum: {milestoneSum.toLocaleString()}</span>
             <span>Total: {Number(row.amount || 0).toLocaleString()}</span>
             <span>
-              {milestonesMatchTotal ? "✓ balanced" : hasInvalidMilestones ? "⚠ invalid" : `${Math.abs(Number(row.amount || 0) - milestoneSum).toLocaleString()} off`}
+              {milestonesMatchTotal
+                ? "✓ balanced"
+                : hasInvalidMilestones
+                ? "⚠ invalid"
+                : `${Math.abs(
+                    Number(row.amount || 0) - milestoneSum,
+                  ).toLocaleString()} off`}
             </span>
           </div>
         </div>
@@ -518,27 +649,33 @@ export function ManualBatchCreatePanel({
   connected: boolean;
   paused?: boolean;
   defaultMint?: string;
-  connectedWalletAddress: string |null;
+  connectedWalletAddress: string | null;
 }) {
-  const [rows, setRows] = useState<ManualBatchRow[]>([createEmptyRow(defaultMint)]);
- 
+  const [rows, setRows] = useState<ManualBatchRow[]>([
+    createEmptyRow(defaultMint),
+  ]);
+
   // When defaultMint changes (user picks a mint in the header), propagate to empty-mint rows
   useEffect(() => {
     if (!defaultMint) return;
-    setRows((prev) => prev.map((r) => (!r.mint ? { ...r, mint: defaultMint } : r)));
+    setRows((prev) =>
+      prev.map((r) => (!r.mint ? { ...r, mint: defaultMint } : r)),
+    );
   }, [defaultMint]);
- 
+
   const updateRow = (index: number, patch: Partial<ManualBatchRow>) => {
-    setRows((prev) => prev.map((r, i) => (i === index ? { ...r, ...patch } : r)));
+    setRows((prev) =>
+      prev.map((r, i) => (i === index ? { ...r, ...patch } : r)),
+    );
   };
- 
+
   const addRow = () => {
     setRows((prev) => [
       ...prev,
       createEmptyRow(defaultMint || prev[prev.length - 1]?.mint || ""),
     ]);
   };
- 
+
   const duplicateRow = (index: number) => {
     const source = rows[index];
     const clone: ManualBatchRow = {
@@ -546,36 +683,41 @@ export function ManualBatchCreatePanel({
       id: `row-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
       collapsed: false,
     };
-    setRows((prev) => [...prev.slice(0, index + 1), clone, ...prev.slice(index + 1)]);
+    setRows((prev) => [
+      ...prev.slice(0, index + 1),
+      clone,
+      ...prev.slice(index + 1),
+    ]);
   };
- 
+
   const removeRow = (index: number) => {
     if (rows.length === 1) return; // always keep at least 1
     setRows((prev) => prev.filter((_, i) => i !== index));
   };
- 
+
   const toggleCollapse = (index: number) => {
-    setRows((prev) => prev.map((r, i) => (i === index ? { ...r, collapsed: !r.collapsed } : r)));
+    setRows((prev) =>
+      prev.map((r, i) => (i === index ? { ...r, collapsed: !r.collapsed } : r)),
+    );
   };
- 
+
   // Collapse all except one
-  const collapseAll = () => setRows((prev) => prev.map((r) => ({ ...r, collapsed: true })));
-  const expandAll = () => setRows((prev) => prev.map((r) => ({ ...r, collapsed: false })));
- 
+  const collapseAll = () =>
+    setRows((prev) => prev.map((r) => ({ ...r, collapsed: true })));
+  const expandAll = () =>
+    setRows((prev) => prev.map((r) => ({ ...r, collapsed: false })));
+
   // Per-row validation state (lazy — only on submit attempt or show indicator)
-const rowValidations = useMemo(
-  () =>
-    rows.map((r) =>
-      validateRow(r, null, connectedWalletAddress)
-    ),
-  [rows, connectedWalletAddress]
-);
- 
+  const rowValidations = useMemo(
+    () => rows.map((r) => validateRow(r, null, connectedWalletAddress)),
+    [rows, connectedWalletAddress],
+  );
+
   const allRowsValid = rowValidations.every((v) => v.valid);
- 
+
   const isSubmitting =
     activeTxAction === "create_stream_batch_manual" && !!activeTxPhase;
- 
+
   const getTxLabel = () => {
     if (activeTxAction !== "create_stream_batch_manual" || !activeTxPhase)
       return `Deploy ${rows.length} Stream${rows.length > 1 ? "s" : ""}`;
@@ -583,18 +725,24 @@ const rowValidations = useMemo(
     if (activeTxPhase === "sending") return "Sending Transactions...";
     return "Confirming On-Chain...";
   };
-  
- const hasSelfRecipient = rows.some(
-  (row) =>
-    row.recipient.trim().toLowerCase() ===
-    connectedWalletAddress?.trim().toLowerCase()
-);
-  const canSubmit = connected && !paused &&  !hasSelfRecipient &&!isSubmitting && allRowsValid && rows.length > 0;
- 
+
+  const hasSelfRecipient = rows.some(
+    (row) =>
+      row.recipient.trim().toLowerCase() ===
+      connectedWalletAddress?.trim().toLowerCase(),
+  );
+  const canSubmit =
+    connected &&
+    !paused &&
+    !hasSelfRecipient &&
+    !isSubmitting &&
+    allRowsValid &&
+    rows.length > 0;
+
   const handleSubmit = () => {
     handleAction("create_stream_batch_manual", { rows });
   };
- 
+
   return (
     <div className="animate-in fade-in-30 duration-200 space-y-4">
       {/* Header */}
@@ -627,7 +775,7 @@ const rowValidations = useMemo(
           </button>
         </div>
       </div>
- 
+
       {/* Row list */}
       <div className="space-y-3">
         {rows.map((row, index) => {
@@ -637,7 +785,7 @@ const rowValidations = useMemo(
             : row.recipient || row.amount
             ? "border-rose-500/20 bg-rose-950/5"
             : "border-zinc-800";
- 
+
           return (
             <div
               key={row.id}
@@ -658,7 +806,7 @@ const rowValidations = useMemo(
                       : "bg-zinc-600"
                   }`}
                 />
- 
+
                 {/* Index + summary */}
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-2">
@@ -681,14 +829,19 @@ const rowValidations = useMemo(
                         </span>
                       ))}
                       {errors.length > 2 && (
-                        <span className="text-[9px] text-zinc-500">+{errors.length - 2} more</span>
+                        <span className="text-[9px] text-zinc-500">
+                          +{errors.length - 2} more
+                        </span>
                       )}
                     </div>
                   )}
                 </div>
- 
+
                 {/* Row actions */}
-                <div className="flex items-center gap-1 shrink-0" onClick={(e) => e.stopPropagation()}>
+                <div
+                  className="flex items-center gap-1 shrink-0"
+                  onClick={(e) => e.stopPropagation()}
+                >
                   <button
                     type="button"
                     onClick={() => duplicateRow(index)}
@@ -715,7 +868,7 @@ const rowValidations = useMemo(
                   )}
                 </div>
               </div>
- 
+
               {/* Expanded editor */}
               {!row.collapsed && (
                 <BatchRowEditor
@@ -732,7 +885,7 @@ const rowValidations = useMemo(
           );
         })}
       </div>
- 
+
       {/* Add row button */}
       <button
         type="button"
@@ -742,7 +895,7 @@ const rowValidations = useMemo(
         <Plus className="w-3.5 h-3.5" />
         Add stream
       </button>
- 
+
       {/* Validation summary */}
       {!allRowsValid && (
         <div className="bg-rose-950/20 border border-rose-500/20 rounded-2xl px-4 py-3 flex items-start gap-3">
@@ -750,15 +903,19 @@ const rowValidations = useMemo(
           <div>
             <p className="text-[11px] font-bold text-rose-300 mb-0.5">
               {rowValidations.filter((v) => !v.valid).length} row
-              {rowValidations.filter((v) => !v.valid).length > 1 ? "s" : ""} have issues
+              {rowValidations.filter((v) => !v.valid).length > 1
+                ? "s"
+                : ""}{" "}
+              have issues
             </p>
             <p className="text-[10px] text-rose-300/70 leading-relaxed">
-              Fix all errors before deploying. Expand rows with a red border to see details.
+              Fix all errors before deploying. Expand rows with a red border to
+              see details.
             </p>
           </div>
         </div>
       )}
- 
+
       {/* Batch summary card */}
       {allRowsValid && rows.length > 0 && (
         <div className="rounded-2xl border border-indigo-500/20 bg-indigo-950/10 px-4 py-3">
@@ -776,13 +933,24 @@ const rowValidations = useMemo(
             <div>
               <div className="text-zinc-500 mb-0.5">Types</div>
               <div className="font-bold text-zinc-100">
-                {[...new Set(rows.map((r) => r.type === "0" ? "Linear" : r.type === "1" ? "Cliff" : "Milestone"))].join(", ")}
+                {[
+                  ...new Set(
+                    rows.map((r) =>
+                      r.type === "0"
+                        ? "Linear"
+                        : r.type === "1"
+                        ? "Cliff"
+                        : "Milestone",
+                    ),
+                  ),
+                ].join(", ")}
               </div>
             </div>
             <div>
               <div className="text-zinc-500 mb-0.5">Tx batches</div>
               <div className="font-bold text-zinc-100">
-                ~{Math.ceil(rows.length / 2)} tx{Math.ceil(rows.length / 2) > 1 ? "s" : ""}
+                ~{Math.ceil(rows.length / 2)} tx
+                {Math.ceil(rows.length / 2) > 1 ? "s" : ""}
               </div>
             </div>
           </div>
@@ -792,7 +960,7 @@ const rowValidations = useMemo(
           </p>
         </div>
       )}
- 
+
       {/* Submit */}
       <button
         disabled={!canSubmit}
@@ -803,14 +971,17 @@ const rowValidations = useMemo(
             : "bg-indigo-600 hover:bg-indigo-700 text-white hover:shadow-indigo-500/20"
         }`}
       >
-        {isSubmitting ? <RefreshCw className="w-4 h-4 animate-spin" /> : <Users className="w-4 h-4" />}
+        {isSubmitting ? (
+          <RefreshCw className="w-4 h-4 animate-spin" />
+        ) : (
+          <Users className="w-4 h-4" />
+        )}
         {!connected ? "Connect wallet to deploy" : getTxLabel()}
       </button>
     </div>
   );
 }
 
- 
 const QUICK_DURATIONS = [
   { label: "1M", value: 60 * 60 * 24 * 30 },
   { label: "3M", value: 60 * 60 * 24 * 90 },
@@ -849,7 +1020,7 @@ function buildEvenMilestoneBaseUnits(totalBaseUnits: bigint, count: number) {
   return Array.from(
     { length: normalizedCount },
     (_, index) =>
-      baseShare + (BigInt(index) < remainder ? BigInt(1) : BigInt(0))
+      baseShare + (BigInt(index) < remainder ? BigInt(1) : BigInt(0)),
   );
 }
 
@@ -869,7 +1040,7 @@ function computeCsvMilestoneRebalance(
   csvText: string,
   mintPresets: { mint: string; decimals?: number }[],
   fallbackMint: string,
-  fallbackDecimals: number
+  fallbackDecimals: number,
 ): { rows: CsvMilestoneRebalanceRow[]; rebalancedText: string } {
   const empty = {
     rows: [] as CsvMilestoneRebalanceRow[],
@@ -917,17 +1088,17 @@ function computeCsvMilestoneRebalance(
 
     const totalBase = parseTokenAmountToBaseUnits(
       values[amountIdx] ?? "0",
-      decimals
+      decimals,
     );
     const sumBase = original.reduce(
       (acc, v) => acc + parseTokenAmountToBaseUnits(v, decimals),
-      BigInt(0)
+      BigInt(0),
     );
     if (sumBase === totalBase) continue; // already balanced — nothing to do
 
     const rebalanced = buildEvenMilestoneBaseUnits(
       totalBase,
-      original.length
+      original.length,
     ).map((b) => formatBaseUnitsToTokenAmount(b, decimals));
 
     rows.push({
@@ -1217,7 +1388,7 @@ function UnlockMilestonePanel({
         setDetailError(
           err?.response?.data?.error ||
             err?.message ||
-            "Failed to fetch stream details."
+            "Failed to fetch stream details.",
         );
       } finally {
         setDetailLoading(false);
@@ -1248,7 +1419,7 @@ function UnlockMilestonePanel({
     () =>
       streams.find((s) => String(s?.id || "") === unlockForm.streamId.trim()) ??
       null,
-    [streams, unlockForm.streamId]
+    [streams, unlockForm.streamId],
   );
 
   // Prefer detail data kalau sudah ada, fallback ke summary
@@ -1300,7 +1471,7 @@ function UnlockMilestonePanel({
       const remainder = totalBase % BigInt(milestoneCount);
       amounts = Array.from(
         { length: milestoneCount },
-        (_, i) => base + (BigInt(i) < remainder ? BigInt(1) : BigInt(0))
+        (_, i) => base + (BigInt(i) < remainder ? BigInt(1) : BigInt(0)),
       );
     }
 
@@ -1308,7 +1479,7 @@ function UnlockMilestonePanel({
     // Hitung cumulative sum sampai cocok dengan unlockedAmount
     // Ini akurat karena unlock selalu sequential
     const unlockedAmountBase = parseBaseUnits(
-      streamDetail.unlockedAmount ?? streamDetail.unlocked_amount ?? 0
+      streamDetail.unlockedAmount ?? streamDetail.unlocked_amount ?? 0,
     );
 
     let derivedNextIndex = 0;
@@ -1336,7 +1507,7 @@ function UnlockMilestonePanel({
     const fmt = (v: bigint) =>
       Number(formatBaseUnitsToTokenAmount(v, decimals)).toLocaleString(
         undefined,
-        { maximumFractionDigits: decimals }
+        { maximumFractionDigits: decimals },
       );
 
     // ── Build items ────────────────────────────────────────────────────────
@@ -1481,7 +1652,7 @@ function UnlockMilestonePanel({
               <span className="font-mono text-amber-300 break-all">
                 {`${connectedWalletAddress!.slice(
                   0,
-                  6
+                  6,
                 )}…${connectedWalletAddress!.slice(-4)}`}
               </span>
               .
@@ -1782,9 +1953,9 @@ function WithdrawPanel({
   const stream = useMemo(
     () =>
       streams.find(
-        (s) => String(s?.id || "") === withdrawForm.streamId.trim()
+        (s) => String(s?.id || "") === withdrawForm.streamId.trim(),
       ) ?? null,
-    [streams, withdrawForm.streamId]
+    [streams, withdrawForm.streamId],
   );
 
   // ── Wallet vs recipient check ──────────────────────────────────────────
@@ -1813,7 +1984,7 @@ function WithdrawPanel({
 
     if (vestingType === 2) {
       vestedBase = parseBaseUnits(
-        stream.unlockedAmount ?? stream.unlocked_milestone_amount ?? 0
+        stream.unlockedAmount ?? stream.unlocked_milestone_amount ?? 0,
       );
     } else if (nowTs < startTs) {
       vestedBase = BigInt(0);
@@ -1833,7 +2004,7 @@ function WithdrawPanel({
     const fmt = (v: bigint) =>
       Number(formatBaseUnitsToTokenAmount(v, decimals)).toLocaleString(
         undefined,
-        { maximumFractionDigits: decimals }
+        { maximumFractionDigits: decimals },
       );
 
     // Progress pct: withdrawn / total
@@ -1857,7 +2028,7 @@ function WithdrawPanel({
     const cliffSecondsRemaining = Math.max(0, cliffTs - nowTs);
     const cliffDaysRemaining = Math.floor(cliffSecondsRemaining / 86400);
     const cliffHoursRemaining = Math.floor(
-      (cliffSecondsRemaining % 86400) / 3600
+      (cliffSecondsRemaining % 86400) / 3600,
     );
 
     const isCompleted = Number(stream.status) === 2;
@@ -1950,7 +2121,7 @@ function WithdrawPanel({
               <span className="font-mono text-amber-300 break-all">
                 {stream?.recipient
                   ? `${stream.recipient.slice(0, 6)}…${stream.recipient.slice(
-                      -4
+                      -4,
                     )}`
                   : "unknown"}
               </span>
@@ -1958,7 +2129,7 @@ function WithdrawPanel({
               <span className="font-mono text-amber-300 break-all">
                 {`${connectedWalletAddress!.slice(
                   0,
-                  6
+                  6,
                 )}…${connectedWalletAddress!.slice(-4)}`}
               </span>
               .
@@ -2396,7 +2567,7 @@ function CancelPanel({
     () =>
       streams.find((s) => String(s?.id || "") === cancelForm.streamId.trim()) ??
       null,
-    [streams, cancelForm.streamId]
+    [streams, cancelForm.streamId],
   );
 
   // ── Wallet vs creator check ────────────────────────────────────────────
@@ -2434,7 +2605,7 @@ function CancelPanel({
     if (vestingType === 2) {
       // Milestone: vested = unlocked milestone amount
       vestedBase = parseBaseUnits(
-        stream.unlockedAmount ?? stream.unlocked_milestone_amount ?? 0
+        stream.unlockedAmount ?? stream.unlocked_milestone_amount ?? 0,
       );
     } else if (nowTs < startTs) {
       vestedBase = BigInt(0);
@@ -2459,7 +2630,7 @@ function CancelPanel({
         undefined,
         {
           maximumFractionDigits: decimals,
-        }
+        },
       );
 
     return {
@@ -2534,7 +2705,7 @@ function CancelPanel({
               <span className="font-mono text-amber-300 break-all">
                 {`${connectedWalletAddress!.slice(
                   0,
-                  6
+                  6,
                 )}…${connectedWalletAddress!.slice(-4)}`}
               </span>
               .
@@ -2740,7 +2911,7 @@ type Props = {
   fileInputEditRef: RefObject<HTMLInputElement | null>;
   handleCsvUpload: (
     e: ChangeEvent<HTMLInputElement>,
-    mode: "create" | "edit"
+    mode: "create" | "edit",
   ) => void;
   withdrawForm: any;
   setWithdrawForm: (value: any) => void;
@@ -2837,11 +3008,11 @@ export function DashboardActionPanels(props: Props) {
 
   const recipientHistory = useAddressHistory("recipient");
   const mintHistory = useAddressHistory("mint");
-const book = useAddressBook();
+  const book = useAddressBook();
   const mintPickerRef = useRef<HTMLDivElement | null>(null);
   const [mintMenuOpen, setMintMenuOpen] = useState(false);
   const [cliffInputMode, setCliffInputMode] = useState<"duration" | "date">(
-    "duration"
+    "duration",
   );
   const [durationInputMode, setDurationInputMode] = useState<
     "duration" | "date"
@@ -2853,12 +3024,12 @@ const book = useAddressBook();
   const csvDurationValidation = useCsvDurationValidation(
     csvCreateText,
     "create",
-    streams
+    streams,
   );
   const csvEditDurationValidation = useCsvDurationValidation(
     csvEditText,
     "edit",
-    streams
+    streams,
   );
   // ─── Solana pubkey validator ──────────────────────────────────────────────
 
@@ -2867,13 +3038,13 @@ const book = useAddressBook();
     () =>
       streams.find((s) => String(s?.id || "") === editLinearForm.streamId) ??
       null,
-    [streams, editLinearForm.streamId]
+    [streams, editLinearForm.streamId],
   );
   const editMilestoneStream = useMemo(
     () =>
       streams.find((s) => String(s?.id || "") === editMilestoneForm.streamId) ??
       null,
-    [streams, editMilestoneForm.streamId]
+    [streams, editMilestoneForm.streamId],
   );
 
   const editLinearMint = editLinearStream?.mint ?? "";
@@ -2891,12 +3062,12 @@ const book = useAddressBook();
   const editLinearBalance = useTokenBalance(
     editLinearMint,
     endpoint,
-    editLinearDecimals
+    editLinearDecimals,
   );
   const editMilestoneBalance = useTokenBalance(
     editMilestoneMint,
     endpoint,
-    editMilestoneBalanceDecimals
+    editMilestoneBalanceDecimals,
   );
 
   // ── Validasi topup linear ─────────────────────────────────────────────────
@@ -2919,7 +3090,7 @@ const book = useAddressBook();
       const d = new Date(Date.now() + 60_000);
       const pad = (n: number) => String(n).padStart(2, "0");
       return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(
-        d.getDate()
+        d.getDate(),
       )}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
     };
 
@@ -2950,15 +3121,15 @@ const book = useAddressBook();
 
   const milestoneSum = useMemo(
     () => milestoneAmounts.reduce((acc, curr) => acc + Number(curr || 0), 0),
-    [milestoneAmounts]
+    [milestoneAmounts],
   );
   const hasInvalidMilestones = useMemo(
     () =>
       milestoneAmounts.some(
         (value) =>
-          !value || Number(value) <= 0 || !Number.isFinite(Number(value))
+          !value || Number(value) <= 0 || !Number.isFinite(Number(value)),
       ),
-    [milestoneAmounts]
+    [milestoneAmounts],
   );
   const milestonesMatchTotal =
     Math.abs(milestoneSum - Number(createForm.amount || 0)) < 0.0000001;
@@ -2988,7 +3159,7 @@ const book = useAddressBook();
     const d = new Date(Date.now() + 10_000);
     const pad = (n: number) => String(n).padStart(2, "0");
     return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(
-      d.getDate()
+      d.getDate(),
     )}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
   })();
   const cliffDateInLocalIso = (() => {
@@ -2998,7 +3169,7 @@ const book = useAddressBook();
     const d = new Date(startDateMs + seconds * 1000);
     const pad = (n: number) => String(n).padStart(2, "0");
     return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(
-      d.getDate()
+      d.getDate(),
     )}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
   })();
   const endDateInLocalIso = (() => {
@@ -3008,7 +3179,7 @@ const book = useAddressBook();
     const d = new Date(startDateMs + seconds * 1000);
     const pad = (n: number) => String(n).padStart(2, "0");
     return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(
-      d.getDate()
+      d.getDate(),
     )}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
   })();
 
@@ -3017,7 +3188,7 @@ const book = useAddressBook();
   const tokenBalance = useTokenBalance(
     createForm.mint,
     endpoint,
-    selectedMintPreset?.decimals
+    selectedMintPreset?.decimals,
   );
   const recipientInvalid =
     Boolean(createForm.recipient?.trim()) &&
@@ -3044,8 +3215,9 @@ const book = useAddressBook();
       ? Boolean(createForm.milestoneCount?.trim())
       : Boolean(createForm.duration?.trim())) &&
     (createForm.type !== "1" || Boolean(createForm.cliffDuration?.trim()));
-    const hasSelfRecipient = createForm.recipient.trim().toLowerCase() ===
-    connectedWalletAddress?.trim().toLowerCase()
+  const hasSelfRecipient =
+    createForm.recipient.trim().toLowerCase() ===
+    connectedWalletAddress?.trim().toLowerCase();
 
   const createDisabled =
     paused ||
@@ -3080,9 +3252,9 @@ const book = useAddressBook();
         csvCreateText,
         mintPresets,
         createForm.mint,
-        csvWalletDecimals
+        csvWalletDecimals,
       ),
-    [csvCreateText, mintPresets, createForm.mint, csvWalletDecimals]
+    [csvCreateText, mintPresets, createForm.mint, csvWalletDecimals],
   );
   const csvStructuralValidation = useCsvStructuralValidation(
     csvCreateText,
@@ -3091,7 +3263,8 @@ const book = useAddressBook();
       mintPresets,
       selectedMint: createForm.mint,
       fallbackDecimals: csvWalletDecimals,
-    }
+      connectedWalletAddress,
+    },
   );
   const csvEditStructuralValidation = useCsvStructuralValidation(
     csvEditText,
@@ -3099,13 +3272,10 @@ const book = useAddressBook();
     {
       mintPresets,
       knownStreams: streams,
-    }
+      connectedWalletAddress,
+    },
   );
-const csvHasSelfRecipient = csvCreateRebalance.rows.some(
-  (row) =>
-    row.recipient?.trim().toLowerCase() ===
-    connectedWalletAddress?.trim().toLowerCase()
-);
+
   const createCsvDisabled =
     paused ||
     !connected ||
@@ -3218,7 +3388,7 @@ const csvHasSelfRecipient = csvCreateRebalance.rows.some(
               >
                 Manual Form
               </button>
-                   {/* <button
+              {/* <button
                 onClick={() => setCreateMode("batch")}
                 className={`w-full px-3 py-2 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-1.5 sm:w-auto ${
                   createMode === "batch"
@@ -3270,25 +3440,27 @@ const csvHasSelfRecipient = csvCreateRebalance.rows.some(
                     <option key={addr} value={addr} />
                   ))}
                 </datalist>
-               {hasSelfRecipient ? (
-  <div className="mt-1.5 text-[10px] font-semibold text-rose-400">
-    Recipient cannot be the connected wallet.
-  </div>
-) : recipientInvalid ? (
-  <div className="mt-1.5 text-[10px] font-semibold text-rose-400">
-    Invalid Solana address — must be a valid base58 public key (32–44
-    characters).
-  </div>
-) : createForm.recipient.trim() ? (
-  <div className="mt-1.5 text-[10px] font-semibold text-emerald-500 flex items-center gap-1">
-    <Check className="w-3 h-3" />
-    Valid Solana address
-  </div>
-) : null}
+                {hasSelfRecipient ? (
+                  <div className="mt-1.5 text-[10px] font-semibold text-rose-400">
+                    Recipient cannot be the connected wallet.
+                  </div>
+                ) : recipientInvalid ? (
+                  <div className="mt-1.5 text-[10px] font-semibold text-rose-400">
+                    Invalid Solana address — must be a valid base58 public key
+                    (32–44 characters).
+                  </div>
+                ) : createForm.recipient.trim() ? (
+                  <div className="mt-1.5 text-[10px] font-semibold text-emerald-500 flex items-center gap-1">
+                    <Check className="w-3 h-3" />
+                    Valid Solana address
+                  </div>
+                ) : null}
                 <AddressBookPanel
                   book={book}
                   currentAddress={createForm.recipient}
-                  onSelect={(addr) => setCreateForm({ ...createForm, recipient: addr })}
+                  onSelect={(addr) =>
+                    setCreateForm({ ...createForm, recipient: addr })
+                  }
                 />
               </div>
 
@@ -3668,7 +3840,7 @@ const csvHasSelfRecipient = csvCreateRebalance.rows.some(
                         const target = new Date(value).getTime();
                         const seconds = Math.max(
                           0,
-                          Math.floor((target - startDateMs) / 1000)
+                          Math.floor((target - startDateMs) / 1000),
                         );
                         setCreateForm({
                           ...createForm,
@@ -3702,7 +3874,7 @@ const csvHasSelfRecipient = csvCreateRebalance.rows.some(
                     <div className="mt-1.5 text-[10px] font-mono text-zinc-500">
                       {durationInputMode === "duration"
                         ? `≈ ends ${new Date(
-                            startDateMs + durationSeconds * 1000
+                            startDateMs + durationSeconds * 1000,
                           ).toLocaleString()}`
                         : `≈ ${durationSeconds.toLocaleString()}s from start date`}
                     </div>
@@ -3785,7 +3957,7 @@ const csvHasSelfRecipient = csvCreateRebalance.rows.some(
                         const target = new Date(value).getTime();
                         const seconds = Math.max(
                           0,
-                          Math.floor((target - startDateMs) / 1000)
+                          Math.floor((target - startDateMs) / 1000),
                         );
                         setCreateForm({
                           ...createForm,
@@ -3819,7 +3991,7 @@ const csvHasSelfRecipient = csvCreateRebalance.rows.some(
                     <div className="mt-1.5 text-[10px] font-mono text-zinc-500">
                       {cliffInputMode === "duration"
                         ? `≈ unlocks ${new Date(
-                            startDateMs + cliffDurationSeconds * 1000
+                            startDateMs + cliffDurationSeconds * 1000,
                           ).toLocaleString()}`
                         : `≈ ${cliffDurationSeconds.toLocaleString()}s from start date`}
                     </div>
@@ -3886,7 +4058,7 @@ const csvHasSelfRecipient = csvCreateRebalance.rows.some(
                         const pctOfTotal =
                           Number(createForm.amount) > 0
                             ? ((val / Number(createForm.amount)) * 100).toFixed(
-                                1
+                                1,
                               )
                             : "0.0";
 
@@ -3917,7 +4089,7 @@ const csvHasSelfRecipient = csvCreateRebalance.rows.some(
                               onChange={(e) => {
                                 const next = [...milestoneAmounts];
                                 const normalized = normalizeDecimalInput(
-                                  e.target.value
+                                  e.target.value,
                                 );
                                 next[idx] =
                                   normalized === "" ? "0" : normalized;
@@ -4005,7 +4177,7 @@ const csvHasSelfRecipient = csvCreateRebalance.rows.some(
                         <div className="font-mono text-zinc-300">
                           {durationSeconds > 0
                             ? new Date(
-                                startDateMs + durationSeconds * 1000
+                                startDateMs + durationSeconds * 1000,
                               ).toLocaleString()
                             : "—"}
                         </div>
@@ -4080,19 +4252,19 @@ const csvHasSelfRecipient = csvCreateRebalance.rows.some(
               </button>
             </div>
           ) : createMode === "batch" ? (
-      <ManualBatchCreatePanel
-        mintPresets={mintPresets}
-        endpoint={endpoint}
-        clusterLabel={clusterLabel}
-        handleAction={handleAction}
-        activeTxAction={activeTxAction}
-        activeTxPhase={activeTxPhase}
-        connected={connected}
-        paused={paused}
-        defaultMint={createForm.mint}
-        connectedWalletAddress={connectedWalletAddress}
-      />
-          ): (
+            <ManualBatchCreatePanel
+              mintPresets={mintPresets}
+              endpoint={endpoint}
+              clusterLabel={clusterLabel}
+              handleAction={handleAction}
+              activeTxAction={activeTxAction}
+              activeTxPhase={activeTxPhase}
+              connected={connected}
+              paused={paused}
+              defaultMint={createForm.mint}
+              connectedWalletAddress={connectedWalletAddress}
+            />
+          ) : (
             <div
               className={`grid min-w-0 gap-4 max-w-full overflow-hidden ${mobileNarrowFormClass}`}
             >
@@ -4223,6 +4395,7 @@ const csvHasSelfRecipient = csvCreateRebalance.rows.some(
                   tokenBalance.decimals ?? selectedMintPreset?.decimals ?? 6
                 }
                 mintPresets={mintPresets}
+                connectedWalletAddress={connectedWalletAddress}
               />
               <CsvDiffPanel
                 csvDiffResult={csvDiffResult}
@@ -4262,7 +4435,7 @@ const csvHasSelfRecipient = csvCreateRebalance.rows.some(
                   "create_stream_csv",
                   `Approve & Apply CSV Revision (Creates v${
                     csvVersions.length + 1
-                  })`
+                  })`,
                 )}
               </button>
             </div>
@@ -4382,6 +4555,7 @@ const csvHasSelfRecipient = csvCreateRebalance.rows.some(
               editTotalByMint={csvEditTotalByMint}
               editStreams={streams} // ← live DB untuk validasi kolom id
               mintPresets={mintPresets}
+              connectedWalletAddress={connectedWalletAddress}
             />
             <CsvDiffPanel
               csvDiffResult={csvDiffResult}
@@ -4647,7 +4821,7 @@ function useFeeEstimate() {
     try {
       const res = await fetch(
         "https://api.coingecko.com/api/v3/simple/price?ids=solana&vs_currencies=usd",
-        { signal: AbortSignal.timeout(5000) }
+        { signal: AbortSignal.timeout(5000) },
       );
       const data = await res.json();
       setSolPrice(data?.solana?.usd ?? null);
@@ -4671,7 +4845,7 @@ function useFeeEstimate() {
 }
 function useCsvEditTotalByMint(
   csvText: string,
-  knownStreams?: any[]
+  knownStreams?: any[],
 ): Record<string, number> {
   return useMemo(() => {
     if (!csvText?.trim()) return {};
@@ -4762,16 +4936,16 @@ function useCsvEditTotalByMint(
           const desiredMilestones = (() => {
             if (rawMilestones.length > 0) {
               const parsedRaw = rawMilestones.map((value) =>
-                parseTokenAmountToBaseUnits(value, decimals)
+                parseTokenAmountToBaseUnits(value, decimals),
               );
               if (rawTarget > 0) {
                 const rawTotal = parsedRaw.reduce(
                   (sum, amount) => sum + amount,
-                  BigInt(0)
+                  BigInt(0),
                 );
                 const targetBase = parseTokenAmountToBaseUnits(
                   String(rawTarget),
-                  decimals
+                  decimals,
                 );
                 if (rawTotal === targetBase) {
                   return parsedRaw;
@@ -4784,14 +4958,14 @@ function useCsvEditTotalByMint(
             if (rawTarget > 0) {
               const targetBase = parseTokenAmountToBaseUnits(
                 String(rawTarget),
-                decimals
+                decimals,
               );
               const count =
                 rawMilestones.length > 0
                   ? rawMilestones.length
                   : Math.max(
                       currentMilestones.length,
-                      Number(stream.milestoneCount ?? 0)
+                      Number(stream.milestoneCount ?? 0),
                     );
               return buildEvenMilestoneBaseUnits(targetBase, count);
             }
@@ -4801,7 +4975,7 @@ function useCsvEditTotalByMint(
 
           const maxCount = Math.max(
             desiredMilestones.length,
-            currentMilestones.length
+            currentMilestones.length,
           );
           const requiredBase = Array.from({ length: maxCount }, (_, index) => {
             const desired = desiredMilestones[index] ?? BigInt(0);
@@ -4939,7 +5113,7 @@ function isLikelyTemplatePlaceholder(id: string): boolean {
 function useCsvIdValidation(
   csvText: string,
   knownStreams: any[] | undefined,
-  enabled: boolean
+  enabled: boolean,
 ) {
   return useMemo(() => {
     if (!enabled || !csvText?.trim()) return { issues: [], hasErrors: false };
@@ -5005,7 +5179,7 @@ type CsvDurationIssue = {
 function useCsvDurationValidation(
   csvText: string,
   mode: "create" | "edit",
-  knownStreams?: any[]
+  knownStreams?: any[],
 ): { issues: CsvDurationIssue[]; hasErrors: boolean } {
   return useMemo(() => {
     if (!csvText?.trim()) return { issues: [], hasErrors: false };
@@ -5028,7 +5202,7 @@ function useCsvDurationValidation(
 
     // Parse a duration cell into a positive whole number of seconds.
     const parseSecs = (
-      raw: string
+      raw: string,
     ): {
       ok: boolean;
       value: number;
@@ -5180,8 +5354,8 @@ function useCsvDurationValidation(
             const currentTotal = Number(
               formatBaseUnitsToTokenAmount(
                 parseBaseUnits(stream.totalAmount),
-                decimals
-              )
+                decimals,
+              ),
             );
             const newTotal = parseFloat(amountCell) || 0;
             topupPositive = newTotal - currentTotal > 0;
@@ -5300,12 +5474,14 @@ function useCsvStructuralValidation(
     fallbackDecimals?: number;
     selectedMint?: string | null;
     knownStreams?: any[];
-  }
+    connectedWalletAddress?: string | null;
+  },
 ): { issues: CsvStructuralIssue[]; hasErrors: boolean } {
   const mintPresets = opts?.mintPresets;
   const fallbackDecimals = opts?.fallbackDecimals;
   const selectedMint = opts?.selectedMint;
   const knownStreams = opts?.knownStreams;
+  const connectedWalletAddress = opts?.connectedWalletAddress;
   return useMemo(() => {
     if (!csvText?.trim()) return { issues: [], hasErrors: false };
     const issues: CsvStructuralIssue[] = [];
@@ -5447,6 +5623,16 @@ function useCsvStructuralValidation(
             field: "recipient",
             reason: "recipient is not a valid Solana address.",
           });
+        } else if (
+          connectedWalletAddress &&
+          recipient.trim().toLowerCase() ===
+            connectedWalletAddress.trim().toLowerCase()
+        ) {
+          issues.push({
+            rowNum,
+            field: "recipient",
+            reason: "recipient cannot be the connected wallet.",
+          });
         }
         const mintVal = mintIdx !== -1 ? values[mintIdx] ?? "" : "";
         if (mintVal.trim() && !isValidSolanaAddress(mintVal)) {
@@ -5493,7 +5679,7 @@ function useCsvStructuralValidation(
             rowNum,
             field: "duplicate",
             reason: `Identical to row #${seenRowKey.get(
-              rowKey
+              rowKey,
             )} — remove the duplicate.`,
           });
         } else {
@@ -5507,6 +5693,26 @@ function useCsvStructuralValidation(
             field: "type",
             reason: `type must be 0, 1 or 2 — got "${typeRaw}".`,
           });
+        }
+        const recipient = recipientIdx !== -1 ? values[recipientIdx] ?? "" : "";
+        if (recipient.trim()) {
+          if (!isValidSolanaAddress(recipient)) {
+            issues.push({
+              rowNum,
+              field: "recipient",
+              reason: "recipient is not a valid Solana address.",
+            });
+          } else if (
+            connectedWalletAddress &&
+            recipient.trim().toLowerCase() ===
+              connectedWalletAddress.trim().toLowerCase()
+          ) {
+            issues.push({
+              rowNum,
+              field: "recipient",
+              reason: "recipient cannot be the connected wallet.",
+            });
+          }
         }
         const amtRaw = amountIdx !== -1 ? values[amountIdx] ?? "" : "";
         if (amtRaw.trim()) {
@@ -5545,7 +5751,7 @@ function useCsvStructuralValidation(
               rowNum,
               field: "duplicate",
               reason: `Duplicate id — already edited in row #${seenId.get(
-                id
+                id,
               )}.`,
             });
           } else {
@@ -5563,6 +5769,7 @@ function useCsvStructuralValidation(
     fallbackDecimals,
     selectedMint,
     knownStreams,
+    connectedWalletAddress,
   ]);
 }
 
@@ -5576,6 +5783,7 @@ function CsvValidationPanel({
   editTotalByMint,
   editStreams,
   mintPresets,
+  connectedWalletAddress,
 }: {
   csvText: string;
   walletBalance: number | null;
@@ -5586,18 +5794,19 @@ function CsvValidationPanel({
   editTotalByMint?: Record<string, number>; // ← baru, override total calculation
   editStreams?: any[]; // ← baru, daftar stream live DB untuk validasi id
   mintPresets?: MintPreset[]; // ← baru, untuk cek presisi amount per mint
+  connectedWalletAddress?: string | null;
 }) {
   const { rows, hasErrors } = useCsvMilestoneValidation(csvText);
   const { issues: idIssues, hasErrors: hasIdErrors } = useCsvIdValidation(
     csvText,
     editStreams,
-    !!editMode
+    !!editMode,
   );
   const { issues: durationIssues, hasErrors: hasDurationErrors } =
     useCsvDurationValidation(
       csvText,
       editMode ? "edit" : "create",
-      editStreams
+      editStreams,
     );
   const { issues: structuralIssues, hasErrors: hasStructuralErrors } =
     useCsvStructuralValidation(csvText, editMode ? "edit" : "create", {
@@ -5605,6 +5814,7 @@ function CsvValidationPanel({
       fallbackDecimals: walletDecimals,
       selectedMint: walletMint,
       knownStreams: editStreams,
+      connectedWalletAddress,
     });
   const totalByMint = useCsvTotalByMint(csvText);
 
@@ -6105,7 +6315,7 @@ function EditMilestonePanel({
         setDetailError(
           err?.response?.data?.error ||
             err?.message ||
-            "Failed to fetch stream details."
+            "Failed to fetch stream details.",
         );
       } finally {
         setDetailLoading(false);
@@ -6119,9 +6329,9 @@ function EditMilestonePanel({
   const streamSummary = useMemo(
     () =>
       streams.find(
-        (s) => String(s?.id || "") === editMilestoneForm.streamId.trim()
+        (s) => String(s?.id || "") === editMilestoneForm.streamId.trim(),
       ) ?? null,
-    [streams, editMilestoneForm.streamId]
+    [streams, editMilestoneForm.streamId],
   );
   const stream = streamDetail ?? streamSummary;
 
@@ -6163,7 +6373,7 @@ function EditMilestonePanel({
       const remainder = totalBase % BigInt(milestoneCount || 1);
       currentAmounts = Array.from(
         { length: milestoneCount },
-        (_, i) => base + (BigInt(i) < remainder ? BigInt(1) : BigInt(0))
+        (_, i) => base + (BigInt(i) < remainder ? BigInt(1) : BigInt(0)),
       );
     }
 
@@ -6171,7 +6381,7 @@ function EditMilestonePanel({
       totalAmount: formatBaseUnitsToTokenAmount(totalBase, streamDecimals),
       milestoneCount,
       amounts: currentAmounts.map((a: bigint) =>
-        formatBaseUnitsToTokenAmount(a, streamDecimals)
+        formatBaseUnitsToTokenAmount(a, streamDecimals),
       ),
       recipient: String(stream.recipient ?? ""),
     };
@@ -6184,7 +6394,7 @@ function EditMilestonePanel({
       : typeof streamDetail?.mintDecimals === "number"
       ? streamDetail.mintDecimals
       : editMilestoneBalanceDecimals,
-    0
+    0,
   );
 
   // ── totalAmount sebagai bigint ─────────────────────────────────────────
@@ -6225,14 +6435,14 @@ function EditMilestonePanel({
 
     const newTotalBase = parseTokenAmountToBaseUnits(
       newTotalHuman,
-      safeDecimals
+      safeDecimals,
     );
     if (newTotalBase <= BigInt(0)) return;
 
     const currentSum = amounts.reduce(
       (sum, v) =>
         sum + parseTokenAmountToBaseUnits(String(v || "0"), safeDecimals),
-      BigInt(0)
+      BigInt(0),
     );
 
     let rescaled: string[];
@@ -6242,14 +6452,14 @@ function EditMilestonePanel({
       rescaled = amounts.map((_, i) =>
         formatBaseUnitsToTokenAmount(
           base + (BigInt(i) < remainder ? BigInt(1) : BigInt(0)),
-          safeDecimals
-        )
+          safeDecimals,
+        ),
       );
     } else {
       const scaled = amounts.map((v) => {
         const base = parseTokenAmountToBaseUnits(
           String(v || "0"),
-          safeDecimals
+          safeDecimals,
         );
         return (base * newTotalBase) / currentSum;
       });
@@ -6257,7 +6467,7 @@ function EditMilestonePanel({
       const diff = newTotalBase - scaledSum;
       if (scaled.length > 0) scaled[scaled.length - 1] += diff;
       rescaled = scaled.map((v) =>
-        formatBaseUnitsToTokenAmount(v, safeDecimals)
+        formatBaseUnitsToTokenAmount(v, safeDecimals),
       );
     }
 
@@ -6282,16 +6492,16 @@ function EditMilestonePanel({
           return BigInt(0);
         }
       }),
-    [amounts, decimals]
+    [amounts, decimals],
   );
 
   const milestoneSum = useMemo(
     () => milestoneAmountBases.reduce((a, b) => a + b, BigInt(0)),
-    [milestoneAmountBases]
+    [milestoneAmountBases],
   );
 
   const hasInvalidAmounts = amounts.some(
-    (v) => !v || Number(v) <= 0 || !Number.isFinite(Number(v))
+    (v) => !v || Number(v) <= 0 || !Number.isFinite(Number(v)),
   );
 
   // FIX: removed the `totalAmountBase > BigInt(0) ? ... : true` special
@@ -6440,7 +6650,7 @@ function EditMilestonePanel({
                   <span className="font-mono text-amber-300 break-all">
                     {stream?.creator
                       ? `${stream.creator.slice(0, 6)}…${stream.creator.slice(
-                          -4
+                          -4,
                         )}`
                       : "unknown"}
                   </span>
@@ -6448,7 +6658,7 @@ function EditMilestonePanel({
                   <span className="font-mono text-amber-300 break-all">
                     {`${connectedWalletAddress!.slice(
                       0,
-                      6
+                      6,
                     )}…${connectedWalletAddress!.slice(-4)}`}
                   </span>
                   .
@@ -6563,7 +6773,7 @@ function EditMilestonePanel({
                   const normalized = normalizeDecimalInput(e.target.value);
                   setEditTotalDraft(normalized);
                   rescaleMilestonesToTotal(
-                    normalized === "" ? "0" : normalized
+                    normalized === "" ? "0" : normalized,
                   );
                 }}
                 onBlur={() => setEditTotalDraft(null)}
@@ -6663,11 +6873,11 @@ function EditMilestonePanel({
               amounts={amounts.map((v: string) =>
                 formatBaseUnitsToTokenAmount(
                   parseTokenAmountToBaseUnits(String(v || "0"), decimals),
-                  decimals
-                )
+                  decimals,
+                ),
               )}
               total={Number(
-                formatBaseUnitsToTokenAmount(totalAmountBase, decimals)
+                formatBaseUnitsToTokenAmount(totalAmountBase, decimals),
               )}
               hasInvalid={hasInvalidAmounts}
               isMatch={matchesTotal}
@@ -6806,9 +7016,9 @@ function EditCliffPanel({
   const stream = useMemo(
     () =>
       streams.find(
-        (s) => String(s?.id || "") === editCliffForm.streamId.trim()
+        (s) => String(s?.id || "") === editCliffForm.streamId.trim(),
       ) ?? null,
-    [streams, editCliffForm.streamId]
+    [streams, editCliffForm.streamId],
   );
 
   // ── Guards ─────────────────────────────────────────────────────────────
@@ -6862,8 +7072,8 @@ function EditCliffPanel({
       totalAmount: Number(
         formatBaseUnitsToTokenAmount(
           parseBaseUnits(stream.totalAmount),
-          decimals
-        )
+          decimals,
+        ),
       ).toLocaleString(undefined, { maximumFractionDigits: decimals }),
     };
   }, [stream]);
@@ -6983,7 +7193,7 @@ function EditCliffPanel({
                   <span className="font-mono text-amber-300 break-all">
                     {stream?.creator
                       ? `${stream.creator.slice(0, 6)}…${stream.creator.slice(
-                          -4
+                          -4,
                         )}`
                       : "unknown"}
                   </span>
@@ -6991,7 +7201,7 @@ function EditCliffPanel({
                   <span className="font-mono text-amber-300 break-all">
                     {`${connectedWalletAddress!.slice(
                       0,
-                      6
+                      6,
                     )}…${connectedWalletAddress!.slice(-4)}`}
                   </span>
                   .
@@ -7177,7 +7387,7 @@ function EditCliffPanel({
                       setEditCliffForm({
                         ...editCliffForm,
                         newCliffDuration: String(
-                          currentPreview.currentCliffDuration + p.add
+                          currentPreview.currentCliffDuration + p.add,
                         ),
                       })
                     }
@@ -7341,9 +7551,9 @@ function EditLinearPanel({
   const stream = useMemo(
     () =>
       streams.find(
-        (s) => String(s?.id || "") === editLinearForm.streamId.trim()
+        (s) => String(s?.id || "") === editLinearForm.streamId.trim(),
       ) ?? null,
-    [streams, editLinearForm.streamId]
+    [streams, editLinearForm.streamId],
   );
 
   const nowTs = Math.floor(Date.now() / 1000);
@@ -7379,7 +7589,7 @@ function EditLinearPanel({
 
     const fmt = (v: any) =>
       Number(
-        formatBaseUnitsToTokenAmount(parseBaseUnits(v), decimals)
+        formatBaseUnitsToTokenAmount(parseBaseUnits(v), decimals),
       ).toLocaleString(undefined, { maximumFractionDigits: decimals });
 
     return {
@@ -7505,7 +7715,7 @@ function EditLinearPanel({
                   <span className="font-mono text-amber-300 break-all">
                     {stream?.creator
                       ? `${stream.creator.slice(0, 6)}…${stream.creator.slice(
-                          -4
+                          -4,
                         )}`
                       : "unknown"}
                   </span>
@@ -7513,7 +7723,7 @@ function EditLinearPanel({
                   <span className="font-mono text-amber-300 break-all">
                     {`${connectedWalletAddress!.slice(
                       0,
-                      6
+                      6,
                     )}…${connectedWalletAddress!.slice(-4)}`}
                   </span>
                   .
@@ -7667,7 +7877,7 @@ function EditLinearPanel({
                       setEditLinearForm({
                         ...editLinearForm,
                         newEndDuration: String(
-                          currentPreview.currentDuration + p.add
+                          currentPreview.currentDuration + p.add,
                         ),
                       })
                     }
