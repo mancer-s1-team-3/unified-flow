@@ -79,13 +79,23 @@ function rowSummaryLabel(row: ManualBatchRow): string {
  
 function validateRow(
   row: ManualBatchRow,
-  tokenBalance: number | null
+  tokenBalance: number | null,
+  connectedWalletAddress?: string | null
 ): { valid: boolean; errors: string[] } {
   const errors: string[] = [];
  
-  if (!row.recipient.trim()) errors.push("Recipient required");
-  else if (!isValidSolanaAddress(row.recipient)) errors.push("Invalid recipient address");
- 
+  if (!row.recipient.trim()) {
+    errors.push("Recipient required");
+  } else if (!isValidSolanaAddress(row.recipient)) {
+    errors.push("Invalid recipient address");
+  } else if (
+    connectedWalletAddress &&
+    row.recipient.trim().toLowerCase() ===
+      connectedWalletAddress.trim().toLowerCase()
+  ) {
+    errors.push("Recipient cannot be your connected wallet");
+  }
+
   if (!row.amount.trim() || Number(row.amount) <= 0) errors.push("Amount required (> 0)");
  
   if (!row.mint.trim()) errors.push("Mint required");
@@ -123,6 +133,7 @@ function BatchRowEditor({
   endpoint,
   clusterLabel,
   onChange,
+  connectedWalletAddress,
 }: {
   row: ManualBatchRow;
   index: number;
@@ -130,6 +141,7 @@ function BatchRowEditor({
   endpoint: string;
   clusterLabel: string;
   onChange: (updated: Partial<ManualBatchRow>) => void;
+  connectedWalletAddress: string |null;
 }) {
   const selectedPreset = mintPresets.find((p) => p.mint === row.mint) ?? null;
   const tokenBalance = useTokenBalance(row.mint, endpoint, selectedPreset?.decimals);
@@ -187,6 +199,15 @@ function BatchRowEditor({
             recipientInvalid ? "border-rose-500/60 focus:border-rose-500" : "border-zinc-800 focus:border-indigo-500"
           }`}
         />
+        {
+  row.recipient &&
+  connectedWalletAddress &&
+  row.recipient.toLowerCase() === connectedWalletAddress.toLowerCase() && (
+    <p className="mt-1 text-[10px] font-semibold text-rose-400">
+      Recipient cannot be your connected wallet
+    </p>
+  )
+}
         {recipientInvalid && (
           <p className="mt-1 text-[10px] font-semibold text-rose-400">Invalid Solana address</p>
         )}
@@ -486,6 +507,7 @@ export function ManualBatchCreatePanel({
   connected,
   paused = false,
   defaultMint = "",
+  connectedWalletAddress,
 }: {
   mintPresets: MintPreset[];
   endpoint: string;
@@ -496,6 +518,7 @@ export function ManualBatchCreatePanel({
   connected: boolean;
   paused?: boolean;
   defaultMint?: string;
+  connectedWalletAddress: string |null;
 }) {
   const [rows, setRows] = useState<ManualBatchRow[]>([createEmptyRow(defaultMint)]);
  
@@ -540,10 +563,13 @@ export function ManualBatchCreatePanel({
   const expandAll = () => setRows((prev) => prev.map((r) => ({ ...r, collapsed: false })));
  
   // Per-row validation state (lazy — only on submit attempt or show indicator)
-  const rowValidations = useMemo(
-    () => rows.map((r) => validateRow(r, null /* balance checked per-row inside editor */)),
-    [rows]
-  );
+const rowValidations = useMemo(
+  () =>
+    rows.map((r) =>
+      validateRow(r, null, connectedWalletAddress)
+    ),
+  [rows, connectedWalletAddress]
+);
  
   const allRowsValid = rowValidations.every((v) => v.valid);
  
@@ -557,8 +583,13 @@ export function ManualBatchCreatePanel({
     if (activeTxPhase === "sending") return "Sending Transactions...";
     return "Confirming On-Chain...";
   };
- 
-  const canSubmit = connected && !paused && !isSubmitting && allRowsValid && rows.length > 0;
+  
+ const hasSelfRecipient = rows.some(
+  (row) =>
+    row.recipient.trim().toLowerCase() ===
+    connectedWalletAddress?.trim().toLowerCase()
+);
+  const canSubmit = connected && !paused &&  !hasSelfRecipient &&!isSubmitting && allRowsValid && rows.length > 0;
  
   const handleSubmit = () => {
     handleAction("create_stream_batch_manual", { rows });
@@ -694,6 +725,7 @@ export function ManualBatchCreatePanel({
                   endpoint={endpoint}
                   clusterLabel={clusterLabel}
                   onChange={(patch) => updateRow(index, patch)}
+                  connectedWalletAddress={connectedWalletAddress}
                 />
               )}
             </div>
@@ -3012,6 +3044,9 @@ const book = useAddressBook();
       ? Boolean(createForm.milestoneCount?.trim())
       : Boolean(createForm.duration?.trim())) &&
     (createForm.type !== "1" || Boolean(createForm.cliffDuration?.trim()));
+    const hasSelfRecipient = createForm.recipient.trim().toLowerCase() ===
+    connectedWalletAddress?.trim().toLowerCase()
+
   const createDisabled =
     paused ||
     !connected ||
@@ -3022,6 +3057,7 @@ const book = useAddressBook();
     endDateInPast ||
     exceedsBalance ||
     recipientInvalid || // ← tambah ini
+    hasSelfRecipient ||
     (createForm.type === "2" &&
       (hasInvalidMilestones || !milestonesMatchTotal)) ||
     activeTxAction === "create_stream";
@@ -3065,7 +3101,11 @@ const book = useAddressBook();
       knownStreams: streams,
     }
   );
-
+const csvHasSelfRecipient = csvCreateRebalance.rows.some(
+  (row) =>
+    row.recipient?.trim().toLowerCase() ===
+    connectedWalletAddress?.trim().toLowerCase()
+);
   const createCsvDisabled =
     paused ||
     !connected ||
@@ -3230,17 +3270,21 @@ const book = useAddressBook();
                     <option key={addr} value={addr} />
                   ))}
                 </datalist>
-                {recipientInvalid && (
-                  <div className="mt-1.5 text-[10px] font-semibold text-rose-400">
-                    Invalid Solana address — must be a valid base58 public key
-                    (32–44 characters).
-                  </div>
-                )}
-                {!recipientInvalid && createForm.recipient?.trim() && (
-                  <div className="mt-1.5 text-[10px] font-semibold text-emerald-500 flex items-center gap-1">
-                    <Check className="w-3 h-3" /> Valid Solana address
-                  </div>
-                )}
+               {hasSelfRecipient ? (
+  <div className="mt-1.5 text-[10px] font-semibold text-rose-400">
+    Recipient cannot be the connected wallet.
+  </div>
+) : recipientInvalid ? (
+  <div className="mt-1.5 text-[10px] font-semibold text-rose-400">
+    Invalid Solana address — must be a valid base58 public key (32–44
+    characters).
+  </div>
+) : createForm.recipient.trim() ? (
+  <div className="mt-1.5 text-[10px] font-semibold text-emerald-500 flex items-center gap-1">
+    <Check className="w-3 h-3" />
+    Valid Solana address
+  </div>
+) : null}
                 <AddressBookPanel
                   book={book}
                   currentAddress={createForm.recipient}
@@ -4046,6 +4090,7 @@ const book = useAddressBook();
         connected={connected}
         paused={paused}
         defaultMint={createForm.mint}
+        connectedWalletAddress={connectedWalletAddress}
       />
           ): (
             <div
