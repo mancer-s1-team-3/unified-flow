@@ -47,7 +47,7 @@ COPY --from=build /app/dist ./dist
 COPY --from=build /app/app ./app
 COPY --from=build /app/prisma ./prisma
 COPY prisma.config.ts ./
-COPY SKILL.md ./
+COPY skills/unified-flow/SKILL.md ./
 COPY docker-entrypoint.sh /usr/local/bin/docker-entrypoint.sh
 
 RUN chmod +x /usr/local/bin/docker-entrypoint.sh \
