@@ -13,6 +13,7 @@ import { DashboardStreamsPanel } from "@/components/dashboard/dashboard-streams-
 import type { TabId } from "@/components/dashboard/types";
 import {
   createStreamBatchOnChain,
+  CreateStreamInput,
   createStreamOnChain,
 } from "@/lib/solana/create-stream";
 import { editCliffOnChain } from "@/lib/solana/edit-cliff";
@@ -47,6 +48,7 @@ import {
 import { WalletProvider } from "@solana/wallet-adapter-react";
 import { WalletAdapterNetwork } from "@solana/wallet-adapter-base";
 import { clusterApiUrl } from "@solana/web3.js";
+import { ManualBatchRow } from "@/components/dashboard/dashboard-action-panels";
 
 // ---------------------------------------------------------------------------
 // Pure helpers (unchanged)
@@ -410,7 +412,7 @@ export default function Home({ initialStreams = [] }: Props) {
   const [useMultisig, setUseMultisig] = useState(false);
 
   // ── CSV ───────────────────────────────────────────────────────────────────
-  const [createMode, setCreateMode] = useState<"manual" | "csv">("manual");
+  const [createMode, setCreateMode] = useState<"manual" | "csv" | "batch">("manual");
   const [csvCreateText, setCsvCreateText] = useState(() =>
     buildCreateStreamCsvTemplate(endpoint)
   );
@@ -1065,7 +1067,43 @@ export default function Home({ initialStreams = [] }: Props) {
       setTimeout(() => router.push("/streams"), 2000);
       return;
     }
+    if (actionName === "create_stream_batch_manual") {
+         if (!wallet) {
+        showNotification(
+          "error",
+          "Connect a Solana wallet before bulk creating streams."
+        );
+        return;
+      }
+    const { rows } = data as { rows: ManualBatchRow[] };
+    const inputs: CreateStreamInput[] = rows.map((row) => ({
+      recipient: row.recipient,
+      amount: row.amount,
+      mint: row.mint,
+      type: row.type,
+      startDate: row.startDate,
+      duration: row.duration,
+      cliffDuration: row.cliffDuration,
+      milestoneCount: row.milestoneCount,
+      milestoneAmounts: row.milestoneAmounts,
+      nonce: Date.now() + Math.floor(Math.random() * 1000), // unique per row
+    }));
 
+    // createStreamBatchOnChain sudah ada di create-stream.ts
+    const result = await createStreamBatchOnChain({
+      wallet,
+      endpoint,
+      inputs,
+      onStatus: (phase) => setActiveTxPhase(phase),
+    });
+ 
+    fetchStreams();
+
+    
+        setActiveTab("streams");
+
+
+  }
     // ── create_stream ───────────────────────────────────────────────────────
     if (actionName === "create_stream") {
       if (!wallet) {
