@@ -27,6 +27,8 @@ import { useAddressHistory } from "@/lib/use-address-history";
 import { parseBaseUnits } from "./dashboard-home-client";
 import { api } from "@/lib/api";
 import { PublicKey } from "@solana/web3.js";
+import { AddressBookPanel } from "@/components/dashboard/address-book-panel";
+import { useAddressBook } from "@/lib/use-address-book";
 const QUICK_DURATIONS = [
   { label: "1M", value: 60 * 60 * 24 * 30 },
   { label: "3M", value: 60 * 60 * 24 * 90 },
@@ -2053,7 +2055,7 @@ export function DashboardActionPanels(props: Props) {
 
   const recipientHistory = useAddressHistory("recipient");
   const mintHistory = useAddressHistory("mint");
-
+const book = useAddressBook();
   const mintPickerRef = useRef<HTMLDivElement | null>(null);
   const [mintMenuOpen, setMintMenuOpen] = useState(false);
   const [cliffInputMode, setCliffInputMode] = useState<"duration" | "date">(
@@ -2479,6 +2481,11 @@ export function DashboardActionPanels(props: Props) {
                     <Check className="w-3 h-3" /> Valid Solana address
                   </div>
                 )}
+                <AddressBookPanel
+                  book={book}
+                  currentAddress={createForm.recipient}
+                  onSelect={(addr) => setCreateForm({ ...createForm, recipient: addr })}
+                />
               </div>
 
               <div className="min-w-0 max-w-full">
