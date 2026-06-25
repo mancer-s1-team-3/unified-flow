@@ -298,12 +298,12 @@ async function buildUnlockMilestoneTransaction(
 }
 
 async function readSkillMarkdown() {
-    const skillPath = path.resolve(__dirname, "../../skill.md");
+    const skillPath = path.resolve(__dirname, "../../SKILL.md");
     const content = await fs.readFile(skillPath, "utf8");
 
     return {
         content,
-        source: "backend/skill.md",
+        source: "backend/SKILL.md",
     };
 }
 

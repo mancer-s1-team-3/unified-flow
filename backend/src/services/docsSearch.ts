@@ -77,7 +77,7 @@ function chunkFromSkillMarkdown(skillMarkdown: string): SearchableChunk[] {
                 id: "skill-full",
                 slug: "skills",
                 title: "Agent Skill Document",
-                heading: "skill.md",
+                heading: "SKILL.md",
                 text: skillMarkdown.slice(0, 2000),
                 source: "skill",
             },
